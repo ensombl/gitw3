@@ -14,7 +14,7 @@ into the binary at build time anyway.
 ```sh
 ./branding/apply.sh
 EXECUTABLE=gitw3 TAGS="bindata sqlite sqlite_unlock_notify" make build
-git checkout -- cmd/ docker/ modules/ options/ public/ routers/ services/   # restore the tree afterwards
+git checkout -- cmd/ docker/ modules/ options/ public/ routers/ services/ templates/   # restore the tree afterwards
 ```
 
 The script rewrites tracked upstream files in place — around a hundred of them. **Never commit

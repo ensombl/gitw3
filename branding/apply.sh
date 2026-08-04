@@ -28,7 +28,7 @@ cd "$ROOT"
 
 # Upstream paths this script writes to. Printed at the end so the restore command stays in
 # sync with what is actually modified.
-TOUCHED="cmd/ docker/ modules/ options/ public/ routers/ services/"
+TOUCHED="cmd/ docker/ modules/ options/ public/ routers/ services/ templates/"
 
 log() { printf '  %s\n' "$*"; }
 die() { printf 'apply-branding: %s\n' "$*" >&2; exit 1; }
@@ -132,7 +132,32 @@ patch_literal cmd/serv.go \
     '"Forgejo: SSH has been disabled"' \
     "\"$BRAND: SSH has been disabled\""
 
+# ---------------------------------------------------------------------------
+# Templates. The brand name is passed as a template argument here, not stored in the locale
+# files, so the locale pass below cannot reach it.
+# ---------------------------------------------------------------------------
+
+# The footer, on every single page. GPLv3 requires source availability, not UI attribution;
+# credit to Forgejo lives in the README and docs/ instead.
+# TODO: point at the GitW3 repository once it is public — w3ds.metastate.foundation is a
+# placeholder home, not a project page.
+patch_literal templates/base/footer_content.tmpl \
+    '<a target="_blank" rel="noopener noreferrer" href="https://forgejo.org">{{ctx.Locale.Tr "powered_by" "Forgejo"}}</a>' \
+    "<a target=\"_blank\" rel=\"noopener noreferrer\" href=\"https://w3ds.metastate.foundation\">{{ctx.Locale.Tr \"powered_by\" \"$BRAND\"}}</a>"
+
+# Swagger UI page titles and the API document's own title.
+patch_literal templates/swagger/ui.tmpl '<title>Forgejo API</title>' "<title>$BRAND API</title>"
+patch_literal templates/swagger/forgejo-ui.tmpl '<title>Forgejo API</title>' "<title>$BRAND API</title>"
+patch_literal templates/swagger/v1_json.tmpl \
+    '"description": "This documentation describes the Forgejo API.",' \
+    "\"description\": \"This documentation describes the $BRAND API.\","
+patch_literal templates/swagger/v1_json.tmpl '"title": "Forgejo API",' "\"title\": \"$BRAND API\","
+
 # Deliberately NOT patched, and why:
+#   swagger "deprecated in Forgejo 15"  a statement about upstream's version history; renaming it
+#                                       would claim a GitW3 15 that never existed
+#   webhook username placeholders       example values in Discord/Slack/Packagist forms
+#   LDAP/OAuth group-map placeholders    example JSON ("MyForgejoOrganization")
 #   modules/structs/repo.go      "Forgejo" is a migration service type exposed through the API
 #   services/migrations/pagure   outbound User-Agent, a protocol identifier rather than UI
 #   cmd/cert.go                  CommonName of a self-signed dev certificate
