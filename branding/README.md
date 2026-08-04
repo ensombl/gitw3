@@ -14,7 +14,13 @@ into the binary at build time anyway.
 ```sh
 ./branding/apply.sh
 EXECUTABLE=gitw3 TAGS="bindata sqlite sqlite_unlock_notify" make build
+git checkout -- cmd/ docker/ modules/ options/ public/   # restore the tree afterwards
 ```
+
+The script rewrites tracked upstream files in place — around a hundred of them. **Never commit
+those changes**: an empty diff against Forgejo is the entire point, and committing the overlay
+would turn every future upstream merge into a conflict. The script prints the restore command
+when it finishes.
 
 CI does this automatically and asserts on the result, so an unbranded artefact fails the build
 rather than shipping quietly.

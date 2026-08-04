@@ -26,6 +26,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRANDING="$ROOT/branding"
 cd "$ROOT"
 
+# Upstream paths this script writes to. Printed at the end so the restore command stays in
+# sync with what is actually modified.
+TOUCHED="cmd/ docker/ modules/ options/ public/"
+
 log() { printf '  %s\n' "$*"; }
 die() { printf 'apply-branding: %s\n' "$*" >&2; exit 1; }
 
@@ -220,3 +224,8 @@ ASSETS
 log "replaced $count image assets"
 
 echo "$BRAND branding applied."
+echo
+echo "This modified tracked upstream files in place. Do not commit them — the whole point is"
+echo "that our diff against Forgejo stays empty. To restore the tree once you are done:"
+echo
+echo "    git checkout -- $TOUCHED"
