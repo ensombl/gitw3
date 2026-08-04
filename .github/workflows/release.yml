@@ -1,0 +1,99 @@
+name: Release
+
+# Triggered by our own tags only. Upstream tags are `v*` and there are ~300 of them mirrored
+# into this repo; `gitw3-v*` keeps the two namespaces unambiguous.
+on:
+  push:
+    tags: ["gitw3-v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive version
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#gitw3-v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: make deps-frontend
+
+      - name: Build binary
+        env:
+          EXECUTABLE: gitw3
+          TAGS: bindata sqlite sqlite_unlock_notify
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        run: make build
+
+      - name: Package
+        run: |
+          set -eu
+          name="gitw3-${{ steps.version.outputs.value }}-linux-amd64"
+          mv gitw3 "$name"
+          ./"$name" --version
+          sha256sum "$name" > "$name.sha256"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # amd64 only for now. The upstream Dockerfile cross-compiles via `xx`, so adding
+          # linux/arm64 here should be a one-line change once someone verifies the build.
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            RELEASE_VERSION=${{ steps.version.outputs.value }}
+          tags: |
+            ghcr.io/ensombl/gitw3:${{ steps.version.outputs.value }}
+            ghcr.io/ensombl/gitw3:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          version="${{ steps.version.outputs.value }}"
+          # A GitW3-only respin of the same upstream base is tagged `gitw3-v16.0.2-1`;
+          # strip that suffix to point at the right upstream release.
+          upstream="${version%-*}"
+          gh release create "$GITHUB_REF_NAME" \
+            --title "GitW3 $version" \
+            --notes "GitW3 $version, based on Forgejo v$upstream.
+
+          Container image: \`ghcr.io/ensombl/gitw3:$version\`
+
+          Upstream release notes: https://codeberg.org/forgejo/forgejo/releases/tag/v$upstream" \
+            gitw3-*-linux-amd64 gitw3-*-linux-amd64.sha256

@@ -1,0 +1,89 @@
+name: Sync upstream Forgejo
+
+# Mirrors Forgejo's branches and tags into this repo and flags releases we have not merged yet.
+# It never writes to `main` and never attempts an automatic merge — see docs/gitw3/upstream-sync.md.
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  UPSTREAM: https://codeberg.org/forgejo/forgejo.git
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream refs
+        run: |
+          set -eu
+          git remote add upstream "$UPSTREAM"
+          # Only Forgejo's own branches. Their renovate/* and bp-*/* branches are build noise.
+          git fetch --tags --prune upstream \
+            "+refs/heads/forgejo:refs/remotes/upstream/forgejo" \
+            "+refs/heads/*/forgejo:refs/remotes/upstream/*/forgejo"
+
+      - name: Push upstream refs
+        run: |
+          set -eu
+          # Explicit refspecs, never `--mirror`: nothing here can delete or move `main`.
+          # Upstream has no `main` branch, so there is no name collision to guard against.
+          git for-each-ref --format='%(refname)' 'refs/remotes/upstream/**' \
+          | while read -r ref; do
+              branch="${ref#refs/remotes/upstream/}"
+              git push --force origin "$ref:refs/heads/$branch"
+            done
+          git push --tags origin
+
+      - name: Check whether the newest upstream release is merged
+        id: check
+        run: |
+          set -eu
+          latest=$(git tag --list 'v*' --sort=-v:refname \
+                   | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          if git merge-base --is-ancestor "$latest" origin/main; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+            echo "main already contains $latest"
+          else
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+            echo "main does NOT contain $latest"
+          fi
+
+      - name: Open a tracking issue
+        if: steps.check.outputs.merged == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          set -eu
+          title="Merge upstream Forgejo $LATEST into main"
+          # Idempotent: this workflow runs daily, and we want one issue per release, not per day.
+          if [ -n "$(gh issue list --state open --search "$title in:title" --json number --jq '.[].number')" ]; then
+            echo "Tracking issue already open."
+            exit 0
+          fi
+          gh issue create \
+            --title "$title" \
+            --label upstream \
+            --body "Forgejo \`$LATEST\` is available and is not yet an ancestor of \`main\`.
+
+          Follow the procedure in [docs/gitw3/upstream-sync.md](../blob/main/docs/gitw3/upstream-sync.md).
+
+          Upstream release notes: https://codeberg.org/forgejo/forgejo/releases/tag/$LATEST
+
+          If this is a security release, treat it as time-critical."

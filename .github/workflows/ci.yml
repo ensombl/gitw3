@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Upstream branches (`forgejo`, `v*/forgejo`) are mirrored verbatim and are not ours to test.
+# Only `main` and PRs targeting it are built here.
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: make deps-frontend
+
+      - name: Build
+        env:
+          EXECUTABLE: gitw3
+          TAGS: bindata sqlite sqlite_unlock_notify
+        run: make build
+
+      - name: Smoke test
+        run: ./gitw3 --version
