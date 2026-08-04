@@ -1,0 +1,35 @@
+# Locale keys that must KEEP the Forgejo name.
+#
+# These strings refer to the upstream Forgejo project or to external infrastructure that is
+# genuinely named Forgejo. Rebranding them would be actively wrong, not merely cosmetic:
+# it would send our users to report our bugs on Forgejo's tracker, or tell them to install a
+# "GitW3 runner" that does not exist.
+#
+# One key per line. Everything not listed here gets the brand substitution.
+
+# Sends bug reports to Forgejo's issue tracker on Codeberg.
+# TODO: this should point at our own tracker instead of simply being excluded.
+report_message
+
+# About the upstream project itself, and links to its repository.
+license_desc
+
+# Checks a TXT DNS record at release.forgejo.org — literally Forgejo's infrastructure.
+enable_update_checker_helper_forgejo
+
+# Forgejo's translation project on Codeberg. Contributions go upstream, not to us.
+language.localization_project
+
+# Webhook type whose identifier is `forgejo` in config and in the API. The label must match
+# the value operators actually write.
+settings.web_hook_name_forgejo
+
+# "Forgejo Actions" is the technology name, and the runner is the external `forgejo-runner`
+# binary. Telling users to set up a "GitW3 runner" would point them at software that does
+# not exist.
+settings.actions_desc
+runs.no_workflows.help_write_access
+runs.no_workflows.help_no_write_access
+
+# Explicitly documented as not displayed in the UI; used by the translation tooling.
+test

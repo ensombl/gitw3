@@ -21,20 +21,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
           cache: npm
 
       - name: Install frontend dependencies
         run: make deps-frontend
+
+      # Must run before the build: options/ and public/ are embedded into the binary by the
+      # `bindata` tag, so branding applied afterwards would not reach the artefact.
+      - name: Apply GitW3 branding
+        run: ./branding/apply.sh
 
       - name: Build
         env:
@@ -43,4 +48,9 @@ jobs:
         run: make build
 
       - name: Smoke test
-        run: ./gitw3 --version
+        run: |
+          ./gitw3 --version
+          # Asserts the branding overlay actually reached the binary. Without this the build
+          # would still pass while silently shipping Forgejo's name.
+          ./gitw3 --version | grep -q '^gitw3 version' \
+            || { echo "::error::branding did not apply to the CLI name"; exit 1; }
