@@ -36,18 +36,35 @@ rather than shipping quietly.
 
 `assets/` currently holds a **placeholder mark**, not the final GitW3 logo.
 
-When the real logo arrives, replace `logo.svg` and regenerate the raster versions:
+### The house style
+
+The mark follows the convention used by the other MetaState platform logos (see
+`infrastructure/eid-wallet/static/images/Logo-*.svg` in the `prototype` repo): a rounded square
+filled with a brand colour, holding one simple white line icon.
+
+| | |
+| --- | --- |
+| Canvas | `viewBox="0 0 162 162"` |
+| Background | `<rect width="162" height="162" rx="32" fill="…"/>` — `rx` is 15–23% of the side across the family |
+| Icon | white, `stroke-width="9"`, `stroke-linecap`/`stroke-linejoin` `round` |
+| Safe area | roughly x,y 41 → 121, so the icon reads at favicon size |
+| Colour | `#8968FF`, taken from the main W3DS logo |
+
+### Regenerating
+
+Replace `logo.svg`, then:
 
 ```sh
-cd branding/assets
-cp logo.svg favicon.svg
-magick -background none logo.svg -resize 512x512 logo.png
-magick -background none logo.svg -resize 128x128 favicon.png
-magick -background none logo.svg -resize 180x180 apple-touch-icon.png
+./branding/render-assets.sh
 ```
 
-The SVG must keep the `viewBox="0 0 212 212" width="32" height="32"` shape that Forgejo's
-templates expect.
+**Do not rasterise with ImageMagick alone.** `magick logo.svg logo.png` appears to succeed but
+silently produces a blank square: ImageMagick falls back to its built-in MSVG renderer when
+librsvg is absent, and MSVG draws neither strokes nor circles. `render-assets.sh` uses headless
+Chrome instead and refuses to finish if a raster comes out as a flat fill.
+
+`loading.svg` is the animated variant shown on the install and migration pages; keep it visually
+consistent with `logo.svg` by hand — it is not generated.
 
 **The GitW3 mark must be original work.** Forgejo's logo is CC BY-SA 4.0 (Caesar Schinas) with an
 attribution exemption granted only to the Forgejo project, and the Jo mascot is CC BY 4.0 (David
