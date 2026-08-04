@@ -28,7 +28,7 @@ cd "$ROOT"
 
 # Upstream paths this script writes to. Printed at the end so the restore command stays in
 # sync with what is actually modified.
-TOUCHED="cmd/ docker/ modules/ options/ public/"
+TOUCHED="cmd/ docker/ modules/ options/ public/ routers/ services/"
 
 log() { printf '  %s\n' "$*"; }
 die() { printf 'apply-branding: %s\n' "$*" >&2; exit 1; }
@@ -92,6 +92,53 @@ patch_literal docker/root/etc/s6/gitea/setup \
 patch_literal docker/rootless/usr/local/bin/docker-setup.sh \
     'APP_NAME=${APP_NAME:-"Forgejo: Beyond coding. We forge."}' \
     "APP_NAME=\${APP_NAME:-\"$BRAND\"}"
+
+# The web installer pre-fills these two fields, and whatever they contain is written into the
+# instance's app.ini for good. Left alone, every instance installed through the browser ends up
+# permanently named "Forgejo" — config, not just display.
+#
+# The slogan is emptied rather than invented: the field is optional, and nobody has approved a
+# GitW3 tagline.
+patch_literal routers/install/install.go \
+    'form.AppName = "Forgejo"' \
+    "form.AppName = \"$BRAND\""
+
+patch_literal routers/install/install.go \
+    'form.AppSlogan = "Beyond coding. We Forge."' \
+    'form.AppSlogan = ""'
+
+# Atom/RSS feed metadata, seen in every feed reader.
+patch_literal modules/setting/ui.go \
+    'Author:      "Forgejo – Beyond coding. We forge.",' \
+    "Author:      \"$BRAND\","
+
+patch_literal modules/setting/ui.go \
+    'Description: "Forgejo is a self-hosted lightweight software forge. Easy to install and low maintenance, it just does the job.",' \
+    "Description: \"$BRAND is a self-hosted lightweight software forge. Easy to install and low maintenance, it just does the job.\","
+
+# Outgoing mail: the test message users send from the admin panel, and the header every
+# recipient's client can see.
+patch_literal services/mailer/mail.go \
+    '"Forgejo Test Email!", "Forgejo Test Email!"' \
+    "\"$BRAND Test Email!\", \"$BRAND Test Email!\""
+
+patch_literal services/mailer/mail.go \
+    '"X-Mailer":                  "Forgejo",' \
+    "\"X-Mailer\":                  \"$BRAND\","
+
+# Messages printed back over git+ssh, so they land in the user's terminal on push and pull.
+patch_literal cmd/serv.go '"Forgejo:"' "\"$BRAND:\""
+patch_literal cmd/serv.go \
+    '"Forgejo: SSH has been disabled"' \
+    "\"$BRAND: SSH has been disabled\""
+
+# Deliberately NOT patched, and why:
+#   modules/structs/repo.go      "Forgejo" is a migration service type exposed through the API
+#   services/migrations/pagure   outbound User-Agent, a protocol identifier rather than UI
+#   cmd/cert.go                  CommonName of a self-signed dev certificate
+#   *_test.go                    assertions against upstream strings; patching them would make
+#                                the suite pass for the wrong reason
+#   log.Info / log.Fatal lines   operator logs, low value against the merge-conflict cost
 
 # ---------------------------------------------------------------------------
 # 2. User-facing translation strings.
