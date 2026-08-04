@@ -33,3 +33,24 @@ runs.no_workflows.help_no_write_access
 
 # Explicitly documented as not displayed in the UI; used by the translation tooling.
 test
+
+
+# ---------------------------------------------------------------------------
+# Keys from options/locale_next/*.json
+#
+# Keys are the same in every language file, so one entry here covers all 72 locales.
+# A trailing `*` matches by prefix.
+# ---------------------------------------------------------------------------
+
+# A migration source: data coming *from* Forgejo instances. Renaming it would label the
+# feature "migrate from GitW3", which is not what it does.
+migrate.forgejo.description
+
+# The upstream update checker, linking to Forgejo's own blog.
+admin.dashboard.new_version_hint
+
+# The Forgejo Actions integration. "Forgejo Actions" is the technology name and the runner is
+# the external `forgejo-runner` binary.
+settings.authorized_integration.ui.forgejo_actions_local
+settings.authorized_integration.forgejo_actions_local*
+actions.runners.runner_details.labels_note
