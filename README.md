@@ -8,9 +8,13 @@ rebranded for the MetaState / W3DS ecosystem.
 GitW3 tracks Forgejo releases. Everything that makes GitW3 *GitW3* is deliberately confined to a
 thin layer on top of upstream:
 
-- **Branding** — application name, logo, colour scheme, and any overridden templates. Applied
-  through the customisation mechanisms Forgejo already provides (`APP_NAME` in `app.ini`,
-  `custom/public/assets/`, `custom/templates/`) rather than by editing upstream source.
+- **Branding** — application name, logo, colour scheme, templates and locale strings. Applied by
+  [`branding/apply.sh`](branding/apply.sh), which rewrites upstream files in the working tree
+  immediately before `make build`. Those rewrites are never committed, so the tracked diff against
+  Forgejo stays empty. Forgejo's own `custom/` mechanism cannot do this job: the Docker image
+  points `GITEA_CUSTOM` at a volume, so the repository's `custom/` directory is never read in a
+  container, and the assets that need overriding are embedded into the binary at build time by the
+  `bindata` tag anyway.
 - **Nothing else, for now.** In particular, W3DS login is *not* implemented in this fork. It is
   provided by a separate OIDC bridge service and wired up through Forgejo's built-in OAuth2
   authentication sources, so it needs no change to this codebase.
@@ -49,9 +53,15 @@ Requires Go (version pinned in [`go.mod`](go.mod)) and Node (pinned in
 
 ```sh
 make deps-frontend
+./branding/apply.sh
 EXECUTABLE=gitw3 TAGS="bindata sqlite sqlite_unlock_notify" make build
 ./gitw3 --version
+git checkout -- cmd/ docker/ modules/ options/ public/ routers/ services/ templates/ web_src/
 ```
+
+The branding step is not optional: without it `make build` produces a binary that still calls
+itself Forgejo. The last line puts the working tree back — see
+[`branding/README.md`](branding/README.md).
 
 Container images are published to `ghcr.io/ensombl/gitw3`.
 
