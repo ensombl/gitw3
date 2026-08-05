@@ -1,0 +1,38 @@
+/* GitW3 palette — dark theme.
+ *
+ * Note that upstream inverts the meaning of the scale here: in the dark theme --color-primary-
+ * dark-N gets *lighter* and light-N gets *darker*, because "dark" means "more prominent against
+ * the dark background". This file follows that convention rather than fighting it.
+ *
+ * The base is MetaState's --color-primary-400 (#a186ff) rather than the #8968ff used on light
+ * backgrounds: the brand purple only reaches ~4.4:1 against Forgejo's dark surface, and its
+ * contrast colour would have to be near-black to stay legible. #a186ff paired with MetaState's
+ * --color-black (#1d2636) gives 5.3:1 on filled buttons.
+ */
+:root {
+  --color-primary: #a186ff;
+  --color-primary-contrast: #1d2636;
+  --color-primary-dark-1: #b8a4ff;
+  --color-primary-dark-2: #b8a4ff;
+  --color-primary-dark-3: #d0c3ff;
+  --color-primary-dark-4: #d0c3ff;
+  --color-primary-dark-5: #e7e1ff;
+  --color-primary-dark-6: #e7e1ff;
+  --color-primary-dark-7: #f3f0ff;
+  --color-primary-light-1: #8968ff;
+  --color-primary-light-2: #7a55f5;
+  --color-primary-light-3: #6b46e5;
+  --color-primary-light-4: #5b34d1;
+  --color-primary-light-5: #5b34d1;
+  --color-primary-light-6: #4c2ab0;
+  --color-primary-light-7: #4c2ab0;
+  --color-primary-alpha-10: #8968ff19;
+  --color-primary-alpha-20: #8968ff33;
+  --color-primary-alpha-30: #8968ff4b;
+  --color-primary-alpha-40: #8968ff66;
+  --color-primary-alpha-50: #8968ff80;
+  --color-primary-alpha-60: #8968ff99;
+  --color-primary-alpha-70: #8968ffb3;
+  --color-primary-alpha-80: #8968ffcc;
+  --color-primary-alpha-90: #8968ffe1;
+}

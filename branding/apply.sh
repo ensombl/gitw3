@@ -28,7 +28,7 @@ cd "$ROOT"
 
 # Upstream paths this script writes to. Printed at the end so the restore command stays in
 # sync with what is actually modified.
-TOUCHED="cmd/ docker/ modules/ options/ public/ routers/ services/ templates/"
+TOUCHED="cmd/ docker/ modules/ options/ public/ routers/ services/ templates/ web_src/"
 
 log() { printf '  %s\n' "$*"; }
 die() { printf 'apply-branding: %s\n' "$*" >&2; exit 1; }
@@ -131,6 +131,38 @@ patch_literal cmd/serv.go '"Forgejo:"' "\"$BRAND:\""
 patch_literal cmd/serv.go \
     '"Forgejo: SSH has been disabled"' \
     "\"$BRAND: SSH has been disabled\""
+
+# Default theme. Upstream ships `forgejo-auto`, which follows the operating system and therefore
+# lands on dark for most people. The MetaState platforms are light, so GitW3 defaults to light
+# and users can still switch.
+patch_literal modules/setting/ui.go \
+    'DefaultTheme:        `forgejo-auto`,' \
+    'DefaultTheme:        `forgejo-light`,'
+
+# ---------------------------------------------------------------------------
+# Colour scheme.
+#
+# Appended after upstream's own :root block rather than patched over it. Overriding by cascade
+# means an upstream colour tweak changes values we do not care about and never conflicts with
+# ours — patching 25 individual lines would break on any of them.
+# ---------------------------------------------------------------------------
+append_once() {
+    local target="$1" src="$2"
+    local marker="/* GitW3 palette"
+
+    [ -f "$target" ] || die "no such file: $target (upstream layout changed?)"
+    [ -f "$src" ] || die "missing branding file: $src"
+
+    if grep -qF -- "$marker" "$target"; then
+        log "already applied: $target"
+        return
+    fi
+    { printf '\n'; cat "$src"; } >> "$target"
+    log "palette appended: $target"
+}
+
+append_once web_src/css/themes/theme-forgejo-light.css "$BRANDING/theme-light.css"
+append_once web_src/css/themes/theme-forgejo-dark.css "$BRANDING/theme-dark.css"
 
 # ---------------------------------------------------------------------------
 # Templates. The brand name is passed as a template argument here, not stored in the locale

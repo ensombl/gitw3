@@ -1,0 +1,40 @@
+/* GitW3 palette — light theme.
+ *
+ * Appended after upstream's :root block so it wins, without patching upstream's own values.
+ * That way an upstream colour tweak can never conflict with ours.
+ *
+ * The MetaState brand purple (#8968ff, from --color-primary in eID Wallet's app.css) only
+ * reaches 3.8:1 against white, below AA for body text. Upstream has the same problem with their
+ * brand orange and solves it the same way: the brand colour sits at --color-primary-light-3 and
+ * a darker shade carries text and interactive states. #5b34d1 gives 7.4:1 on white.
+ *
+ * --color-primary-hover and --color-primary-active are not redeclared: they are var() references
+ * to dark-2 and dark-4, and custom properties resolve at use time, so they follow automatically.
+ */
+:root {
+  --color-primary: #5b34d1;
+  --color-primary-contrast: #ffffff;
+  --color-primary-dark-1: #5b34d1;
+  --color-primary-dark-2: #4c2ab0;
+  --color-primary-dark-3: #4c2ab0;
+  --color-primary-dark-4: #3d2190;
+  --color-primary-dark-5: #3d2190;
+  --color-primary-dark-6: #3d2190;
+  --color-primary-dark-7: #2e1a6b;
+  --color-primary-light-1: #6b46e5;
+  --color-primary-light-2: #7a55f5;
+  --color-primary-light-3: #8968ff;
+  --color-primary-light-4: #a186ff;
+  --color-primary-light-5: #b8a4ff;
+  --color-primary-light-6: #e7e1ff;
+  --color-primary-light-7: #f3f0ff;
+  --color-primary-alpha-10: #5b34d119;
+  --color-primary-alpha-20: #5b34d133;
+  --color-primary-alpha-30: #5b34d14b;
+  --color-primary-alpha-40: #5b34d166;
+  --color-primary-alpha-50: #5b34d180;
+  --color-primary-alpha-60: #5b34d199;
+  --color-primary-alpha-70: #5b34d1b3;
+  --color-primary-alpha-80: #5b34d1cc;
+  --color-primary-alpha-90: #5b34d1e1;
+}
