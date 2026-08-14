@@ -65,6 +65,57 @@ itself Forgejo. The last line puts the working tree back — see
 
 Container images are published to `ghcr.io/ensombl/gitw3`.
 
+## Local development
+
+For iterating on code, use the live-reload dev server instead of the full build above:
+
+```sh
+make deps-frontend
+TAGS="sqlite sqlite_unlock_notify" GITEA_RUN_MODE=dev make watch
+```
+
+`make watch` runs the frontend (`webpack --watch`) and backend (`air`, which rebuilds and restarts
+on `.go`/`.tmpl` changes) together. `TAGS` must be set explicitly here and include `sqlite`: unlike
+the release build above, `make watch`'s backend target does not set it, so without it the install
+wizard won't offer SQLite3 as a database option.
+
+First run serves the install wizard at `http://localhost:3000`. If that port is taken, set
+`[server] HTTP_PORT` in `custom/conf/app.ini` — environment variable overrides
+(`GITEA__server__HTTP_PORT`) are not read this early, only `app.ini` is. SQLite needs no other setup.
+
+### Testing W3DS login locally
+
+W3DS login isn't part of this codebase (see above) — it's a separate OIDC bridge wired in as a
+Forgejo OAuth2 authentication source. To exercise it locally:
+
+1. Run the OIDC bridge service (out of scope for this repo) and note its client ID, client secret,
+   and `.well-known/openid-configuration` discovery URL.
+2. Register it as an authentication source. The name must be exactly `W3DS` — it's baked into the
+   bridge's redirect URI as `<ROOT_URL>/user/oauth2/W3DS/callback`:
+   ```sh
+   ./gitea admin auth add-oauth \
+     --name "W3DS" \
+     --provider "openidConnect" \
+     --key "<client id>" \
+     --secret "<client secret>" \
+     --auto-discover-url "http://<bridge-host>/.well-known/openid-configuration" \
+     --scopes "openid" --scopes "profile" --scopes "email"
+   ```
+   The `profile`/`email` scopes are needed so Forgejo gets a real username/email back instead of
+   falling back to the OIDC `sub` claim and a synthetic `@w3ds.invalid` address.
+3. Add the following to `custom/conf/app.ini` and restart (`app.ini` is only read at process
+   startup, so this needs a restart of `make watch`, not just a hot-reload):
+   ```ini
+   [oauth2_client]
+   ENABLE_AUTO_REGISTRATION = true
+   ACCOUNT_LINKING = login
+   USERNAME = nickname
+   REGISTER_EMAIL_CONFIRM = false
+   ```
+   Without `ENABLE_AUTO_REGISTRATION`, Forgejo shows a manual "Complete new account" step on every
+   first-time OAuth2 login instead of silently provisioning the account, which is the intended
+   production behaviour.
+
 ## Licence
 
 Forgejo is GPL-3.0-or-later, and so is GitW3. See [LICENSE](LICENSE).
