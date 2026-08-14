@@ -116,6 +116,39 @@ Forgejo OAuth2 authentication source. To exercise it locally:
    first-time OAuth2 login instead of silently provisioning the account, which is the intended
    production behaviour.
 
+### Testing code sync locally
+
+Code sync isn't part of this codebase either — a separate `forgejo-code-sync` service resolves each push's
+author via the W3DS link above and writes their commits into their eVault, using a Forgejo system webhook and
+the admin Users API. To exercise it locally:
+
+1. Create a dedicated site-admin service account for the sync service — not a shared human admin's login, since
+   its token can read every account's `login_name` and every private repo's content.
+2. Generate two PATs on that account:
+   - `read:user,read:repository` scopes, for the service's continuous use (`FORGEJO_ADMIN_TOKEN`).
+   - `write:admin` scope, for the one-time webhook registration below (`FORGEJO_PROVISIONING_TOKEN`) —
+     optional, falls back to the token above, but keeps the always-running token's blast radius smaller.
+3. If the sync service's webhook URL resolves to loopback relative to this instance (true for local dev, not
+   for a real deployment), add the following to `custom/conf/app.ini` and restart:
+   ```ini
+   [webhook]
+   ALLOWED_HOST_LIST = loopback
+   ```
+4. Run the sync service's registration script once (idempotent, safe to re-run on redeploy) to register the
+   system webhook via `POST /api/v1/admin/hooks`.
+5. Two things about that endpoint worth knowing, even though the script already handles both:
+   - `active` must be sent as `true` explicitly — it defaults to `false`, and a hook created without it looks
+     completely normal (`201`, listed in Site Administration) but never delivers anything.
+   - `config.is_system_webhook` must be the literal string `"true"` — omit it and GitW3 silently creates a
+     "default" webhook instead: invisible to `GET /admin/hooks`, and it only applies to repos created *after*
+     it's added, never retroactively to existing ones.
+   - Rotating the webhook secret needs the hook deleted and recreated, not `PATCH`ed — `PATCH /admin/hooks/{id}`
+     silently ignores a changed `config.secret`.
+6. Verify after registering: Site Administration → Webhooks shows the hook with Active on, not just present,
+   and a "Test Delivery" (or a real push) actually reaches the service.
+7. Don't register the webhook twice — two system webhooks pointed at the same URL produce two envelopes per
+   push; the sync service has no deduplication for that case by design.
+
 ## Licence
 
 Forgejo is GPL-3.0-or-later, and so is GitW3. See [LICENSE](LICENSE).
