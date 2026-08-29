@@ -156,10 +156,17 @@
 					</ul>
 					<div data-w3ds-ppa-action class="{{if eq $publication.PPAStatus "granted"}}tw-hidden{{end}}">
 					{{if .CanAdminW3DS}}
-						<form class="w3ds-ppa-apply" data-w3ds-ppa-form action="{{.RepoLink}}/w3ds/ppa" method="post">
+						<form class="ui form w3ds-ppa-apply" data-w3ds-ppa-form action="{{.RepoLink}}/w3ds/ppa" method="post">
 							<input type="hidden" name="last_commit_id" value="{{$lastCommitID}}">
-							<button type="submit" class="ui {{if eq $publication.PPAStatus "submitted"}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="{{if .PPAWalletReady}}true{{else}}false{{end}}" {{if not .CanApplyPPA}}disabled{{end}}>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
-							<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if and (or (eq $publication.PPAStatus "ready") (eq $publication.PPAStatus "denied")) (not .PPAWalletReady)}}{{ctx.Locale.Tr "platform.ppa.wallet_required"}}{{else}}{{$publication.PPAActionMessage}}{{end}}</span>
+							<div class="field {{if ne $publication.PPAStatus "denied"}}tw-hidden{{end}}" data-w3ds-ppa-response>
+								<label for="w3ds-ppa-response">{{ctx.Locale.Tr "platform.ppa.response_label"}}</label>
+								<textarea id="w3ds-ppa-response" name="response_to_decision" rows="4" maxlength="2048" placeholder="{{ctx.Locale.Tr "platform.ppa.response_placeholder"}}" data-w3ds-ppa-response-input {{if eq $publication.PPAStatus "denied"}}required{{end}}></textarea>
+								<span class="help">{{ctx.Locale.Tr "platform.ppa.response_help"}}</span>
+							</div>
+							<div class="w3ds-ppa-apply-actions">
+								<button type="submit" class="ui {{if eq $publication.PPAStatus "submitted"}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="{{if .PPAWalletReady}}true{{else}}false{{end}}" {{if not .CanApplyPPA}}disabled{{end}}>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
+								<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if and (or (eq $publication.PPAStatus "ready") (eq $publication.PPAStatus "denied")) (not .PPAWalletReady)}}{{ctx.Locale.Tr "platform.ppa.wallet_required"}}{{else}}{{$publication.PPAActionMessage}}{{end}}</span>
+							</div>
 						</form>
 					{{else}}
 						<button type="button" class="ui {{if eq $publication.PPAStatus "submitted"}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="false" disabled>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>

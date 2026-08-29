@@ -95,6 +95,7 @@ test('focuses a denied decision and shows a red tab status', () => {
       <p data-w3ds-ppa-decision-time data-prefix="Decision recorded"></p>
     </div>
     <div data-w3ds-ppa-action>
+      <div data-w3ds-ppa-response class="tw-hidden"><textarea data-w3ds-ppa-response-input></textarea></div>
       <button data-w3ds-ppa-apply data-can-edit="true"><span data-w3ds-ppa-button-label></span></button>
       <span data-w3ds-ppa-note></span>
     </div>
@@ -120,6 +121,8 @@ test('focuses a denied decision and shows a red tab status', () => {
   expect(root.querySelector('[data-w3ds-ppa-checklist]')?.classList.contains('tw-hidden')).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-decision]')?.classList.contains('negative')).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-decision-message]')?.textContent).toContain('Missing security review');
+  expect(root.querySelector('[data-w3ds-ppa-response]')?.classList.contains('tw-hidden')).toBe(false);
+  expect(root.querySelector('[data-w3ds-ppa-response-input]')?.required).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-apply]')?.disabled).toBe(false);
   expect(root.querySelector('[data-w3ds-ppa-button-label]')?.textContent).toBe('Sign and reapply');
   expect(tab.querySelector('[data-w3ds-tab-status]')?.classList.contains('denied')).toBe(true);

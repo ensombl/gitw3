@@ -95,6 +95,19 @@ func TestPlatformManifestValidatesSubmissionProof(t *testing.T) {
 	submitManifest(t, manifest)
 	require.NoError(t, manifest.Validate(false))
 
+	t.Run("signed response to denial", func(t *testing.T) {
+		reapplication := *manifest
+		proof := *manifest.SubmissionProof
+		proof.Statement.PreviousDecision = "denied"
+		proof.Statement.PreviousDecisionAt = time.Now().UTC().Format(time.RFC3339)
+		proof.Statement.ResponseToDecision = "We addressed the review feedback."
+		payload, err := proof.Statement.SigningPayload()
+		require.NoError(t, err)
+		proof.Payload = payload
+		reapplication.SubmissionProof = &proof
+		require.NoError(t, reapplication.Validate(false))
+	})
+
 	t.Run("missing proof", func(t *testing.T) {
 		invalid := *manifest
 		invalid.SubmissionProof = nil
@@ -121,6 +134,16 @@ func TestPlatformManifestValidatesSubmissionProof(t *testing.T) {
 		invalid := *manifest
 		invalid.InSubmission = false
 		assert.ErrorContains(t, invalid.Validate(false), "require inSubmission")
+	})
+	t.Run("response without denial", func(t *testing.T) {
+		invalid := *manifest
+		proof := *manifest.SubmissionProof
+		proof.Statement.ResponseToDecision = "Please reconsider."
+		payload, err := proof.Statement.SigningPayload()
+		require.NoError(t, err)
+		proof.Payload = payload
+		invalid.SubmissionProof = &proof
+		assert.ErrorContains(t, invalid.Validate(false), "response requires a previous denial")
 	})
 }
 

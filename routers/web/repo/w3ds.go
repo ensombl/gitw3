@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"forgejo.org/models"
 	auth_model "forgejo.org/models/auth"
@@ -259,6 +260,18 @@ func W3DSCreatePPASigningSession(ctx *context.Context) {
 		ppaJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.ppa.wallet_required"))
 		return
 	}
+	responseToDecision := strings.TrimSpace(ctx.FormString("response_to_decision"))
+	if decision != nil && decision.Decision == "denied" && responseToDecision == "" {
+		ppaJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.ppa.response_required"))
+		return
+	}
+	if utf8.RuneCountInString(responseToDecision) > 2048 {
+		ppaJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.ppa.response_too_long"))
+		return
+	}
+	if decision == nil {
+		responseToDecision = ""
+	}
 
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
@@ -284,6 +297,7 @@ func W3DSCreatePPASigningSession(ctx *context.Context) {
 	if decision != nil && decision.Decision == "denied" {
 		statement.PreviousDecision = decision.Decision
 		statement.PreviousDecisionAt = decision.CreatedAt
+		statement.ResponseToDecision = responseToDecision
 	}
 	payload, err := statement.SigningPayload()
 	if err != nil {

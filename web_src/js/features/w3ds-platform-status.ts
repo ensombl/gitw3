@@ -134,6 +134,10 @@ export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
     }
   }
   root.querySelector<HTMLElement>('[data-w3ds-ppa-action]')?.classList.toggle('tw-hidden', data.ppaStatus === 'granted');
+  const responseField = root.querySelector<HTMLElement>('[data-w3ds-ppa-response]');
+  const responseInput = responseField?.querySelector<HTMLTextAreaElement>('[data-w3ds-ppa-response-input]');
+  responseField?.classList.toggle('tw-hidden', data.ppaStatus !== 'denied');
+  if (responseInput) responseInput.required = data.ppaStatus === 'denied';
   const apply = root.querySelector<HTMLButtonElement>('[data-w3ds-ppa-apply]');
   if (apply) {
     apply.disabled = apply.dataset.canEdit !== 'true' || apply.dataset.signing === 'true' || !['ready', 'denied'].includes(data.ppaStatus);
@@ -214,7 +218,7 @@ function initPPASigning(root: HTMLElement) {
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (apply.disabled) return;
+    if (apply.disabled || !form.reportValidity()) return;
 
     signingStopped = false;
     setActive(true);
@@ -229,7 +233,7 @@ function initPPASigning(root: HTMLElement) {
     }, {once: true});
 
     try {
-      const response = await POST(form.action, {headers: {accept: 'application/json'}});
+      const response = await POST(form.action, {data: new FormData(form), headers: {accept: 'application/json'}});
       if (!response.ok) throw new Error(await responseMessage(response, signingStatus.dataset.failed ?? ''));
       const offer = await response.json() as PPASigningOffer;
       await toCanvas(canvas, offer.uri, {width: 260, margin: 1, errorCorrectionLevel: 'M'});

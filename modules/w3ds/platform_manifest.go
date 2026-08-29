@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -44,6 +45,7 @@ type PPASubmissionStatement struct {
 	Nonce              string   `json:"nonce"`
 	PreviousDecision   string   `json:"previousDecision,omitempty"`
 	PreviousDecisionAt string   `json:"previousDecisionAt,omitempty"`
+	ResponseToDecision string   `json:"responseToDecision,omitempty"`
 }
 
 // PPASubmissionProof travels with the PlatformProfile in the platform eVault.
@@ -215,6 +217,12 @@ func (m *PlatformManifest) validateSubmissionProof() error {
 	}
 	if (statement.PreviousDecision == "") != (statement.PreviousDecisionAt == "") || (statement.PreviousDecision != "" && statement.PreviousDecision != "denied") {
 		return errors.New("submissionProof has invalid reapplication details")
+	}
+	if statement.ResponseToDecision != "" && statement.PreviousDecision != "denied" {
+		return errors.New("submissionProof response requires a previous denial")
+	}
+	if utf8.RuneCountInString(statement.ResponseToDecision) > 2048 {
+		return errors.New("submissionProof response must not exceed 2048 characters")
 	}
 	if statement.PreviousDecisionAt != "" {
 		if _, err := time.Parse(time.RFC3339, statement.PreviousDecisionAt); err != nil {
