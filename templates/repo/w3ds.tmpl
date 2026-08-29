@@ -97,23 +97,23 @@
 							<label for="platform_description">{{ctx.Locale.Tr "platform.edit.description"}}</label>
 							<textarea id="platform_description" name="platform_description" rows="4" maxlength="2048" required>{{$edit.PlatformDescription}}</textarea>
 						</div>
-						<div class="w3ds-edit-grid">
-							<div class="required field {{if .Err_PlatformDomains}}error{{end}}">
-								<label for="platform_domains">{{ctx.Locale.Tr "platform.domains.label"}}</label>
-								<select class="ui fluid selection dropdown" id="platform_domains" name="platform_domains" multiple required {{if .DomainOntologyUnavailable}}disabled{{end}}>
-									{{range .PlatformDomains}}<option value="{{.ID}}" title="{{.Description}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}
-								</select>
-								<span class="help">{{ctx.Locale.Tr "platform.domains.help"}}</span>
+						<div class="required field {{if .Err_PlatformDomains}}error{{end}}">
+							<label>{{ctx.Locale.Tr "platform.domains.label"}}</label>
+							<div class="w3ds-domain-options" role="group" aria-label="{{ctx.Locale.Tr "platform.domains.label"}}">
+								{{range .PlatformDomains}}<label class="w3ds-domain-option"><input type="checkbox" name="platform_domains" value="{{.ID}}" {{if .Selected}}checked{{end}} {{if $.DomainOntologyUnavailable}}disabled{{end}}><span><strong>{{.Label}}</strong><small>{{.Description}}</small></span></label>{{end}}
 							</div>
+							<span class="help">{{ctx.Locale.Tr "platform.domains.help"}}</span>
+						</div>
+						<div class="w3ds-edit-grid">
 							<div class="field {{if .Err_PlatformURL}}error{{end}}">
 								<label for="platform_url">{{ctx.Locale.Tr "platform.repo.application_url"}}</label>
 								<input id="platform_url" name="platform_url" type="url" value="{{$edit.PlatformURL}}" maxlength="2048" placeholder="https://my-platform.example">
 								<span class="help">{{ctx.Locale.Tr "platform.edit.application_help"}}</span>
 							</div>
-						</div>
-						<div class="field {{if .Err_PlatformLogoURL}}error{{end}}">
-							<label for="platform_logo_url">{{ctx.Locale.Tr "platform.edit.logo_url"}}</label>
-							<input id="platform_logo_url" name="platform_logo_url" type="url" value="{{$edit.PlatformLogoURL}}" maxlength="2048" placeholder="https://my-platform.example/logo.png">
+							<div class="field {{if .Err_PlatformLogoURL}}error{{end}}">
+								<label for="platform_logo_url">{{ctx.Locale.Tr "platform.edit.logo_url"}}</label>
+								<input id="platform_logo_url" name="platform_logo_url" type="url" value="{{$edit.PlatformLogoURL}}" maxlength="2048" placeholder="https://my-platform.example/logo.png">
+							</div>
 						</div>
 						<div class="ui info message w3ds-stable-identity">
 							<div class="header">{{ctx.Locale.Tr "platform.edit.stable_title"}}</div>

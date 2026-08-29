@@ -2,7 +2,7 @@
 <div role="main" aria-label="{{.Title}}" class="page-content repository new repo">
 	<div class="ui middle very relaxed page one column grid">
 		<div class="column">
-			<form id="platform-onboarding-form" class="ui form" action="{{AppSubUrl}}/repo/create/new" method="post">
+			<form id="platform-onboarding-form" class="ui form" action="{{AppSubUrl}}/repo/create/new" method="post" data-platform-domains-required-text="{{ctx.Locale.Tr "platform.domains.required"}}">
 				{{.CsrfTokenHtml}}
 				<h2 class="ui top attached header">{{ctx.Locale.Tr "platform.create.title"}}</h2>
 				<div class="ui attached segment">
@@ -40,19 +40,18 @@
 							{{if .DomainOntologyUnavailable}}
 								<div class="ui negative message">{{ctx.Locale.Tr "platform.domains.unavailable"}}</div>
 							{{end}}
-							<div class="two fields">
-								<label class="field">{{ctx.Locale.Tr "platform.domains.label"}}
-									<select class="ui fluid selection dropdown" name="platform_domains" multiple required {{if .DomainOntologyUnavailable}}disabled{{end}}>
-										{{range .PlatformDomains}}
-											<option value="{{.ID}}" title="{{.Description}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
-										{{end}}
-									</select>
-									<span class="help">{{ctx.Locale.Tr "platform.domains.help"}}</span>
-								</label>
-								<div class="field">
-									<label>{{ctx.Locale.Tr "platform.create.version"}}</label>
-									<div class="ui info message">{{ctx.Locale.Tr "platform.create.version_from_release"}}</div>
+							<div class="required field {{if .Err_PlatformDomains}}error{{end}}">
+								<label>{{ctx.Locale.Tr "platform.domains.label"}}</label>
+								<div class="w3ds-domain-options" role="group" aria-label="{{ctx.Locale.Tr "platform.domains.label"}}">
+									{{range .PlatformDomains}}
+										<label class="w3ds-domain-option"><input type="checkbox" name="platform_domains" value="{{.ID}}" {{if .Selected}}checked{{end}} {{if $.DomainOntologyUnavailable}}disabled{{end}}><span><strong>{{.Label}}</strong><small>{{.Description}}</small></span></label>
+									{{end}}
 								</div>
+								<span class="help">{{ctx.Locale.Tr "platform.domains.help"}}</span>
+							</div>
+							<div class="field">
+								<label>{{ctx.Locale.Tr "platform.create.version"}}</label>
+								<div class="ui info message">{{ctx.Locale.Tr "platform.create.version_from_release"}}</div>
 							</div>
 							<label>{{ctx.Locale.Tr "platform.create.url"}}<input name="platform_url" value="{{.platform_url}}" type="url" placeholder="https://my-platform.example"></label>
 							<label>{{ctx.Locale.Tr "platform.create.logo_url"}}<input name="platform_logo_url" value="{{.platform_logo_url}}" type="url" placeholder="https://my-platform.example/logo.png"></label>

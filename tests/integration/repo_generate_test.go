@@ -41,9 +41,10 @@ func assertPlatformCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.
 	assert.Equal(t, 1, form.Find("#platform-step-back.tw-hidden").Length(), "Expected the back button to start hidden")
 	assert.Equal(t, 1, form.Find("#platform-create-submit.tw-hidden").Length(), "Expected the submit button to start hidden")
 	htmlDoc.AssertDropdownHasSelectedOption(t, "uid", strconv.FormatInt(owner.ID, 10))
-	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_domains", "platform_url", "platform_public_key"} {
+	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_url", "platform_public_key"} {
 		assert.Equal(t, 1, form.Find(fmt.Sprintf("[name='%s']", name)).Length(), "missing %s", name)
 	}
+	assert.Greater(t, form.Find(".w3ds-domain-option input[name='platform_domains']").Length(), 0, "published domains should be visible choices")
 	_, platformURLRequired := form.Find("[name='platform_url']").Attr("required")
 	assert.False(t, platformURLRequired, "platform_url should be optional")
 }
@@ -291,15 +292,16 @@ func TestW3DSEditPlatform(t *testing.T) {
 		pageResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds", user.Name, repo.Name), http.StatusOK)
 		page := NewHTMLParser(t, pageResp.Body)
 		page.AssertElement(t, "form[action='/"+user.Name+"/"+repo.Name+"/w3ds']", true)
+		assert.Equal(t, 2, page.Find(".w3ds-domain-option input[name='platform_domains']").Length())
 		assert.Equal(t, "Fixture Platform", page.GetInputValueByName("platform_display_name"))
 
-		update := NewRequestWithValues(t, "POST", "/"+user.Name+"/"+repo.Name+"/w3ds", map[string]string{
-			"platform_display_name": "Fixture Platform Updated",
-			"platform_description":  "The profile was edited directly from the W3DS tab",
-			"platform_domains":      "social",
-			"platform_url":          "https://guided.example",
-			"platform_logo_url":     "https://guided.example/logo.png",
-			"last_commit_id":        page.GetInputValueByName("last_commit_id"),
+		update := NewRequestWithURLValues(t, "POST", "/"+user.Name+"/"+repo.Name+"/w3ds", url.Values{
+			"platform_display_name": {"Fixture Platform Updated"},
+			"platform_description":  {"The profile was edited directly from the W3DS tab"},
+			"platform_domains":      {"social", "productivity"},
+			"platform_url":          {"https://guided.example"},
+			"platform_logo_url":     {"https://guided.example/logo.png"},
+			"last_commit_id":        {page.GetInputValueByName("last_commit_id")},
 		})
 		updateResp := session.MakeRequest(t, update, http.StatusSeeOther)
 		assert.Equal(t, "/"+user.Name+"/"+repo.Name+"/w3ds", test.RedirectURL(updateResp))
@@ -312,7 +314,7 @@ func TestW3DSEditPlatform(t *testing.T) {
 		assert.Equal(t, "Fixture Platform Updated", updated.DisplayName)
 		assert.Equal(t, "The profile was edited directly from the W3DS tab", updated.Description)
 		assert.Equal(t, "0.1.0", updated.Version)
-		assert.Equal(t, []string{"social"}, updated.Domains)
+		assert.Equal(t, []string{"social", "productivity"}, updated.Domains)
 		assert.Empty(t, updated.Category)
 		assert.Equal(t, "https://guided.example", updated.URL)
 		assert.Equal(t, "https://guided.example/logo.png", updated.LogoURL)

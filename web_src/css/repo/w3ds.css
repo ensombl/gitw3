@@ -107,6 +107,53 @@
   gap: 1rem;
 }
 
+.w3ds-domain-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  max-height: 28rem;
+  padding: 0.5rem;
+  overflow-block: auto;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  background: var(--color-input-background);
+}
+
+.ui.form .field .w3ds-domain-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.ui.form .field .w3ds-domain-option:hover,
+.ui.form .field .w3ds-domain-option:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-alpha-10);
+}
+
+.ui.form .field .w3ds-domain-option input {
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+}
+
+.w3ds-domain-option span,
+.w3ds-domain-option small {
+  display: block;
+}
+
+.w3ds-domain-option small {
+  margin-top: 0.2rem;
+  color: var(--color-text-light-2);
+  font-weight: var(--font-weight-normal);
+  line-height: 1.35;
+}
+
 .w3ds-stable-identity code {
   word-break: break-all;
 }
@@ -248,6 +295,10 @@
   }
 
   .w3ds-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .w3ds-domain-options {
     grid-template-columns: 1fr;
   }
 

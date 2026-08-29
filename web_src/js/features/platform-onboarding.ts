@@ -125,6 +125,15 @@ export function initPlatformOnboarding() {
         return false;
       }
     }
+    if (current === 1) {
+      const domains = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="platform_domains"]'));
+      if (domains.length > 0 && !domains.some((domain) => domain.checked)) {
+        domains[0].setCustomValidity(form.dataset.platformDomainsRequiredText ?? 'Select at least one application domain.');
+        domains[0].reportValidity();
+        domains[0].setCustomValidity('');
+        return false;
+      }
+    }
     if (current === 2) {
       const mode = form.querySelector<HTMLInputElement>('input[name="platform_key_mode"]:checked')?.value;
       const publicKey = form.querySelector<HTMLInputElement>('#platform-public-key')!;
