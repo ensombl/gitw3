@@ -329,9 +329,16 @@ func W3DSCreatePPASigningSession(ctx *context.Context) {
 	callbackURL := strings.TrimRight(setting.AppURL, "/") + "/w3ds/ppa/callback"
 	query := url.Values{}
 	query.Set("session", payload)
-	query.Set("data", base64.StdEncoding.EncodeToString(statementJSON))
+	displayJSON, err := json.Marshal(map[string]string{
+		"message":   "Submit " + manifest.DisplayName + " " + release.Version + " for PPA review (" + strings.Join(manifest.Domains, ", ") + ")",
+		"sessionId": payload,
+	})
+	if err != nil {
+		ppaJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.ppa.signing_failed"))
+		return
+	}
+	query.Set("data", base64.StdEncoding.EncodeToString(displayJSON))
 	query.Set("redirect_uri", callbackURL)
-	query.Set("platform_url", setting.AppURL)
 	ctx.JSON(http.StatusCreated, map[string]any{
 		"sessionId": payload,
 		"uri":       "w3ds://sign?" + query.Encode(),
