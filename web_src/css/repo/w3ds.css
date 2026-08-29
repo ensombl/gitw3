@@ -318,14 +318,14 @@
 
 .w3ds-ppa-signing-qr {
   display: grid;
-  min-height: 260px;
-  margin: 1rem auto;
+  min-height: 192px;
+  margin: 0.75rem auto;
   place-items: center;
 }
 
 .w3ds-ppa-signing-qr canvas {
   max-width: 100%;
-  border: 0.75rem solid var(--color-white);
+  border: 0.5rem solid var(--color-white);
   border-radius: var(--border-radius);
   background: var(--color-white);
 }
