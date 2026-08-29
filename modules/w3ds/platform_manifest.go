@@ -83,7 +83,7 @@ func (m *PlatformManifest) Validate(allowLocalHTTP bool) error {
 	if !strings.HasPrefix(m.PublicKey, "z") || len(m.PublicKey) < 2 || len(m.PublicKey) > 8192 {
 		return errors.New("publicKey must be a z-prefixed multibase key")
 	}
-	if err := validateWebURL(m.URL, false, allowLocalHTTP); err != nil {
+	if err := validateWebURL(m.URL, true, allowLocalHTTP); err != nil {
 		return fmt.Errorf("url: %w", err)
 	}
 	if m.LogoURL != "" {

@@ -40,6 +40,8 @@ func assertPlatformCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.
 	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_url", "platform_public_key"} {
 		assert.Equal(t, 1, form.Find(fmt.Sprintf("[name='%s']", name)).Length(), "missing %s", name)
 	}
+	_, platformURLRequired := form.Find("[name='platform_url']").Attr("required")
+	assert.False(t, platformURLRequired, "platform_url should be optional")
 }
 
 func assertRepoCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.User, templateID string) {
@@ -184,7 +186,6 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 		"platform_display_name": "Guided Platform",
 		"platform_description":  "A platform created through the guided flow",
 		"platform_version":      "0.1.0",
-		"platform_url":          "https://guided.example.com",
 		"platform_category":     "Productivity",
 		"platform_public_key":   "z0123456789",
 	})
@@ -200,6 +201,7 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	var manifest w3ds.PlatformManifest
 	require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &manifest))
 	assert.Equal(t, "guided-platform", manifest.PlatformName)
+	assert.Empty(t, manifest.URL)
 	assert.Nil(t, manifest.EName)
 }
 

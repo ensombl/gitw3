@@ -46,6 +46,12 @@ func TestPlatformManifestAllowsLocalHTTPInDevelopment(t *testing.T) {
 	require.Error(t, manifest.Validate(false))
 }
 
+func TestPlatformManifestAllowsMissingURL(t *testing.T) {
+	manifest := validManifest()
+	manifest.URL = ""
+	require.NoError(t, manifest.Validate(false))
+}
+
 func TestPlatformManifestMarshal(t *testing.T) {
 	data, err := validManifest().Marshal()
 	require.NoError(t, err)
