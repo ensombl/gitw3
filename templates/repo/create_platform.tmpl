@@ -8,6 +8,11 @@
 				<div class="ui attached segment">
 					{{template "base/alert" .}}
 					{{if or .CanCreateRepo .Orgs}}
+						{{if and (not .CanCreateRepo) (ne .MaxCreationLimit 0)}}
+							<div class="ui negative message">
+								<p>{{ctx.Locale.TrN .MaxCreationLimit "repo.form.reach_limit_of_creation_1" "repo.form.reach_limit_of_creation_n" .MaxCreationLimit}}</p>
+							</div>
+						{{end}}
 						<div class="ui ordered fluid steps tw-mb-4">
 							<div class="active step" data-platform-step-indicator="1"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.create.repo_step"}}</div></div></div>
 							<div class="step" data-platform-step-indicator="2"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.create.profile_step"}}</div></div></div>

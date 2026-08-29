@@ -21,8 +21,12 @@ function downloadKeyBackup(publicKey: string, privateKey: ArrayBuffer) {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = 'w3ds-platform-key.json';
+  document.body.append(link);
   link.click();
-  URL.revokeObjectURL(link.href);
+  setTimeout(() => {
+    URL.revokeObjectURL(link.href);
+    link.remove();
+  });
 }
 
 export function initPlatformOnboarding() {

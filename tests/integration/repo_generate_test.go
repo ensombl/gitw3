@@ -149,7 +149,9 @@ func TestRepoCreateForm(t *testing.T) {
 	htmlDoc := NewHTMLParser(t, resp.Body)
 	assertPlatformCreateForm(t, htmlDoc, user)
 
-	req = NewRequestWithValues(t, "POST", "/repo/create/new", map[string]string{})
+	req = NewRequestWithValues(t, "POST", "/repo/create/new", map[string]string{
+		"uid": strconv.FormatInt(user.ID, 10),
+	})
 	resp = session.MakeRequest(t, req, http.StatusOK)
 	htmlDoc = NewHTMLParser(t, resp.Body)
 	assertPlatformCreateForm(t, htmlDoc, user)
