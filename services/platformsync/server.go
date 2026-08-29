@@ -31,19 +31,117 @@ type webhookPayload struct {
 
 // Server exposes the signed webhook and authenticated status API.
 type Server struct {
-	config Config
-	store  *Store
-	mux    *http.ServeMux
+	config    Config
+	store     *Store
+	processor *Processor
+	mux       *http.ServeMux
 }
 
-func NewServer(config Config, store *Store) *Server {
+func NewServer(config Config, store *Store, processors ...*Processor) *Server {
 	server := &Server{config: config, store: store, mux: http.NewServeMux()}
+	if len(processors) > 0 {
+		server.processor = processors[0]
+	}
 	server.mux.HandleFunc("POST /webhooks/forgejo", server.handleWebhook)
 	server.mux.HandleFunc("GET /api/v1/status/{repositoryID}", server.handleStatus)
+	server.mux.HandleFunc("POST /api/v1/deployments/prepare", server.handlePrepareDeployment)
+	server.mux.HandleFunc("POST /api/v1/deployments/{deploymentID}/finalize", server.handleFinalizeDeployment)
+	server.mux.HandleFunc("GET /api/v1/deployments/{deploymentID}", server.handleDeploymentStatus)
 	server.mux.HandleFunc("GET /healthz", func(response http.ResponseWriter, _ *http.Request) {
 		response.WriteHeader(http.StatusNoContent)
 	})
 	return server
+}
+
+func (s *Server) authorized(request *http.Request) bool {
+	return hmac.Equal(
+		[]byte(strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")),
+		[]byte(s.config.InternalToken),
+	)
+}
+
+func (s *Server) handlePrepareDeployment(response http.ResponseWriter, request *http.Request) {
+	if !s.authorized(request) {
+		http.Error(response, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.processor == nil {
+		http.Error(response, "deployment publisher unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	request.Body = http.MaxBytesReader(response, request.Body, maxWebhookBody)
+	var input PrepareDeploymentRequest
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		http.Error(response, "invalid deployment", http.StatusBadRequest)
+		return
+	}
+	job, err := s.processor.PrepareDeployment(request.Context(), input)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeDeploymentJSON(response, http.StatusCreated, job)
+}
+
+func (s *Server) handleFinalizeDeployment(response http.ResponseWriter, request *http.Request) {
+	if !s.authorized(request) {
+		http.Error(response, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.processor == nil {
+		http.Error(response, "deployment publisher unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	job, err := s.store.GetDeployment(request.PathValue("deploymentID"))
+	if err != nil {
+		http.Error(response, "could not load deployment", http.StatusInternalServerError)
+		return
+	}
+	if job == nil {
+		http.NotFound(response, request)
+		return
+	}
+	request.Body = http.MaxBytesReader(response, request.Body, maxWebhookBody)
+	var input FinalizeDeploymentRequest
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		http.Error(response, "invalid deployment signature", http.StatusBadRequest)
+		return
+	}
+	if err := s.processor.FinalizeDeployment(input, job); err != nil {
+		http.Error(response, err.Error(), http.StatusConflict)
+		return
+	}
+	writeDeploymentJSON(response, http.StatusAccepted, job)
+}
+
+func (s *Server) handleDeploymentStatus(response http.ResponseWriter, request *http.Request) {
+	if !s.authorized(request) {
+		http.Error(response, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	job, err := s.store.GetDeployment(request.PathValue("deploymentID"))
+	if err != nil {
+		http.Error(response, "could not load deployment", http.StatusInternalServerError)
+		return
+	}
+	if job == nil {
+		http.NotFound(response, request)
+		return
+	}
+	writeDeploymentJSON(response, http.StatusOK, job)
+}
+
+func writeDeploymentJSON(response http.ResponseWriter, status int, job *DeploymentJob) {
+	response.Header().Set("Content-Type", "application/json")
+	response.WriteHeader(status)
+	_ = json.NewEncoder(response).Encode(map[string]any{
+		"id": job.ID, "status": job.Status, "deploymentEName": job.DeploymentEName,
+		"versionEName": job.VersionEName, "bundlePayload": job.BundlePayload,
+		"deploymentKeyDocumentId":   job.DeploymentKeyDocumentID,
+		"softwareVersionDocumentId": job.SoftwareVersionDocumentID,
+		"profileEnvelopeId":         job.ProfileEnvelopeID, "lastError": job.LastError,
+		"attempts": job.Attempts, "updatedAt": job.UpdatedAt,
+	})
 }
 
 func (s *Server) Handler() http.Handler {
@@ -108,7 +206,7 @@ func (s *Server) handleWebhook(response http.ResponseWriter, request *http.Reque
 }
 
 func (s *Server) handleStatus(response http.ResponseWriter, request *http.Request) {
-	if !hmac.Equal([]byte(strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")), []byte(s.config.InternalToken)) {
+	if !s.authorized(request) {
 		http.Error(response, "unauthorized", http.StatusUnauthorized)
 		return
 	}

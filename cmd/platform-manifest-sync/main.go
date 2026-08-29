@@ -32,7 +32,7 @@ func main() {
 	httpClient := &http.Client{Timeout: config.RequestTimeout}
 	processor := platformsync.NewProcessor(config, store, httpClient)
 	worker := platformsync.NewWorker(store, processor, config.ReconcilePeriod, config.AccreditationPeriod)
-	server := platformsync.NewServer(config, store)
+	server := platformsync.NewServer(config, store, processor)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

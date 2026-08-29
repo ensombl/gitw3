@@ -17,7 +17,10 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-const jobsBucket = "platform-jobs"
+const (
+	jobsBucket           = "platform-jobs"
+	deploymentJobsBucket = "deployment-jobs"
+)
 
 // Status is the user-visible publication lifecycle state.
 type Status string
@@ -32,28 +35,66 @@ const (
 
 // Job is the durable, repository-scoped reconciliation record.
 type Job struct {
-	RepositoryID      int64                       `json:"repositoryId"`
-	FullName          string                      `json:"fullName"`
-	DefaultBranch     string                      `json:"defaultBranch"`
-	TargetSHA         string                      `json:"targetSha"`
-	LastSHA           string                      `json:"lastSha,omitempty"`
-	EName             string                      `json:"ename,omitempty"`
-	EnvelopeID        string                      `json:"envelopeId,omitempty"`
-	PlatformName      string                      `json:"platformName,omitempty"`
-	ReleaseTag        string                      `json:"releaseTag,omitempty"`
-	ReleaseVersion    string                      `json:"releaseVersion,omitempty"`
-	AuthorENames      []string                    `json:"authorEnames,omitempty"`
-	Manifest          *w3ds.PlatformManifest      `json:"manifest,omitempty"`
-	Decision          *w3ds.AccreditationDecision `json:"decision,omitempty"`
+	RepositoryID      int64                        `json:"repositoryId"`
+	FullName          string                       `json:"fullName"`
+	DefaultBranch     string                       `json:"defaultBranch"`
+	TargetSHA         string                       `json:"targetSha"`
+	LastSHA           string                       `json:"lastSha,omitempty"`
+	EName             string                       `json:"ename,omitempty"`
+	EnvelopeID        string                       `json:"envelopeId,omitempty"`
+	PlatformName      string                       `json:"platformName,omitempty"`
+	ReleaseTag        string                       `json:"releaseTag,omitempty"`
+	ReleaseVersion    string                       `json:"releaseVersion,omitempty"`
+	AuthorENames      []string                     `json:"authorEnames,omitempty"`
+	Manifest          *w3ds.PlatformManifest       `json:"manifest,omitempty"`
+	Decision          *w3ds.AccreditationDecision  `json:"decision,omitempty"`
 	Decisions         []w3ds.AccreditationDecision `json:"decisions,omitempty"`
-	DecisionCheckedAt time.Time                   `json:"decisionCheckedAt,omitempty"`
-	Archive           bool                        `json:"archive"`
-	Status            Status                      `json:"status"`
-	Attempts          int                         `json:"attempts"`
-	LastError         string                      `json:"lastError,omitempty"`
-	NextAttempt       time.Time                   `json:"nextAttempt"`
-	CreatedAt         time.Time                   `json:"createdAt"`
-	UpdatedAt         time.Time                   `json:"updatedAt"`
+	DecisionCheckedAt time.Time                    `json:"decisionCheckedAt,omitempty"`
+	Archive           bool                         `json:"archive"`
+	Status            Status                       `json:"status"`
+	Attempts          int                          `json:"attempts"`
+	LastError         string                       `json:"lastError,omitempty"`
+	NextAttempt       time.Time                    `json:"nextAttempt"`
+	CreatedAt         time.Time                    `json:"createdAt"`
+	UpdatedAt         time.Time                    `json:"updatedAt"`
+}
+
+type DeploymentStatus string
+
+const (
+	DeploymentAwaitingSignature DeploymentStatus = "awaiting_signature"
+	DeploymentPublishing        DeploymentStatus = "publishing"
+	DeploymentCompleted         DeploymentStatus = "completed"
+	DeploymentFailed            DeploymentStatus = "failed"
+)
+
+type DeploymentJob struct {
+	ID                        string           `json:"id"`
+	RepositoryID              int64            `json:"repositoryId"`
+	PlatformEName             string           `json:"platformEName"`
+	DeploymentEName           string           `json:"deploymentEName"`
+	VersionEName              string           `json:"versionEName"`
+	DeploymentName            string           `json:"deploymentName"`
+	Environment               string           `json:"environment"`
+	DeployerEName             string           `json:"deployerEName"`
+	Version                   string           `json:"version"`
+	ReleaseTag                string           `json:"releaseTag"`
+	CommitSHA                 string           `json:"commitSha"`
+	PublicKey                 string           `json:"publicKey"`
+	RegistryEntropy           string           `json:"registryEntropy"`
+	Namespace                 string           `json:"namespace"`
+	BundlePayload             string           `json:"bundlePayload"`
+	WalletSignature           string           `json:"walletSignature,omitempty"`
+	KeyBindingCertificate     string           `json:"keyBindingCertificate,omitempty"`
+	DeploymentKeyDocumentID   string           `json:"deploymentKeyDocumentId,omitempty"`
+	SoftwareVersionDocumentID string           `json:"softwareVersionDocumentId,omitempty"`
+	ProfileEnvelopeID         string           `json:"profileEnvelopeId,omitempty"`
+	Status                    DeploymentStatus `json:"status"`
+	Attempts                  int              `json:"attempts"`
+	LastError                 string           `json:"lastError,omitempty"`
+	NextAttempt               time.Time        `json:"nextAttempt"`
+	CreatedAt                 time.Time        `json:"createdAt"`
+	UpdatedAt                 time.Time        `json:"updatedAt"`
 }
 
 // Store persists jobs across restarts and process crashes.
@@ -71,13 +112,67 @@ func OpenStore(path string) (*Store, error) {
 	}
 	store := &Store{db: db}
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(jobsBucket))
+		if _, err := tx.CreateBucketIfNotExists([]byte(jobsBucket)); err != nil {
+			return err
+		}
+		_, err := tx.CreateBucketIfNotExists([]byte(deploymentJobsBucket))
 		return err
 	}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize state database: %w", err)
 	}
 	return store, nil
+}
+
+func (s *Store) GetDeployment(id string) (*DeploymentJob, error) {
+	var job *DeploymentJob
+	err := s.db.View(func(tx *bolt.Tx) error {
+		data := tx.Bucket([]byte(deploymentJobsBucket)).Get([]byte(id))
+		if data == nil {
+			return nil
+		}
+		var decoded DeploymentJob
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			return err
+		}
+		job = &decoded
+		return nil
+	})
+	return job, err
+}
+
+func (s *Store) SaveDeployment(job *DeploymentJob) error {
+	if job == nil || job.ID == "" {
+		return errors.New("valid deployment job is required")
+	}
+	job.UpdatedAt = time.Now().UTC()
+	data, err := json.Marshal(job)
+	if err != nil {
+		return err
+	}
+	return s.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket([]byte(deploymentJobsBucket)).Put([]byte(job.ID), data)
+	})
+}
+
+func (s *Store) ReadyDeployments(now time.Time, limit int) ([]*DeploymentJob, error) {
+	jobs := make([]*DeploymentJob, 0, limit)
+	err := s.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket([]byte(deploymentJobsBucket)).ForEach(func(_, data []byte) error {
+			if len(jobs) >= limit {
+				return nil
+			}
+			var job DeploymentJob
+			if err := json.Unmarshal(data, &job); err != nil {
+				return err
+			}
+			if (job.Status == DeploymentPublishing || job.Status == DeploymentFailed) && !job.NextAttempt.After(now) {
+				jobs = append(jobs, &job)
+			}
+			return nil
+		})
+	})
+	return jobs, err
 }
 
 func (s *Store) Close() error {

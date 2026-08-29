@@ -261,6 +261,70 @@ func newW3DSClient(config Config, client *http.Client) *w3dsClient {
 	return &w3dsClient{config: config, http: client}
 }
 
+type preparedIdentity struct {
+	RegistryEntropy string
+	Namespace       string
+	EName           string
+}
+
+func (c *w3dsClient) prepareIdentity(ctx context.Context) (*preparedIdentity, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.config.RegistryURL+"/entropy", nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := c.http.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, responseError("request registry entropy", response)
+	}
+	var entropy struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&entropy); err != nil || entropy.Token == "" {
+		return nil, errors.New("registry returned invalid entropy")
+	}
+	prepared := &preparedIdentity{RegistryEntropy: entropy.Token, Namespace: uuid.NewString()}
+	payload := map[string]string{"registryEntropy": prepared.RegistryEntropy, "namespace": prepared.Namespace}
+	var preview struct {
+		Success bool   `json:"success"`
+		W3ID    string `json:"w3id"`
+	}
+	if err := c.postJSON(ctx, c.config.ProvisionerURL+"/provision/preview", payload, &preview, nil); err != nil {
+		return nil, fmt.Errorf("preview deployment eVault: %w", err)
+	}
+	if !preview.Success || strings.TrimSpace(preview.W3ID) == "" {
+		return nil, errors.New("provisioner returned no deployment eName preview")
+	}
+	prepared.EName = strings.TrimSpace(preview.W3ID)
+	return prepared, nil
+}
+
+func (c *w3dsClient) provisionPrepared(ctx context.Context, prepared *preparedIdentity, publicKey string) (string, error) {
+	if prepared == nil {
+		return "", errors.New("prepared identity is required")
+	}
+	payload := map[string]string{
+		"registryEntropy": prepared.RegistryEntropy,
+		"namespace":       prepared.Namespace,
+		"verificationId":  c.config.VerificationID,
+		"publicKey":       publicKey,
+	}
+	var provisioned struct {
+		Success bool   `json:"success"`
+		W3ID    string `json:"w3id"`
+	}
+	if err := c.postJSON(ctx, c.config.ProvisionerURL+"/provision", payload, &provisioned, nil); err != nil {
+		return "", fmt.Errorf("provision deployment eVault: %w", err)
+	}
+	if !provisioned.Success || strings.TrimSpace(provisioned.W3ID) != prepared.EName {
+		return "", errors.New("provisioner returned a different deployment eName")
+	}
+	return prepared.EName, nil
+}
+
 func (c *w3dsClient) provision(ctx context.Context, publicKey string) (string, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.config.RegistryURL+"/entropy", nil)
 	if err != nil {
@@ -280,12 +344,9 @@ func (c *w3dsClient) provision(ctx context.Context, publicKey string) (string, e
 	if err := json.NewDecoder(response.Body).Decode(&entropy); err != nil || entropy.Token == "" {
 		return "", errors.New("registry returned invalid entropy")
 	}
-
 	payload := map[string]string{
-		"registryEntropy": entropy.Token,
-		"namespace":       uuid.NewString(),
-		"verificationId":  c.config.VerificationID,
-		"publicKey":       publicKey,
+		"registryEntropy": entropy.Token, "namespace": uuid.NewString(),
+		"verificationId": c.config.VerificationID, "publicKey": publicKey,
 	}
 	var provisioned struct {
 		Success bool   `json:"success"`
@@ -298,6 +359,200 @@ func (c *w3dsClient) provision(ctx context.Context, publicKey string) (string, e
 		return "", errors.New("provisioner did not return a platform eName")
 	}
 	return strings.TrimSpace(provisioned.W3ID), nil
+}
+
+func (c *w3dsClient) registerSoftwareVersion(ctx context.Context, job *DeploymentJob) error {
+	token, err := c.platformToken(ctx)
+	if err != nil {
+		return err
+	}
+	payload := map[string]string{
+		"platformEname": job.PlatformEName,
+		"version":       job.Version,
+		"releaseTag":    job.ReleaseTag,
+		"commitSha":     job.CommitSHA,
+	}
+	var record struct {
+		EName string `json:"ename"`
+	}
+	if err := c.postJSON(ctx, c.config.RegistryURL+"/records/software-versions", payload, &record, map[string]string{"Authorization": "Bearer " + token}); err != nil {
+		return fmt.Errorf("register software version: %w", err)
+	}
+	if record.EName != job.VersionEName {
+		return errors.New("Registry returned a different software version eName")
+	}
+	return nil
+}
+
+func (c *w3dsClient) deploymentRegistered(ctx context.Context, ename string) (bool, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.config.RegistryURL+"/resolve?w3id="+url.QueryEscape(ename), nil)
+	if err != nil {
+		return false, err
+	}
+	response, err := c.http.Do(request)
+	if err != nil {
+		return false, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if response.StatusCode != http.StatusOK {
+		return false, responseError("resolve deployment eVault", response)
+	}
+	return true, nil
+}
+
+func (c *w3dsClient) publishDeployment(ctx context.Context, job *DeploymentJob) error {
+	if err := c.registerSoftwareVersion(ctx, job); err != nil {
+		return err
+	}
+	registered, err := c.deploymentRegistered(ctx, job.DeploymentEName)
+	if err != nil {
+		return err
+	}
+	if !registered {
+		if _, err := c.provisionPrepared(ctx, &preparedIdentity{
+			RegistryEntropy: job.RegistryEntropy, Namespace: job.Namespace, EName: job.DeploymentEName,
+		}, job.PublicKey); err != nil {
+			return err
+		}
+	}
+	endpoint, err := c.resolve(ctx, job.DeploymentEName)
+	if err != nil {
+		return err
+	}
+	token, err := c.platformToken(ctx)
+	if err != nil {
+		return err
+	}
+	deploymentDocument, versionDocument, _, err := w3ds.BuildDeploymentAttestation(
+		job.DeploymentEName, job.DeploymentName, job.Environment, job.DeployerEName,
+		job.PlatformEName, job.VersionEName, job.Version, job.ReleaseTag, job.CommitSHA, job.PublicKey,
+	)
+	if err != nil {
+		return err
+	}
+	headers := map[string]string{"Authorization": "Bearer " + token, "X-ENAME": job.DeploymentEName}
+	job.DeploymentKeyDocumentID, err = c.ensureDeploymentBinding(ctx, endpoint, headers, deploymentDocument, job)
+	if err != nil {
+		return err
+	}
+	job.SoftwareVersionDocumentID, err = c.ensureDeploymentBinding(ctx, endpoint, headers, versionDocument, job)
+	if err != nil {
+		return err
+	}
+	job.ProfileEnvelopeID = uuid.NewSHA1(uuid.NameSpaceURL, []byte("gitw3:deployment:"+job.ID)).String()
+	profile := w3ds.DeploymentProfile{
+		DeploymentEName: job.DeploymentEName, DeploymentName: job.DeploymentName,
+		Environment: job.Environment, DeployerEName: job.DeployerEName,
+		PlatformEName: job.PlatformEName, VersionEName: job.VersionEName,
+		Version: job.Version, ReleaseTag: job.ReleaseTag, CommitSHA: job.CommitSHA,
+		PublicKey: job.PublicKey, DeploymentKeyDocumentID: job.DeploymentKeyDocumentID,
+		SoftwareVersionDocumentID: job.SoftwareVersionDocumentID, CreatedAt: job.CreatedAt.Format(time.RFC3339),
+	}
+	graphql := map[string]any{
+		"query": `mutation PublishDeployment($id: String!, $input: MetaEnvelopeInput!) {
+	updateMetaEnvelopeById(id: $id, input: $input) { metaEnvelope { id } }
+}`,
+		"variables": map[string]any{"id": job.ProfileEnvelopeID, "input": map[string]any{
+			"ontology": w3ds.DeploymentProfileOntology, "payload": profile, "acl": []string{"*"},
+		}},
+	}
+	var result struct {
+		Data struct {
+			Update struct {
+				MetaEnvelope *struct {
+					ID string `json:"id"`
+				} `json:"metaEnvelope"`
+			} `json:"updateMetaEnvelopeById"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := c.postJSON(ctx, endpoint, graphql, &result, headers); err != nil {
+		return fmt.Errorf("publish deployment profile: %w", err)
+	}
+	if len(result.Errors) > 0 {
+		return errors.New(result.Errors[0].Message)
+	}
+	if result.Data.Update.MetaEnvelope == nil {
+		return errors.New("eVault returned no deployment profile")
+	}
+	return nil
+}
+
+func (c *w3dsClient) ensureDeploymentBinding(ctx context.Context, endpoint string, headers map[string]string, document w3ds.DeploymentBindingDocument, job *DeploymentJob) (string, error) {
+	graphql := map[string]any{
+		"query": `query ExistingDeploymentBindings($type: BindingDocumentType!) {
+	bindingDocuments(type: $type, first: 100) { edges { node { id parsed } } }
+}`,
+		"variables": map[string]any{"type": document.Type},
+	}
+	var existing struct {
+		Data struct {
+			Documents struct {
+				Edges []struct {
+					Node struct {
+						ID     string `json:"id"`
+						Parsed struct {
+							Subject    string `json:"subject"`
+							Signatures []struct {
+								Signature     string `json:"signature"`
+								SignedPayload string `json:"signedPayload"`
+							} `json:"signatures"`
+						} `json:"parsed"`
+					} `json:"node"`
+				} `json:"edges"`
+			} `json:"bindingDocuments"`
+		} `json:"data"`
+	}
+	if err := c.postJSON(ctx, endpoint, graphql, &existing, headers); err != nil {
+		return "", fmt.Errorf("find deployment binding: %w", err)
+	}
+	for _, edge := range existing.Data.Documents.Edges {
+		if edge.Node.Parsed.Subject != document.Subject {
+			continue
+		}
+		for _, signature := range edge.Node.Parsed.Signatures {
+			if signature.Signature == job.WalletSignature && signature.SignedPayload == job.BundlePayload {
+				return edge.Node.ID, nil
+			}
+		}
+	}
+	mutation := map[string]any{
+		"query": `mutation CreateDeploymentBinding($input: CreateBindingDocumentInput!) {
+	createBindingDocument(input: $input) { metaEnvelopeId errors { message code } }
+}`,
+		"variables": map[string]any{"input": map[string]any{
+			"subject": document.Subject, "type": document.Type, "data": document.Data,
+			"ownerSignature": map[string]any{
+				"signer": job.DeployerEName, "signature": job.WalletSignature,
+				"timestamp": job.UpdatedAt.Format(time.RFC3339), "scope": "bundle", "signedPayload": job.BundlePayload,
+			},
+		}},
+	}
+	var created struct {
+		Data struct {
+			Create struct {
+				ID     string `json:"metaEnvelopeId"`
+				Errors []struct {
+					Message string `json:"message"`
+				} `json:"errors"`
+			} `json:"createBindingDocument"`
+		} `json:"data"`
+	}
+	if err := c.postJSON(ctx, endpoint, mutation, &created, headers); err != nil {
+		return "", fmt.Errorf("create deployment binding: %w", err)
+	}
+	if len(created.Data.Create.Errors) > 0 {
+		return "", errors.New(created.Data.Create.Errors[0].Message)
+	}
+	if created.Data.Create.ID == "" {
+		return "", errors.New("eVault returned no deployment binding document")
+	}
+	return created.Data.Create.ID, nil
 }
 
 func (c *w3dsClient) accreditations(ctx context.Context, ename, version string) ([]w3ds.AccreditationDecision, error) {

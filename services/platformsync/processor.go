@@ -10,7 +10,10 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"strings"
 	"time"
+
+	"forgejo.org/modules/w3ds"
 
 	"github.com/google/uuid"
 )
@@ -21,6 +24,101 @@ type Processor struct {
 	store   *Store
 	forgejo *forgejoClient
 	w3ds    *w3dsClient
+}
+
+type PrepareDeploymentRequest struct {
+	ID             string `json:"id"`
+	RepositoryID   int64  `json:"repositoryId"`
+	PlatformEName  string `json:"platformEName"`
+	DeploymentName string `json:"deploymentName"`
+	Environment    string `json:"environment"`
+	DeployerEName  string `json:"deployerEName"`
+	Version        string `json:"version"`
+	ReleaseTag     string `json:"releaseTag"`
+	CommitSHA      string `json:"commitSha"`
+	PublicKey      string `json:"publicKey"`
+}
+
+type FinalizeDeploymentRequest struct {
+	SignerEName           string `json:"signerEName"`
+	Signature             string `json:"signature"`
+	KeyBindingCertificate string `json:"keyBindingCertificate"`
+}
+
+func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeploymentRequest) (*DeploymentJob, error) {
+	if input.ID == "" || input.RepositoryID <= 0 || input.PlatformEName == "" || input.DeploymentName == "" ||
+		input.Environment == "" || input.DeployerEName == "" || input.Version == "" || input.ReleaseTag == "" ||
+		input.CommitSHA == "" || input.PublicKey == "" {
+		return nil, errors.New("complete deployment details are required")
+	}
+	if existing, err := p.store.GetDeployment(input.ID); err != nil || existing != nil {
+		return existing, err
+	}
+	platformID, err := uuid.Parse(strings.TrimPrefix(input.PlatformEName, "@"))
+	if err != nil {
+		return nil, errors.New("platform eName must contain a UUID")
+	}
+	identity, err := p.w3ds.prepareIdentity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	versionEName := "@" + uuid.NewSHA1(platformID, []byte("software-version:"+input.Version)).String()
+	_, _, bundle, err := w3ds.BuildDeploymentAttestation(
+		identity.EName, input.DeploymentName, input.Environment, input.DeployerEName,
+		input.PlatformEName, versionEName, input.Version, input.ReleaseTag, input.CommitSHA, input.PublicKey,
+	)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	job := &DeploymentJob{
+		ID: input.ID, RepositoryID: input.RepositoryID, PlatformEName: input.PlatformEName,
+		DeploymentEName: identity.EName, VersionEName: versionEName,
+		DeploymentName: input.DeploymentName, Environment: input.Environment, DeployerEName: input.DeployerEName,
+		Version: input.Version, ReleaseTag: input.ReleaseTag, CommitSHA: strings.ToLower(input.CommitSHA),
+		PublicKey: input.PublicKey, RegistryEntropy: identity.RegistryEntropy, Namespace: identity.Namespace,
+		BundlePayload: bundle, Status: DeploymentAwaitingSignature, CreatedAt: now,
+	}
+	if err := p.store.SaveDeployment(job); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
+func (p *Processor) FinalizeDeployment(input FinalizeDeploymentRequest, job *DeploymentJob) error {
+	if job == nil || job.Status != DeploymentAwaitingSignature {
+		return errors.New("deployment is not awaiting a signature")
+	}
+	if input.SignerEName != job.DeployerEName || input.Signature == "" || input.KeyBindingCertificate == "" {
+		return errors.New("deployment signature does not match its deployer")
+	}
+	job.WalletSignature = input.Signature
+	job.KeyBindingCertificate = input.KeyBindingCertificate
+	job.Status = DeploymentPublishing
+	job.Attempts = 0
+	job.LastError = ""
+	job.NextAttempt = time.Now().UTC()
+	return p.store.SaveDeployment(job)
+}
+
+func (p *Processor) ReconcileDeployment(ctx context.Context, job *DeploymentJob) error {
+	if job == nil || job.WalletSignature == "" {
+		return errors.New("signed deployment job is required")
+	}
+	job.Status = DeploymentPublishing
+	job.LastError = ""
+	if err := p.store.SaveDeployment(job); err != nil {
+		return err
+	}
+	if err := p.w3ds.publishDeployment(ctx, job); err != nil {
+		return err
+	}
+	job.Status = DeploymentCompleted
+	job.Attempts = 0
+	job.LastError = ""
+	job.RegistryEntropy = ""
+	job.NextAttempt = time.Time{}
+	return p.store.SaveDeployment(job)
 }
 
 func NewProcessor(config Config, store *Store, client *http.Client) *Processor {
@@ -199,6 +297,7 @@ func NewWorker(store *Store, processor *Processor, period, accreditationPeriod t
 
 func (w *Worker) Run(ctx context.Context) {
 	w.reconcileReady(ctx)
+	w.reconcileDeployments(ctx)
 	w.refreshAccreditations(ctx)
 	reconcileTicker := time.NewTicker(w.period)
 	defer reconcileTicker.Stop()
@@ -210,8 +309,30 @@ func (w *Worker) Run(ctx context.Context) {
 			return
 		case <-reconcileTicker.C:
 			w.reconcileReady(ctx)
+			w.reconcileDeployments(ctx)
 		case <-accreditationTicker.C:
 			w.refreshAccreditations(ctx)
+		}
+	}
+}
+
+func (w *Worker) reconcileDeployments(ctx context.Context) {
+	jobs, err := w.store.ReadyDeployments(time.Now().UTC(), 50)
+	if err != nil {
+		slog.Error("load deployment jobs", "error", err)
+		return
+	}
+	for _, job := range jobs {
+		if err := w.processor.ReconcileDeployment(ctx, job); err != nil {
+			job.Attempts++
+			job.Status = DeploymentFailed
+			job.LastError = err.Error()
+			delay := time.Duration(math.Min(math.Pow(2, float64(job.Attempts)), 300)) * time.Second
+			job.NextAttempt = time.Now().UTC().Add(delay)
+			if saveErr := w.store.SaveDeployment(job); saveErr != nil {
+				slog.Error("save failed deployment", "deployment_id", job.ID, "error", saveErr)
+			}
+			slog.Warn("deployment publication will retry", "deployment_id", job.ID, "attempt", job.Attempts, "error", err)
 		}
 	}
 }

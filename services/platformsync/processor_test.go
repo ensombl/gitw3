@@ -203,6 +203,44 @@ func addSubmissionProof(t *testing.T, manifest *w3ds.PlatformManifest, repositor
 	manifest.SubmissionHistory = []w3ds.PPASubmissionProof{*manifest.SubmissionProof}
 }
 
+func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/entropy":
+			_ = json.NewEncoder(response).Encode(map[string]string{"token": "signed-entropy"})
+		case "/provision/preview":
+			_ = json.NewEncoder(response).Encode(map[string]any{
+				"success": true, "w3id": "@11111111-1111-5111-8111-111111111111",
+			})
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(server.URL, ""), store, server.Client())
+	job, err := processor.PrepareDeployment(context.Background(), PrepareDeploymentRequest{
+		ID: "deployment-1", RepositoryID: 42,
+		PlatformEName:  "@0699e093-2dd9-59cc-a416-7dc69623ebfd",
+		DeploymentName: "Singapore", Environment: "production", DeployerEName: "@deployer",
+		Version: "1.2.3", ReleaseTag: "v1.2.3", CommitSHA: strings.Repeat("a", 40), PublicKey: "zKey",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, DeploymentAwaitingSignature, job.Status)
+	assert.Equal(t, "@11111111-1111-5111-8111-111111111111", job.DeploymentEName)
+	assert.True(t, strings.HasPrefix(job.VersionEName, "@"))
+	assert.Contains(t, job.BundlePayload, w3ds.DeploymentAttestationType)
+
+	require.NoError(t, processor.FinalizeDeployment(FinalizeDeploymentRequest{
+		SignerEName: "@deployer", Signature: "wallet-signature", KeyBindingCertificate: "certificate",
+	}, job))
+	stored, err := store.GetDeployment(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, DeploymentPublishing, stored.Status)
+	assert.Equal(t, "wallet-signature", stored.WalletSignature)
+}
+
 func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	fake := newFakePlatformInfrastructure(t)
 	store := openTestStore(t)
