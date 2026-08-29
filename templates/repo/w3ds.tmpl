@@ -67,6 +67,23 @@
 					<div><dt>{{ctx.Locale.Tr "platform.repo.application_url"}}</dt><dd>{{if $manifest.URL}}<a href="{{$manifest.URL}}" rel="noopener noreferrer">{{$manifest.URL}}</a>{{else}}{{ctx.Locale.Tr "platform.repo.not_set"}}{{end}}</dd></div>
 				</dl>
 			</section>
+
+			<section class="w3ds-section w3ds-ppa" aria-labelledby="w3ds-ppa-heading">
+				<div class="w3ds-ppa-icon">{{svg "octicon-verified" 32}}</div>
+				<div class="w3ds-ppa-content">
+					<div class="tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
+						<h2 id="w3ds-ppa-heading">{{ctx.Locale.Tr "platform.ppa.title"}}</h2>
+						<span class="ui blue label">{{ctx.Locale.Tr "platform.ppa.coming_soon"}}</span>
+					</div>
+					<p>{{ctx.Locale.Tr "platform.ppa.help"}}</p>
+					<ul class="w3ds-ppa-checklist">
+						<li>{{if .PlatformIdentityReady}}{{svg "octicon-check-circle-fill"}}{{else}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.identity"}}</span> <span class="ui {{if .PlatformIdentityReady}}green{{else}}grey{{end}} label">{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
+						<li>{{if $manifest.URL}}{{svg "octicon-check-circle-fill"}}{{else}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.deployment"}}</span> <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label">{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
+					</ul>
+					<button type="button" class="ui primary button" data-w3ds-ppa-apply disabled>{{svg "octicon-verified"}} {{ctx.Locale.Tr "platform.ppa.apply"}}</button>
+					<span class="w3ds-ppa-note">{{ctx.Locale.Tr "platform.ppa.disabled_help"}}</span>
+				</div>
+			</section>
 		{{else}}
 			<div class="w3ds-empty-state">
 				{{svg "octicon-shield-check" 48}}

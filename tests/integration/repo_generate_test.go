@@ -200,6 +200,7 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	page.AssertElement(t, ".overflow-menu-items a.item.active[href='/"+user.Name+"/"+repoName+"/w3ds']", true)
 	page.AssertElement(t, "#w3ds-publication-status", true)
 	page.AssertElement(t, "#w3ds-platform-page[data-w3ds-status-url='/"+user.Name+"/"+repoName+"/w3ds/status']", true)
+	page.AssertElement(t, "button[data-w3ds-ppa-apply][disabled]", true)
 	statusResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds/status", user.Name, repoName), http.StatusOK)
 	var status map[string]any
 	require.NoError(t, json.Unmarshal(statusResp.Body.Bytes(), &status))
