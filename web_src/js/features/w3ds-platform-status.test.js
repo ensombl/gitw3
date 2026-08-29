@@ -126,6 +126,10 @@ test('focuses a denied decision and shows a red tab status', () => {
   expect(root.querySelector('[data-w3ds-ppa-checklist]')?.classList.contains('tw-hidden')).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-history]')?.classList.contains('tw-hidden')).toBe(false);
   expect(root.querySelectorAll('[data-w3ds-ppa-history-list] > li')).toHaveLength(3);
+  expect(root.querySelector('[data-w3ds-ppa-history-list] > li:first-child')?.classList.contains('w3ds-ppa-turn-decision')).toBe(true);
+  expect(root.querySelector('[data-w3ds-ppa-history-list] > li:nth-child(2)')?.classList.contains('w3ds-ppa-turn-response')).toBe(true);
+  expect(root.querySelector('[data-w3ds-ppa-history-list] > li:nth-child(2) .w3ds-ppa-avatar')?.textContent).toBe('APP');
+  expect(root.querySelector('[data-w3ds-ppa-history-list] > li:nth-child(2) .w3ds-ppa-bubble')?.classList.contains('info')).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-history-list] > li:last-child')?.textContent).toContain('Missing security review');
   expect(root.querySelector('[data-w3ds-ppa-history-title]')?.textContent).toContain('0.2.0');
   expect(root.querySelector('[data-w3ds-ppa-response]')?.classList.contains('tw-hidden')).toBe(false);

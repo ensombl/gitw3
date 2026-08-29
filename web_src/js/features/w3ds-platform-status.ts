@@ -90,29 +90,45 @@ function renderPPAHistory(root: HTMLElement, data: W3DSStatus) {
   if (heading) heading.textContent = (heading.dataset.titlePrefix ?? '').replace('%s', data.ppaVersion);
   list.replaceChildren(...events.map((event) => {
     const item = document.createElement('li');
-    item.className = `ui ${event.tone} message`;
+    item.className = `w3ds-ppa-turn w3ds-ppa-turn-${event.kind}`;
     item.dataset.kind = event.kind;
 
-    const title = document.createElement('div');
+    if (event.kind !== 'submission') {
+      const avatar = document.createElement('span');
+      avatar.className = 'w3ds-ppa-avatar';
+      avatar.setAttribute('aria-hidden', 'true');
+      avatar.textContent = event.kind === 'decision' ? 'PPA' : 'APP';
+      item.append(avatar);
+    }
+
+    const bubble = document.createElement('article');
+    bubble.className = `ui ${event.tone} message w3ds-ppa-bubble`;
+    const heading = document.createElement('div');
+    heading.className = 'w3ds-ppa-bubble-heading';
+    const title = document.createElement('strong');
     title.className = 'header';
-    title.append(document.createTextNode(event.title));
+    title.textContent = event.title;
+    heading.append(title);
     if (event.actor) {
       const actor = document.createElement('span');
       actor.className = 'w3ds-ppa-history-actor';
-      actor.textContent = ` · ${event.actor}`;
-      title.append(actor);
+      actor.textContent = event.actor;
+      heading.append(actor);
     }
     const message = document.createElement('p');
+    message.className = 'w3ds-ppa-bubble-message';
     message.textContent = event.message;
-    item.append(title, message);
+    bubble.append(heading, message);
     if (event.createdAt) {
-      const time = document.createElement('p');
+      const time = document.createElement('time');
       time.className = 'w3ds-ppa-decision-time';
+      time.dateTime = event.createdAt;
       const timestamp = new Date(event.createdAt);
       const displayTime = Number.isNaN(timestamp.getTime()) ? event.createdAt : timestamp.toLocaleString();
       time.textContent = `${history.dataset.timePrefix ?? ''} ${displayTime}`.trim();
-      item.append(time);
+      bubble.append(time);
     }
+    item.append(bubble);
     return item;
   }));
 }

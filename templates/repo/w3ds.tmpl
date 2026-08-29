@@ -146,10 +146,16 @@
 						<h3 data-w3ds-ppa-history-title data-title-prefix="{{ctx.Locale.Tr "platform.ppa.conversation" "%s"}}">{{ctx.Locale.Tr "platform.ppa.conversation" $publication.PPAVersion}}</h3>
 						<ol data-w3ds-ppa-history-list>
 							{{range $event := $publication.PPAHistory}}
-								<li class="ui {{$event.Tone}} message" data-kind="{{$event.Kind}}">
-									<div class="header">{{$event.Title}}{{if $event.Actor}} <span class="w3ds-ppa-history-actor">· {{$event.Actor}}</span>{{end}}</div>
-									<p>{{$event.Message}}</p>
-									{{if $event.CreatedAt}}<p class="w3ds-ppa-decision-time" data-w3ds-event-time data-created-at="{{$event.CreatedAt}}">{{ctx.Locale.Tr "platform.ppa.decision_recorded" $event.CreatedAt}}</p>{{end}}
+								<li class="w3ds-ppa-turn w3ds-ppa-turn-{{$event.Kind}}" data-kind="{{$event.Kind}}">
+									{{if ne $event.Kind "submission"}}<span class="w3ds-ppa-avatar" aria-hidden="true">{{if eq $event.Kind "decision"}}PPA{{else}}APP{{end}}</span>{{end}}
+									<article class="ui {{$event.Tone}} message w3ds-ppa-bubble">
+										<div class="w3ds-ppa-bubble-heading">
+											<strong class="header">{{$event.Title}}</strong>
+											{{if $event.Actor}}<span class="w3ds-ppa-history-actor">{{$event.Actor}}</span>{{end}}
+										</div>
+										<p class="w3ds-ppa-bubble-message">{{$event.Message}}</p>
+										{{if $event.CreatedAt}}<time class="w3ds-ppa-decision-time" data-w3ds-event-time data-created-at="{{$event.CreatedAt}}">{{ctx.Locale.Tr "platform.ppa.decision_recorded" $event.CreatedAt}}</time>{{end}}
+									</article>
 								</li>
 							{{end}}
 						</ol>
