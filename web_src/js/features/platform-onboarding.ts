@@ -1,19 +1,80 @@
+import {p256} from '@noble/curves/nist.js';
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+function hexToBytes(hex: string): Uint8Array {
+  return Uint8Array.from(hex.match(/.{2}/g) ?? [], (byte) => Number.parseInt(byte, 16));
 }
 
-function downloadKeyBackup(publicKey: string, privateKey: ArrayBuffer) {
+function concatBytes(...arrays: Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(arrays.reduce((length, array) => length + array.length, 0));
+  let offset = 0;
+  for (const array of arrays) {
+    result.set(array, offset);
+    offset += array.length;
+  }
+  return result;
+}
+
+export function bytesToBase58(bytes: Uint8Array): string {
+  if (bytes.length === 0) return '';
+  const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  const digits = [0];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let index = 0; index < digits.length; index++) {
+      carry += digits[index] << 8;
+      digits[index] = carry % 58;
+      carry = Math.floor(carry / 58);
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = Math.floor(carry / 58);
+    }
+  }
+  for (let index = 0; bytes[index] === 0 && index < bytes.length - 1; index++) digits.push(0);
+  return digits.reverse().map((digit) => alphabet[digit]).join('');
+}
+
+function exportP256Spki(publicKey: Uint8Array): Uint8Array {
+  const header = hexToBytes('3059301306072a8648ce3d020106082a8648ce3d030107034200');
+  return concatBytes(header, publicKey);
+}
+
+function exportP256Pkcs8(secretKey: Uint8Array, publicKey: Uint8Array): Uint8Array {
+  const header = hexToBytes('308187020100301306072a8648ce3d020106082a8648ce3d030107046d306b0201010420');
+  const publicKeyHeader = hexToBytes('a144034200');
+  return concatBytes(header, secretKey, publicKeyHeader, publicKey);
+}
+
+export async function generatePlatformKeyPair(subtle: SubtleCrypto | null | undefined = globalThis.crypto?.subtle) {
+  if (subtle) {
+    const pair = await subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify']);
+    const [spki, pkcs8] = await Promise.all([
+      subtle.exportKey('spki', pair.publicKey),
+      subtle.exportKey('pkcs8', pair.privateKey),
+    ]);
+    return {publicKeySpki: new Uint8Array(spki), privateKeyPkcs8: new Uint8Array(pkcs8)};
+  }
+
+  const {secretKey} = p256.keygen();
+  const publicKey = p256.getPublicKey(secretKey, false);
+  return {
+    publicKeySpki: exportP256Spki(publicKey),
+    privateKeyPkcs8: exportP256Pkcs8(secretKey, publicKey),
+  };
+}
+
+function downloadKeyBackup(publicKey: string, privateKey: Uint8Array) {
   const backup = {
     format: 'w3ds-platform-key-v1',
     algorithm: {name: 'ECDSA', namedCurve: 'P-256', hash: 'SHA-256'},
     publicKey,
-    privateKeyPkcs8: bytesToBase64(new Uint8Array(privateKey)),
+    privateKeyPkcs8: bytesToBase64(privateKey),
     createdAt: new Date().toISOString(),
     warning: 'Keep this private key secret. GitW3 cannot recover it.',
   };
@@ -120,14 +181,10 @@ export function initPlatformOnboarding() {
     const button = event.currentTarget as HTMLButtonElement;
     button.disabled = true;
     try {
-      const pair = await crypto.subtle.generateKey({name: 'ECDSA', namedCurve: 'P-256'}, true, ['sign', 'verify']);
-      const [spki, pkcs8] = await Promise.all([
-        crypto.subtle.exportKey('spki', pair.publicKey),
-        crypto.subtle.exportKey('pkcs8', pair.privateKey),
-      ]);
-      const publicKey = `z${bytesToHex(new Uint8Array(spki))}`;
+      const {publicKeySpki, privateKeyPkcs8} = await generatePlatformKeyPair();
+      const publicKey = `z${bytesToBase58(publicKeySpki)}`;
       form.querySelector<HTMLInputElement>('#platform-public-key')!.value = publicKey;
-      downloadKeyBackup(publicKey, pkcs8);
+      downloadKeyBackup(publicKey, privateKeyPkcs8);
     } finally {
       button.disabled = false;
     }
