@@ -170,6 +170,38 @@ func openTestStore(t *testing.T) *Store {
 	return store
 }
 
+func addSubmissionProof(t *testing.T, manifest *w3ds.PlatformManifest, repository string, repositoryID int64) {
+	t.Helper()
+	require.NotNil(t, manifest.EName)
+	statement := w3ds.PPASubmissionStatement{
+		Type:             w3ds.PPASubmissionStatementType,
+		SchemaVersion:    1,
+		RepositoryID:     repositoryID,
+		Repository:       repository,
+		PlatformEName:    *manifest.EName,
+		PlatformName:     manifest.PlatformName,
+		ReleaseTag:       "v" + manifest.Version,
+		Version:          manifest.Version,
+		ManifestCommitID: "commit-before-submission",
+		Domains:          append([]string(nil), manifest.Domains...),
+		SignerEName:      "@alice.w3id",
+		IssuedAt:         time.Now().UTC().Format(time.RFC3339),
+		Nonce:            "submission-nonce",
+	}
+	payload, err := statement.SigningPayload()
+	require.NoError(t, err)
+	manifest.InSubmission = true
+	manifest.SubmissionVersion = manifest.Version
+	manifest.SubmissionProof = &w3ds.PPASubmissionProof{
+		Statement:             statement,
+		Payload:               payload,
+		Signature:             "wallet-signature",
+		PublicKey:             "zpublic-key",
+		KeyBindingCertificate: "registry-certificate",
+		VerifiedAt:            time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
 func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	fake := newFakePlatformInfrastructure(t)
 	store := openTestStore(t)
@@ -228,8 +260,7 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 
 	fake.mu.Lock()
 	fake.manifest.Description = "Updated description"
-	fake.manifest.InSubmission = true
-	fake.manifest.SubmissionVersion = "0.1.0"
+	addSubmissionProof(t, fake.manifest, "alice/platform", 42)
 	fake.manifest.IsDraft = false
 	fake.release = &platformRelease{TagName: "v0.2.0", Version: "0.2.0"}
 	fake.mu.Unlock()
@@ -285,8 +316,7 @@ func TestProcessorClearsSubmissionOnNewRelease(t *testing.T) {
 	require.NoError(t, processor.Reconcile(context.Background(), job))
 
 	fake.mu.Lock()
-	fake.manifest.InSubmission = true
-	fake.manifest.SubmissionVersion = "0.1.0"
+	addSubmissionProof(t, fake.manifest, "alice/platform", 42)
 	fake.release = &platformRelease{TagName: "v0.2.0", Version: "0.2.0"}
 	fake.mu.Unlock()
 	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-2", false))
@@ -299,4 +329,34 @@ func TestProcessorClearsSubmissionOnNewRelease(t *testing.T) {
 	assert.Equal(t, "0.2.0", fake.manifest.Version)
 	assert.False(t, fake.manifest.InSubmission)
 	assert.Empty(t, fake.manifest.SubmissionVersion)
+	assert.Nil(t, fake.manifest.SubmissionProof)
+}
+
+func TestProcessorPublishesSubmissionProof(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, &http.Client{Timeout: time.Second})
+	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-1", false))
+	job, err := store.Get(42)
+	require.NoError(t, err)
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+
+	fake.mu.Lock()
+	addSubmissionProof(t, fake.manifest, "alice/platform", 42)
+	fake.mu.Unlock()
+	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-2", false))
+	job, err = store.Get(42)
+	require.NoError(t, err)
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	require.Len(t, fake.published, 2)
+	proof, ok := fake.published[1]["submissionProof"].(map[string]any)
+	require.True(t, ok)
+	statement, ok := proof["statement"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "0.1.0", statement["version"])
+	assert.Equal(t, "@alice.w3id", statement["signerEName"])
+	assert.Equal(t, "@alice.w3id", fake.published[1]["submittedBy"])
 }

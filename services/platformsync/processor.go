@@ -94,6 +94,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 			if manifest.InSubmission {
 				manifest.InSubmission = false
 				manifest.SubmissionVersion = ""
+				manifest.SubmissionProof = nil
 				manifestChanged = true
 			}
 		case err != nil:
@@ -106,10 +107,12 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 				manifest.Version = release.Version
 				manifest.InSubmission = false
 				manifest.SubmissionVersion = ""
+				manifest.SubmissionProof = nil
 				manifestChanged = true
 			} else if manifest.InSubmission && manifest.SubmissionVersion != "" && manifest.SubmissionVersion != release.Version {
 				manifest.InSubmission = false
 				manifest.SubmissionVersion = ""
+				manifest.SubmissionProof = nil
 				manifestChanged = true
 			}
 			if releaseChanged {

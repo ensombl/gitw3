@@ -6,6 +6,7 @@ package w3ds
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,39 @@ func validManifest() *PlatformManifest {
 		"my-platform", "My Platform", "A helpful W3DS platform", "0.1.0",
 		"https://platform.example.com", "https://platform.example.com/logo.png", []string{"productivity", "work"}, "z0123456789",
 	)
+}
+
+func submitManifest(t *testing.T, manifest *PlatformManifest) {
+	t.Helper()
+	eName := "@my-platform"
+	manifest.EName = &eName
+	statement := PPASubmissionStatement{
+		Type:             PPASubmissionStatementType,
+		SchemaVersion:    1,
+		RepositoryID:     42,
+		Repository:       "alice/my-platform",
+		PlatformEName:    eName,
+		PlatformName:     manifest.PlatformName,
+		ReleaseTag:       "v" + manifest.Version,
+		Version:          manifest.Version,
+		ManifestCommitID: "0123456789abcdef",
+		Domains:          append([]string(nil), manifest.Domains...),
+		SignerEName:      "@alice",
+		IssuedAt:         time.Now().UTC().Format(time.RFC3339),
+		Nonce:            "nonce",
+	}
+	payload, err := statement.SigningPayload()
+	require.NoError(t, err)
+	manifest.InSubmission = true
+	manifest.SubmissionVersion = manifest.Version
+	manifest.SubmissionProof = &PPASubmissionProof{
+		Statement:             statement,
+		Payload:               payload,
+		Signature:             "wallet-signature",
+		PublicKey:             "zpublic-key",
+		KeyBindingCertificate: "registry-certificate",
+		VerifiedAt:            time.Now().UTC().Format(time.RFC3339),
+	}
 }
 
 func TestPlatformManifestValidate(t *testing.T) {
@@ -54,6 +88,40 @@ func TestPlatformManifestAllowsMissingURL(t *testing.T) {
 	manifest := validManifest()
 	manifest.URL = ""
 	require.NoError(t, manifest.Validate(false))
+}
+
+func TestPlatformManifestValidatesSubmissionProof(t *testing.T) {
+	manifest := validManifest()
+	submitManifest(t, manifest)
+	require.NoError(t, manifest.Validate(false))
+
+	t.Run("missing proof", func(t *testing.T) {
+		invalid := *manifest
+		invalid.SubmissionProof = nil
+		assert.ErrorContains(t, invalid.Validate(false), "wallet signature proof")
+	})
+	t.Run("wrong version", func(t *testing.T) {
+		invalid := *manifest
+		invalid.SubmissionVersion = "0.2.0"
+		assert.ErrorContains(t, invalid.Validate(false), "current platform version")
+	})
+	t.Run("changed domains", func(t *testing.T) {
+		invalid := *manifest
+		invalid.Domains = []string{"identity"}
+		assert.ErrorContains(t, invalid.Validate(false), "application domains")
+	})
+	t.Run("changed statement", func(t *testing.T) {
+		invalid := *manifest
+		proof := *manifest.SubmissionProof
+		proof.Statement.Repository = "mallory/platform"
+		invalid.SubmissionProof = &proof
+		assert.ErrorContains(t, invalid.Validate(false), "payload does not match")
+	})
+	t.Run("proof without submission", func(t *testing.T) {
+		invalid := *manifest
+		invalid.InSubmission = false
+		assert.ErrorContains(t, invalid.Validate(false), "require inSubmission")
+	})
 }
 
 func TestPlatformManifestMarshal(t *testing.T) {

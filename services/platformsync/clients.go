@@ -409,6 +409,10 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 		"isDraft":           manifest.IsDraft,
 		"authorEnames":      authorENames,
 	}
+	if manifest.SubmissionProof != nil {
+		payload["submissionProof"] = manifest.SubmissionProof
+		payload["submittedBy"] = manifest.SubmissionProof.Statement.SignerEName
+	}
 	if manifest.Category != "" {
 		payload["category"] = manifest.Category
 	}
