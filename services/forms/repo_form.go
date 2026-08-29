@@ -51,14 +51,13 @@ type CreateRepoForm struct {
 	ForkSingleBranch string
 	ObjectFormatName string
 
-	PlatformName        string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
-	PlatformDisplayName string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
-	PlatformDescription string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
-	PlatformVersion     string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
-	PlatformURL         string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
-	PlatformLogoURL     string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
-	PlatformCategory    string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
-	PlatformPublicKey   string `binding:"MaxSize(8192)" preprocess:"TrimSpace"`
+	PlatformName        string   `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDisplayName string   `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDescription string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformURL         string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformLogoURL     string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformDomains     []string `binding:"platform_domains;Required;"`
+	PlatformPublicKey   string   `binding:"MaxSize(8192)" preprocess:"TrimSpace"`
 	UseAITooling        bool
 }
 
@@ -70,13 +69,12 @@ func (f *CreateRepoForm) Validate(req *http.Request, errs binding.Errors) bindin
 
 // UpdatePlatformForm contains the editable W3DS platform profile fields.
 type UpdatePlatformForm struct {
-	PlatformDisplayName string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
-	PlatformDescription string `binding:"Required;MaxSize(2048)" preprocess:"TrimSpace"`
-	PlatformVersion     string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
-	PlatformURL         string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
-	PlatformLogoURL     string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
-	PlatformCategory    string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
-	LastCommitID        string `binding:"Required;MaxSize(64)"`
+	PlatformDisplayName string   `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDescription string   `binding:"Required;MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformURL         string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformLogoURL     string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformDomains     []string `binding:"platform_domains;Required;"`
+	LastCommitID        string   `binding:"Required;MaxSize(64)"`
 }
 
 // Validate validates the editable platform profile fields.

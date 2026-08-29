@@ -25,8 +25,11 @@ Version 1 contains:
   "ename": null,
   "url": "https://my-platform.example",
   "logoUrl": "https://my-platform.example/logo.png",
-  "category": "Productivity",
-  "publicKey": "z..."
+  "domains": ["productivity", "work"],
+  "publicKey": "z...",
+  "inSubmission": false,
+  "submissionVersion": "",
+  "isDraft": true
 }
 ```
 
@@ -34,6 +37,17 @@ Version 1 contains:
 provisions the platform eVault and commits the assigned value with its bot account. Changes merged to
 the default branch update the same public User-profile MetaEnvelope. Deleting the manifest or repository
 archives the profile so the Marketplace hides it.
+
+GitW3 loads the selectable `domains` from the published ontology at
+`https://ontology.w3ds.metastate.foundation/domains`. Multiple domains may be selected. They are
+published as both `domains` and `requestedDomains` in the platform profile so each release-specific PPA
+application carries the exact requested domain set. Legacy manifests containing only `category` remain
+readable, but must select ontology domains before applying for PPA.
+
+`version` is controlled by the latest stable Forgejo release tag rather than an editable form field.
+Tags such as `v1.2.3` are normalized to `1.2.3`. PPA state is scoped by `submissionVersion`; when a newer
+release appears before the pending version receives an eVault decision, GitW3 moves the pending
+application to the new version automatically.
 
 The generated-key option creates an ECDSA P-256 key in the browser. Only the public SPKI key reaches
 GitW3. The PKCS#8 private key is delivered in a one-time JSON download and is never stored by GitW3 or
@@ -91,7 +105,7 @@ Create exactly one active system webhook targeting:
 https://<publisher>/webhooks/forgejo
 ```
 
-Enable `repository` and `push` events, set the shared secret, and set
+Enable `repository`, `push`, and `release` events, set the shared secret, and set
 `config.is_system_webhook` to the literal string `"true"`. A system hook covers repositories created
 before and after registration. The publisher verifies `X-Forgejo-Signature`, ignores non-default
 branches, and safely coalesces repeat delivery.
@@ -103,11 +117,12 @@ Then enable repository-page status in GitW3's `app.ini`:
 ENABLED = true
 URL = http://platform-manifest-sync:8090
 INTERNAL_TOKEN = <same value as PLATFORM_SYNC_INTERNAL_TOKEN>
+ONTOLOGY_URL = https://ontology.w3ds.metastate.foundation
 TIMEOUT = 2s
 ```
 
 The equivalent container variables are `GITEA__platform_manifest_sync__ENABLED`, `URL`,
-`INTERNAL_TOKEN`, and `TIMEOUT`.
+`INTERNAL_TOKEN`, `ONTOLOGY_URL`, and `TIMEOUT`.
 
 ## Failure behavior
 

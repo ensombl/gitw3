@@ -32,38 +32,34 @@ func NormalizeReleaseVersion(tag string) (string, bool) {
 
 var (
 	platformNamePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+	domainIDPattern     = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 	semverPattern       = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
-	platformCategories  = []string{"Identity", "Social", "Governance", "Wellness", "Finance", "Storage", "Productivity", "Other"}
 	knownCategories     = map[string]struct{}{
 		"Identity": {}, "Social": {}, "Governance": {}, "Wellness": {},
 		"Finance": {}, "Storage": {}, "Productivity": {}, "Other": {},
 	}
 )
 
-// PlatformCategories returns the supported marketplace categories.
-func PlatformCategories() []string {
-	return append([]string(nil), platformCategories...)
-}
-
 // PlatformManifest is the repository-owned source of truth for a W3DS platform.
 type PlatformManifest struct {
-	SchemaVersion     int     `json:"schemaVersion"`
-	PlatformName      string  `json:"platformName"`
-	DisplayName       string  `json:"displayName"`
-	Description       string  `json:"description"`
-	Version           string  `json:"version"`
-	EName             *string `json:"ename"`
-	URL               string  `json:"url"`
-	LogoURL           string  `json:"logoUrl"`
-	Category          string  `json:"category"`
-	PublicKey         string  `json:"publicKey"`
-	InSubmission      bool    `json:"inSubmission"`
-	SubmissionVersion string  `json:"submissionVersion,omitempty"`
-	IsDraft           bool    `json:"isDraft"`
+	SchemaVersion     int      `json:"schemaVersion"`
+	PlatformName      string   `json:"platformName"`
+	DisplayName       string   `json:"displayName"`
+	Description       string   `json:"description"`
+	Version           string   `json:"version"`
+	EName             *string  `json:"ename"`
+	URL               string   `json:"url"`
+	LogoURL           string   `json:"logoUrl"`
+	Domains           []string `json:"domains,omitempty"`
+	Category          string   `json:"category,omitempty"`
+	PublicKey         string   `json:"publicKey"`
+	InSubmission      bool     `json:"inSubmission"`
+	SubmissionVersion string   `json:"submissionVersion,omitempty"`
+	IsDraft           bool     `json:"isDraft"`
 }
 
 // NewPlatformManifest creates a manifest whose eName will be filled by the publisher.
-func NewPlatformManifest(platformName, displayName, description, version, appURL, logoURL, category, publicKey string) *PlatformManifest {
+func NewPlatformManifest(platformName, displayName, description, version, appURL, logoURL string, domains []string, publicKey string) *PlatformManifest {
 	return &PlatformManifest{
 		SchemaVersion:     PlatformManifestVersion,
 		PlatformName:      strings.TrimSpace(platformName),
@@ -73,7 +69,7 @@ func NewPlatformManifest(platformName, displayName, description, version, appURL
 		EName:             nil,
 		URL:               strings.TrimSpace(appURL),
 		LogoURL:           strings.TrimSpace(logoURL),
-		Category:          strings.TrimSpace(category),
+		Domains:           normalizeDomains(domains),
 		PublicKey:         strings.TrimSpace(publicKey),
 		InSubmission:      false,
 		SubmissionVersion: "",
@@ -104,8 +100,8 @@ func (m *PlatformManifest) Validate(allowLocalHTTP bool) error {
 	if m.SubmissionVersion != "" && !semverPattern.MatchString(m.SubmissionVersion) {
 		return errors.New("submissionVersion must be a semantic version")
 	}
-	if _, ok := knownCategories[m.Category]; !ok {
-		return errors.New("category is not supported")
+	if err := validateManifestDomains(m.Domains, m.Category); err != nil {
+		return err
 	}
 	if !strings.HasPrefix(m.PublicKey, "z") || len(m.PublicKey) < 2 || len(m.PublicKey) > 8192 {
 		return errors.New("publicKey must be a z-prefixed multibase key")
@@ -120,6 +116,37 @@ func (m *PlatformManifest) Validate(allowLocalHTTP bool) error {
 	}
 	if m.EName != nil && strings.TrimSpace(*m.EName) == "" {
 		return errors.New("ename must be null or a non-empty W3DS identifier")
+	}
+	return nil
+}
+
+func normalizeDomains(domains []string) []string {
+	normalized := make([]string, 0, len(domains))
+	for _, domain := range domains {
+		normalized = append(normalized, strings.TrimSpace(domain))
+	}
+	return normalized
+}
+
+func validateManifestDomains(domains []string, legacyCategory string) error {
+	if len(domains) == 0 {
+		if _, ok := knownCategories[legacyCategory]; ok {
+			return nil
+		}
+		return errors.New("at least one application domain is required")
+	}
+	if len(domains) > 100 {
+		return errors.New("no more than 100 application domains may be selected")
+	}
+	seen := make(map[string]struct{}, len(domains))
+	for _, domain := range domains {
+		if !domainIDPattern.MatchString(domain) || len(domain) > 100 {
+			return errors.New("domains must be lowercase, dash-separated identifiers")
+		}
+		if _, exists := seen[domain]; exists {
+			return errors.New("domains must not contain duplicates")
+		}
+		seen[domain] = struct{}{}
 	}
 	return nil
 }

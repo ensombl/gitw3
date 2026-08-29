@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	repo_model "forgejo.org/models/repo"
 	"forgejo.org/models/unittest"
@@ -40,11 +41,35 @@ func assertPlatformCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.
 	assert.Equal(t, 1, form.Find("#platform-step-back.tw-hidden").Length(), "Expected the back button to start hidden")
 	assert.Equal(t, 1, form.Find("#platform-create-submit.tw-hidden").Length(), "Expected the submit button to start hidden")
 	htmlDoc.AssertDropdownHasSelectedOption(t, "uid", strconv.FormatInt(owner.ID, 10))
-	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_url", "platform_public_key"} {
+	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_domains", "platform_url", "platform_public_key"} {
 		assert.Equal(t, 1, form.Find(fmt.Sprintf("[name='%s']", name)).Length(), "missing %s", name)
 	}
 	_, platformURLRequired := form.Find("[name='platform_url']").Attr("required")
 	assert.False(t, platformURLRequired, "platform_url should be optional")
+}
+
+func useTestDomainOntology(t *testing.T) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		assert.Equal(t, "/domains", request.URL.Path)
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{
+			"schemaId":"test-domain-schema",
+			"domains":[
+				{"id":"productivity","label":"Productivity","description":"Tools for getting things done."},
+				{"id":"social","label":"Social","description":"Social applications."}
+			]
+		}`))
+	}))
+	previousURL := setting.PlatformManifestSync.OntologyURL
+	previousTimeout := setting.PlatformManifestSync.Timeout
+	setting.PlatformManifestSync.OntologyURL = server.URL
+	setting.PlatformManifestSync.Timeout = 2 * time.Second
+	t.Cleanup(func() {
+		setting.PlatformManifestSync.OntologyURL = previousURL
+		setting.PlatformManifestSync.Timeout = previousTimeout
+		server.Close()
+	})
 }
 
 func assertRepoCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.User, templateID string) {
@@ -149,6 +174,7 @@ Clone URL: %s%s/%s.git`,
 // test form elements before and after POST error response
 func TestRepoCreateForm(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
+	useTestDomainOntology(t)
 	userName := "user1"
 	session := loginUser(t, userName)
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: userName})
@@ -177,6 +203,7 @@ func TestPlatformCreateChoice(t *testing.T) {
 
 func TestPlatformCreateCommitsManifest(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
+	useTestDomainOntology(t)
 	session := loginUser(t, "user1")
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user1"})
 	repoName := "guided-platform"
@@ -188,8 +215,7 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 		"platform_name":         "guided-platform",
 		"platform_display_name": "Guided Platform",
 		"platform_description":  "A platform created through the guided flow",
-		"platform_version":      "0.1.0",
-		"platform_category":     "Productivity",
+		"platform_domains":      "productivity",
 		"platform_public_key":   "z0123456789",
 	})
 	resp := session.MakeRequest(t, req, http.StatusSeeOther)
@@ -220,6 +246,8 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &manifest))
 	assert.Equal(t, "guided-platform", manifest.PlatformName)
 	assert.Equal(t, "Guided Platform", manifest.DisplayName)
+	assert.Equal(t, []string{"productivity"}, manifest.Domains)
+	assert.Empty(t, manifest.Category)
 	assert.Empty(t, manifest.URL)
 	assert.Equal(t, "z0123456789", manifest.PublicKey)
 	assert.Nil(t, manifest.EName)
@@ -229,6 +257,7 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 
 func TestW3DSEditPlatform(t *testing.T) {
 	onApplicationRun(t, func(t *testing.T, _ *url.URL) {
+		useTestDomainOntology(t)
 		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user2"})
 		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user.ID, Name: "repo1"})
 		manifest := w3ds.NewPlatformManifest(
@@ -238,7 +267,7 @@ func TestW3DSEditPlatform(t *testing.T) {
 			"0.1.0",
 			"",
 			"",
-			"Productivity",
+			[]string{"productivity"},
 			"z0123456789",
 		)
 		eName := "@fixture-platform.w3id"
@@ -256,6 +285,7 @@ func TestW3DSEditPlatform(t *testing.T) {
 			}},
 		})
 		require.NoError(t, err)
+		createNewRelease(t, loginUser(t, user.Name), "/"+user.Name+"/"+repo.Name, "v0.1.0", "v0.1.0", false, false)
 
 		session := loginUser(t, user.Name)
 		pageResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds", user.Name, repo.Name), http.StatusOK)
@@ -266,8 +296,7 @@ func TestW3DSEditPlatform(t *testing.T) {
 		update := NewRequestWithValues(t, "POST", "/"+user.Name+"/"+repo.Name+"/w3ds", map[string]string{
 			"platform_display_name": "Fixture Platform Updated",
 			"platform_description":  "The profile was edited directly from the W3DS tab",
-			"platform_version":      "0.2.0",
-			"platform_category":     "Social",
+			"platform_domains":      "social",
 			"platform_url":          "https://guided.example",
 			"platform_logo_url":     "https://guided.example/logo.png",
 			"last_commit_id":        page.GetInputValueByName("last_commit_id"),
@@ -282,8 +311,9 @@ func TestW3DSEditPlatform(t *testing.T) {
 		assert.Equal(t, "fixture-platform", updated.PlatformName)
 		assert.Equal(t, "Fixture Platform Updated", updated.DisplayName)
 		assert.Equal(t, "The profile was edited directly from the W3DS tab", updated.Description)
-		assert.Equal(t, "0.2.0", updated.Version)
-		assert.Equal(t, "Social", updated.Category)
+		assert.Equal(t, "0.1.0", updated.Version)
+		assert.Equal(t, []string{"social"}, updated.Domains)
+		assert.Empty(t, updated.Category)
 		assert.Equal(t, "https://guided.example", updated.URL)
 		assert.Equal(t, "https://guided.example/logo.png", updated.LogoURL)
 		assert.Equal(t, "z0123456789", updated.PublicKey)
@@ -320,6 +350,7 @@ func TestW3DSEditPlatform(t *testing.T) {
 
 func TestRepoCreateFormRepoLimit(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
+	useTestDomainOntology(t)
 	org := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "org3"})
 	userName := "user2"
 	session := loginUser(t, userName)

@@ -17,6 +17,7 @@
 		{{if .IsW3DSPlatform}}
 			{{$publication := .PlatformPublication}}
 			{{$manifest := .PlatformManifest}}
+			{{$release := .PlatformRelease}}
 			{{$edit := .PlatformEditForm}}
 			{{$lastCommitID := .PlatformLastCommitID}}
 			<div class="w3ds-page-heading">
@@ -49,6 +50,7 @@
 					<li class="{{if .PlatformIdentityReady}}complete{{end}}" data-w3ds-identity-step><span class="w3ds-guide-number">2</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_identity"}} <span class="ui {{if .PlatformIdentityReady}}green{{else}}blue{{end}} label" data-w3ds-step-label>{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.automatic"}}{{end}}</span></div><p data-w3ds-step-message>{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.step_identity_ready" .PlatformEName}}{{else}}{{ctx.Locale.Tr "platform.repo.step_identity_pending"}}{{end}}</p></div></li>
 					<li class="{{if .PlatformPublished}}complete{{end}}" data-w3ds-marketplace-step><span class="w3ds-guide-number">3</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_marketplace"}} <span class="ui {{if .PlatformPublished}}green{{else}}blue{{end}} label" data-w3ds-step-label>{{if .PlatformPublished}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></div><p data-w3ds-step-message>{{if .PlatformPublished}}{{ctx.Locale.Tr "platform.repo.step_marketplace_ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.step_marketplace_pending"}}{{end}}</p></div></li>
 					<li class="{{if $manifest.URL}}complete{{end}}" data-w3ds-application-step><span class="w3ds-guide-number">4</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_application"}} <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label" data-w3ds-step-label>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></div><p data-w3ds-step-message>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.step_application_ready" $manifest.URL}}{{else}}{{ctx.Locale.Tr "platform.repo.step_application_missing"}}{{end}}</p></div></li>
+					<li class="{{if $publication.Release.Ready}}complete{{end}}" data-w3ds-release-step><span class="w3ds-guide-number">5</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_release"}} <span class="ui {{$publication.Release.Tone}} label" data-w3ds-step-label>{{$publication.Release.Label}}</span></div><p data-w3ds-step-message>{{$publication.Release.Message}}</p></div></li>
 				</ol>
 			</section>
 
@@ -75,6 +77,7 @@
 				<h2 id="w3ds-details-heading">{{ctx.Locale.Tr "platform.repo.details"}}</h2>
 				{{if .CanEditW3DS}}
 					<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.edit.help"}}</p>
+					{{if .DomainOntologyUnavailable}}<div class="ui negative message">{{ctx.Locale.Tr "platform.domains.unavailable"}}</div>{{end}}
 					<form class="ui form" action="{{.RepoLink}}/w3ds" method="post">
 						<input type="hidden" name="last_commit_id" value="{{$edit.LastCommitID}}">
 						<div class="w3ds-edit-grid">
@@ -82,9 +85,13 @@
 								<label for="platform_display_name">{{ctx.Locale.Tr "platform.repo.display_name"}}</label>
 								<input id="platform_display_name" name="platform_display_name" value="{{$edit.PlatformDisplayName}}" maxlength="100" required>
 							</div>
-							<div class="required field {{if .Err_PlatformVersion}}error{{end}}">
+							<div class="field">
 								<label for="platform_version">{{ctx.Locale.Tr "platform.repo.version"}}</label>
-								<input id="platform_version" name="platform_version" value="{{$edit.PlatformVersion}}" maxlength="100" placeholder="0.1.0" required>
+								<div class="ui action input fluid">
+									<input id="platform_version" data-w3ds-release-version value="{{if $release}}{{$release.Tag}}{{end}}" placeholder="{{ctx.Locale.Tr "platform.repo.release_none"}}" readonly>
+									<a class="ui button" data-w3ds-release-link data-w3ds-release-create-url="{{.RepoLink}}/releases/new" href="{{if $release}}{{$release.URL}}{{else}}{{.RepoLink}}/releases/new{{end}}">{{if $release}}{{ctx.Locale.Tr "platform.repo.view_release"}}{{else}}{{ctx.Locale.Tr "platform.repo.create_release"}}{{end}}</a>
+								</div>
+								<span class="help">{{ctx.Locale.Tr "platform.edit.release_version_help"}}</span>
 							</div>
 						</div>
 						<div class="required field {{if .Err_PlatformDescription}}error{{end}}">
@@ -92,11 +99,12 @@
 							<textarea id="platform_description" name="platform_description" rows="4" maxlength="2048" required>{{$edit.PlatformDescription}}</textarea>
 						</div>
 						<div class="w3ds-edit-grid">
-							<div class="required field {{if .Err_PlatformCategory}}error{{end}}">
-								<label for="platform_category">{{ctx.Locale.Tr "platform.repo.category"}}</label>
-								<select id="platform_category" name="platform_category" required>
-									{{range $category := .PlatformCategories}}<option value="{{$category}}" {{if eq $edit.PlatformCategory $category}}selected{{end}}>{{$category}}</option>{{end}}
+							<div class="required field {{if .Err_PlatformDomains}}error{{end}}">
+								<label for="platform_domains">{{ctx.Locale.Tr "platform.domains.label"}}</label>
+								<select class="ui fluid selection dropdown" id="platform_domains" name="platform_domains" multiple required {{if .DomainOntologyUnavailable}}disabled{{end}}>
+									{{range .PlatformDomains}}<option value="{{.ID}}" title="{{.Description}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}
 								</select>
+								<span class="help">{{ctx.Locale.Tr "platform.domains.help"}}</span>
 							</div>
 							<div class="field {{if .Err_PlatformURL}}error{{end}}">
 								<label for="platform_url">{{ctx.Locale.Tr "platform.repo.application_url"}}</label>
@@ -120,8 +128,8 @@
 				{{else}}
 					<dl class="w3ds-details">
 						<div><dt>{{ctx.Locale.Tr "platform.repo.display_name"}}</dt><dd>{{$manifest.DisplayName}}</dd></div>
-						<div><dt>{{ctx.Locale.Tr "platform.repo.version"}}</dt><dd>{{$manifest.Version}}</dd></div>
-						<div><dt>{{ctx.Locale.Tr "platform.repo.category"}}</dt><dd>{{$manifest.Category}}</dd></div>
+						<div><dt>{{ctx.Locale.Tr "platform.repo.version"}}</dt><dd>{{if $release}}<a href="{{$release.URL}}">{{$release.Tag}}</a>{{else}}{{ctx.Locale.Tr "platform.repo.release_none"}}{{end}}</dd></div>
+						<div><dt>{{ctx.Locale.Tr "platform.domains.label"}}</dt><dd>{{if $manifest.Domains}}{{if .DomainOntologyUnavailable}}{{range $manifest.Domains}}<span class="ui label">{{.}}</span> {{end}}{{else}}{{range .PlatformDomains}}{{if .Selected}}<span class="ui label" title="{{.Description}}">{{.Label}}</span> {{end}}{{end}}{{end}}{{else}}{{$manifest.Category}}{{end}}</dd></div>
 						<div><dt>{{ctx.Locale.Tr "platform.repo.application_url"}}</dt><dd>{{if $manifest.URL}}<a href="{{$manifest.URL}}" rel="noopener noreferrer">{{$manifest.URL}}</a>{{else}}{{ctx.Locale.Tr "platform.repo.not_set"}}{{end}}</dd></div>
 					</dl>
 				{{end}}
@@ -136,6 +144,8 @@
 					</div>
 					<p>{{ctx.Locale.Tr "platform.ppa.help"}}</p>
 					<ul class="w3ds-ppa-checklist">
+						<li data-w3ds-ppa-release>{{if $publication.Release.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.release"}}</span> <span class="ui {{if $publication.Release.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Release.Label}}</span></li>
+						<li data-w3ds-ppa-domains>{{if $publication.Domains.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.domains"}}</span> <span class="ui {{if $publication.Domains.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Domains.Label}}</span></li>
 						<li data-w3ds-ppa-identity>{{if .PlatformIdentityReady}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.identity"}}</span> <span class="ui {{if .PlatformIdentityReady}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
 						<li data-w3ds-ppa-application>{{if $manifest.URL}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.deployment"}}</span> <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
 					</ul>

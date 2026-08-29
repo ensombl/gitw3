@@ -215,16 +215,14 @@ func PortPlatform(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplPortPlatform)
 }
 
-func preparePlatformCreatePage(ctx *context.Context, uid int64) *user_model.User {
+func preparePlatformCreatePage(ctx *context.Context, uid int64, selectedDomains []string) (*user_model.User, *w3ds.DomainCatalog, error) {
 	ctx.Data["Title"] = ctx.Tr("platform.create.title")
 	ctx.Data["Gitignores"] = repo_module.Gitignores
 	ctx.Data["Licenses"] = repo_module.Licenses
 	ctx.Data["private"] = getRepoPrivate(ctx)
 	ctx.Data["IsForcedPrivate"] = setting.Repository.ForcePrivate
 	ctx.Data["default_branch"] = setting.Repository.DefaultBranch
-	ctx.Data["platform_version"] = "0.1.0"
-	ctx.Data["platform_category"] = "Other"
-	ctx.Data["PlatformCategories"] = w3ds.PlatformCategories()
+	catalog, ontologyErr := preparePlatformDomains(ctx, selectedDomains)
 	ctx.Data["CanCreateRepo"] = ctx.Doer.CanCreateRepo()
 	ctx.Data["MaxCreationLimit"] = ctx.Doer.MaxCreationLimit()
 	ctx.Data["SupportedObjectFormats"] = git.SupportedObjectFormats
@@ -234,14 +232,17 @@ func preparePlatformCreatePage(ctx *context.Context, uid int64) *user_model.User
 	if !ctx.Written() {
 		ctx.Data["ContextUser"] = ctxUser
 	}
-	return ctxUser
+	return ctxUser, catalog, ontologyErr
 }
 
 // CreatePlatform renders the guided new-platform wizard.
 func CreatePlatform(ctx *context.Context) {
-	preparePlatformCreatePage(ctx, ctx.FormInt64("org"))
+	_, _, ontologyErr := preparePlatformCreatePage(ctx, ctx.FormInt64("org"), nil)
 	if ctx.Written() {
 		return
+	}
+	if ontologyErr != nil {
+		log.Warn("Load W3DS domain ontology for platform creation: %v", ontologyErr)
 	}
 	ctx.HTML(http.StatusOK, tplCreatePlatform)
 }
@@ -249,8 +250,13 @@ func CreatePlatform(ctx *context.Context) {
 // CreatePlatformPost creates an initialized repository with a W3DS platform manifest.
 func CreatePlatformPost(ctx *context.Context) {
 	form := web.GetForm(ctx).(*forms.CreateRepoForm)
-	ctxUser := preparePlatformCreatePage(ctx, form.UID)
+	ctxUser, catalog, ontologyErr := preparePlatformCreatePage(ctx, form.UID, form.PlatformDomains)
 	if ctx.Written() {
+		return
+	}
+	if ontologyErr != nil {
+		log.Warn("Load W3DS domain ontology for platform creation: %v", ontologyErr)
+		ctx.RenderWithErr(ctx.Tr("platform.domains.unavailable"), tplCreatePlatform, form)
 		return
 	}
 	if !ctx.CheckQuota(quota_model.LimitSubjectSizeReposAll, ctxUser.ID, ctxUser.Name) {
@@ -260,15 +266,19 @@ func CreatePlatformPost(ctx *context.Context) {
 		ctx.HTML(http.StatusOK, tplCreatePlatform)
 		return
 	}
+	if err := w3ds.ValidateSelectedDomains(form.PlatformDomains, catalog); err != nil {
+		ctx.RenderWithErr(ctx.Tr("platform.domains.invalid", err), tplCreatePlatform, form)
+		return
+	}
 
 	manifest := w3ds.NewPlatformManifest(
 		form.PlatformName,
 		form.PlatformDisplayName,
 		form.PlatformDescription,
-		form.PlatformVersion,
+		w3ds.DefaultPlatformVersion,
 		form.PlatformURL,
 		form.PlatformLogoURL,
-		form.PlatformCategory,
+		form.PlatformDomains,
 		form.PlatformPublicKey,
 	)
 	if err := manifest.Validate(!setting.IsProd); err != nil {

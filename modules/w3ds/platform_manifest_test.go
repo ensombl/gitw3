@@ -14,7 +14,7 @@ import (
 func validManifest() *PlatformManifest {
 	return NewPlatformManifest(
 		"my-platform", "My Platform", "A helpful W3DS platform", "0.1.0",
-		"https://platform.example.com", "https://platform.example.com/logo.png", "Productivity", "z0123456789",
+		"https://platform.example.com", "https://platform.example.com/logo.png", []string{"productivity", "work"}, "z0123456789",
 	)
 }
 
@@ -29,7 +29,9 @@ func TestPlatformManifestValidate(t *testing.T) {
 		{"version", func(m *PlatformManifest) { m.Version = "first" }},
 		{"submission version", func(m *PlatformManifest) { m.SubmissionVersion = "first" }},
 		{"url", func(m *PlatformManifest) { m.URL = "http://example.com" }},
-		{"category", func(m *PlatformManifest) { m.Category = "Unknown" }},
+		{"domains missing", func(m *PlatformManifest) { m.Domains = nil }},
+		{"domain malformed", func(m *PlatformManifest) { m.Domains = []string{"Not Valid"} }},
+		{"domain duplicate", func(m *PlatformManifest) { m.Domains = []string{"work", "work"} }},
 		{"public key", func(m *PlatformManifest) { m.PublicKey = "plain-key" }},
 	}
 	for _, test := range tests {
@@ -59,6 +61,8 @@ func TestPlatformManifestMarshal(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"schemaVersion": 1`)
 	assert.Contains(t, string(data), `"ename": null`)
+	assert.Contains(t, string(data), `"domains": [`)
+	assert.NotContains(t, string(data), `"category"`)
 	assert.Contains(t, string(data), `"inSubmission": false`)
 	assert.NotContains(t, string(data), `"submissionVersion"`)
 	assert.Contains(t, string(data), `"isDraft": true`)

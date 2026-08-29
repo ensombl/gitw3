@@ -37,7 +37,7 @@ func newFakePlatformInfrastructure(t *testing.T) *fakePlatformInfrastructure {
 	fake := &fakePlatformInfrastructure{
 		manifest: w3ds.NewPlatformManifest(
 			"guided-platform", "Guided Platform", "Initial description", "0.1.0",
-			"https://guided.example.com", "", "Productivity", "z0123456789",
+			"https://guided.example.com", "", []string{"productivity", "work"}, "z0123456789",
 		),
 		manifestExists: true,
 		release:        &platformRelease{TagName: "v0.1.0", Version: "0.1.0"},
@@ -197,6 +197,8 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	assert.Equal(t, false, fake.published[0]["inSubmission"])
 	assert.Equal(t, true, fake.published[0]["isDraft"])
 	assert.Equal(t, []any{"@alice.w3id", "@bob.w3id"}, fake.published[0]["authorEnames"])
+	assert.Equal(t, []any{"productivity", "work"}, fake.published[0]["domains"])
+	assert.Equal(t, []any{"productivity", "work"}, fake.published[0]["requestedDomains"])
 	assert.Equal(t, "", fake.published[0]["submissionVersion"])
 
 	fake.mu.Lock()

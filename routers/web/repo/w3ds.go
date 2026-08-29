@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"forgejo.org/models"
+	repo_model "forgejo.org/models/repo"
 	"forgejo.org/models/unit"
 	"forgejo.org/modules/base"
 	"forgejo.org/modules/git"
@@ -31,24 +32,35 @@ type w3dsGuideStep struct {
 	Message string `json:"message"`
 }
 
+type w3dsReleaseView struct {
+	Tag     string
+	Version string
+	URL     string
+}
+
 type w3dsPublicationView struct {
-	Status       string        `json:"status"`
-	Tone         string        `json:"tone"`
-	Title        string        `json:"title"`
-	Message      string        `json:"message"`
-	EName        string        `json:"ename"`
-	LastError    string        `json:"lastError,omitempty"`
-	IsDraft      bool          `json:"isDraft"`
-	InSubmission bool          `json:"inSubmission"`
-	PPAStatus    string        `json:"ppaStatus"`
-	PPALabel     string        `json:"ppaLabel"`
-	PPAMessage   string        `json:"ppaMessage"`
-	PPAButton    string        `json:"ppaButton"`
-	PPAVersion   string        `json:"ppaVersion"`
-	PPALevel     string        `json:"ppaLevel,omitempty"`
-	Identity     w3dsGuideStep `json:"identity"`
-	Marketplace  w3dsGuideStep `json:"marketplace"`
-	Application  w3dsGuideStep `json:"application"`
+	Status        string        `json:"status"`
+	Tone          string        `json:"tone"`
+	Title         string        `json:"title"`
+	Message       string        `json:"message"`
+	EName         string        `json:"ename"`
+	LastError     string        `json:"lastError,omitempty"`
+	IsDraft       bool          `json:"isDraft"`
+	InSubmission  bool          `json:"inSubmission"`
+	PPAStatus     string        `json:"ppaStatus"`
+	PPALabel      string        `json:"ppaLabel"`
+	PPAMessage    string        `json:"ppaMessage"`
+	PPAButton     string        `json:"ppaButton"`
+	PPAVersion    string        `json:"ppaVersion"`
+	PPALevel      string        `json:"ppaLevel,omitempty"`
+	ReleaseTag    string        `json:"releaseTag"`
+	ReleaseURL    string        `json:"releaseUrl"`
+	ReleaseAction string        `json:"releaseAction"`
+	Identity      w3dsGuideStep `json:"identity"`
+	Marketplace   w3dsGuideStep `json:"marketplace"`
+	Application   w3dsGuideStep `json:"application"`
+	Domains       w3dsGuideStep `json:"domains"`
+	Release       w3dsGuideStep `json:"release"`
 }
 
 // W3DS renders the repository's W3DS platform workspace.
@@ -63,10 +75,9 @@ func W3DS(ctx *context.Context) {
 		form = &forms.UpdatePlatformForm{
 			PlatformDisplayName: manifest.DisplayName,
 			PlatformDescription: manifest.Description,
-			PlatformVersion:     manifest.Version,
 			PlatformURL:         manifest.URL,
 			PlatformLogoURL:     manifest.LogoURL,
-			PlatformCategory:    manifest.Category,
+			PlatformDomains:     append([]string(nil), manifest.Domains...),
 			LastCommitID:        ctx.Repo.CommitID,
 		}
 	}
@@ -86,23 +97,27 @@ func W3DSUpdate(ctx *context.Context) {
 		ctx.NotFound("W3DS platform manifest", nil)
 		return
 	}
-	prepareW3DSPage(ctx, manifest, form)
+	catalog := prepareW3DSPage(ctx, manifest, form)
 	if ctx.HasError() {
 		ctx.RenderWithErr(ctx.Tr("platform.edit.invalid"), tplRepoW3DS, form)
+		return
+	}
+	if catalog == nil {
+		ctx.RenderWithErr(ctx.Tr("platform.domains.unavailable"), tplRepoW3DS, form)
+		return
+	}
+	if err := w3ds.ValidateSelectedDomains(form.PlatformDomains, catalog); err != nil {
+		ctx.RenderWithErr(ctx.Tr("platform.domains.invalid", err), tplRepoW3DS, form)
 		return
 	}
 
 	updated := *manifest
 	updated.DisplayName = form.PlatformDisplayName
 	updated.Description = form.PlatformDescription
-	updated.Version = form.PlatformVersion
-	if updated.Version != manifest.Version {
-		updated.InSubmission = false
-		updated.SubmissionVersion = ""
-	}
 	updated.URL = form.PlatformURL
 	updated.LogoURL = form.PlatformLogoURL
-	updated.Category = form.PlatformCategory
+	updated.Domains = append([]string(nil), form.PlatformDomains...)
+	updated.Category = ""
 	if err := updated.Validate(!setting.IsProd); err != nil {
 		ctx.RenderWithErr(ctx.Tr("platform.create.invalid_manifest", err), tplRepoW3DS, form)
 		return
@@ -174,9 +189,24 @@ func W3DSApplyPPA(ctx *context.Context) {
 		ctx.NotFound("W3DS platform manifest", nil)
 		return
 	}
+	release, err := loadLatestPlatformRelease(ctx)
+	if err != nil {
+		ctx.ServerError("loadLatestPlatformRelease", err)
+		return
+	}
+	if release == nil || release.Version == "" {
+		ctx.Flash.Error(ctx.Tr("platform.ppa.release_missing"))
+		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		return
+	}
+	if manifest.Version != release.Version {
+		ctx.Flash.Error(ctx.Tr("platform.ppa.release_syncing", release.Tag))
+		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		return
+	}
 	status := loadPlatformPublicationStatus(ctx)
-	if currentPPADecision(status, manifest.Version) != nil {
-		ctx.Flash.Success(ctx.Tr("platform.ppa.already_decided", manifest.Version))
+	if currentPPADecision(status, release.Version) != nil {
+		ctx.Flash.Success(ctx.Tr("platform.ppa.already_decided", release.Version))
 		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
 		return
 	}
@@ -197,11 +227,23 @@ func W3DSApplyPPA(ctx *context.Context) {
 		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
 		return
 	}
+	catalog, err := preparePlatformDomains(ctx, manifest.Domains)
+	if err != nil {
+		log.Warn("Load W3DS domain ontology for PPA submission from repository %d: %v", ctx.Repo.Repository.ID, err)
+		ctx.Flash.Error(ctx.Tr("platform.domains.unavailable"))
+		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		return
+	}
+	if err := w3ds.ValidateSelectedDomains(manifest.Domains, catalog); err != nil {
+		ctx.Flash.Error(ctx.Tr("platform.domains.invalid", err))
+		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		return
+	}
 
 	updated := *manifest
 	updated.EName = &eName
 	updated.InSubmission = true
-	updated.SubmissionVersion = updated.Version
+	updated.SubmissionVersion = release.Version
 	if err := commitPlatformManifest(ctx, &updated, form.LastCommitID, "chore: submit PPA application"); err != nil {
 		redirectPlatformActionError(ctx, err)
 		return
@@ -245,36 +287,55 @@ func redirectPlatformActionError(ctx *context.Context, err error) {
 	ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
 }
 
-func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form *forms.UpdatePlatformForm) {
+func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form *forms.UpdatePlatformForm) *w3ds.DomainCatalog {
 	ctx.Data["Title"] = ctx.Tr("platform.repo.title")
 	ctx.Data["PageIsW3DS"] = true
 	ctx.Data["W3DSOnboarded"] = ctx.FormBool("w3ds_onboarded")
 	ctx.Data["W3DSUseAI"] = ctx.FormBool("ai")
 	ctx.Data["PlatformManifestPath"] = w3ds.PlatformManifestPath
-	ctx.Data["PlatformCategories"] = w3ds.PlatformCategories()
 	ctx.Data["PlatformEditForm"] = form
+	selectedDomains := []string(nil)
+	if form != nil {
+		selectedDomains = form.PlatformDomains
+	}
+	catalog, ontologyErr := preparePlatformDomains(ctx, selectedDomains)
+	if ontologyErr != nil {
+		log.Warn("Load W3DS domain ontology for repository %d: %v", ctx.Repo.Repository.ID, ontologyErr)
+	}
 	canEdit := ctx.Repo.CanWrite(unit.TypeCode) && !ctx.Repo.Repository.IsArchived
 	ctx.Data["CanEditW3DS"] = canEdit
 	ctx.Data["PlatformLastCommitID"] = ctx.Repo.CommitID
 	if manifest == nil {
-		return
+		return catalog
 	}
 	status := loadPlatformPublicationStatus(ctx)
+	release, err := loadLatestPlatformRelease(ctx)
+	if err != nil {
+		log.Warn("Load latest release for W3DS repository %d: %v", ctx.Repo.Repository.ID, err)
+	}
 	eName := strings.TrimSpace(status.EName)
 	if eName == "" && manifest.EName != nil {
 		eName = strings.TrimSpace(*manifest.EName)
 	}
 	ctx.Data["IsW3DSPlatform"] = true
-	pending := currentPPASubmission(manifest)
-	decision := currentPPADecision(status, manifest.Version)
-	publication := newW3DSPublicationView(ctx, status, eName, manifest.Version, manifest.URL, manifest.IsDraft, pending, decision)
+	releaseSynced := release != nil && release.Version != "" && manifest.Version == release.Version
+	version := ""
+	if release != nil {
+		version = release.Version
+	}
+	pending := releaseSynced && currentPPASubmission(manifest)
+	decision := currentPPADecision(status, version)
+	domainsReady := len(manifest.Domains) > 0
+	publication := newW3DSPublicationView(ctx, status, eName, release, releaseSynced, manifest.URL, domainsReady, manifest.IsDraft, pending, decision)
 	ctx.Data["PlatformManifest"] = manifest
+	ctx.Data["PlatformRelease"] = release
 	ctx.Data["PlatformPublication"] = publication
 	ctx.Data["PlatformEName"] = eName
 	ctx.Data["PlatformIdentityReady"] = eName != ""
 	ctx.Data["PlatformPublished"] = publication.Marketplace.Ready
-	ctx.Data["PPARequirementsReady"] = eName != "" && strings.TrimSpace(manifest.URL) != ""
+	ctx.Data["PPARequirementsReady"] = eName != "" && strings.TrimSpace(manifest.URL) != "" && domainsReady && releaseSynced
 	ctx.Data["CanApplyPPA"] = canEdit && publication.PPAStatus == "ready"
+	return catalog
 }
 
 // W3DSStatus returns the current publication state for the repository workspace.
@@ -289,16 +350,30 @@ func W3DSStatus(ctx *context.Context) {
 		return
 	}
 	status := loadPlatformPublicationStatus(ctx)
+	release, err := loadLatestPlatformRelease(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, map[string]string{"message": ctx.Locale.TrString("platform.status.refresh_failed")})
+		return
+	}
 	eName := strings.TrimSpace(status.EName)
 	if eName == "" && manifest.EName != nil {
 		eName = strings.TrimSpace(*manifest.EName)
 	}
-	pending := currentPPASubmission(manifest)
-	decision := currentPPADecision(status, manifest.Version)
-	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName, manifest.Version, manifest.URL, manifest.IsDraft, pending, decision))
+	releaseSynced := release != nil && release.Version != "" && manifest.Version == release.Version
+	version := ""
+	if release != nil {
+		version = release.Version
+	}
+	pending := releaseSynced && currentPPASubmission(manifest)
+	decision := currentPPADecision(status, version)
+	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName, release, releaseSynced, manifest.URL, len(manifest.Domains) > 0, manifest.IsDraft, pending, decision))
 }
 
-func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName, version, applicationURL string, isDraft, inSubmission bool, decision *w3ds.AccreditationDecision) w3dsPublicationView {
+func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName string, release *w3dsReleaseView, releaseSynced bool, applicationURL string, domainsReady, isDraft, inSubmission bool, decision *w3ds.AccreditationDecision) w3dsPublicationView {
+	version := ""
+	if release != nil {
+		version = release.Version
+	}
 	view := w3dsPublicationView{
 		Status:       status.Status,
 		Tone:         "info",
@@ -306,6 +381,13 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 		IsDraft:      isDraft,
 		InSubmission: inSubmission,
 		PPAVersion:   version,
+	}
+	if release != nil {
+		view.ReleaseTag = release.Tag
+		view.ReleaseURL = release.URL
+		view.ReleaseAction = ctx.Locale.TrString("platform.repo.view_release")
+	} else {
+		view.ReleaseAction = ctx.Locale.TrString("platform.repo.create_release")
 	}
 	switch status.Status {
 	case "published":
@@ -374,15 +456,44 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 		view.Application.Label = ctx.Locale.TrString("platform.repo.waiting")
 		view.Application.Message = ctx.Locale.TrString("platform.repo.step_application_missing")
 	}
+	view.Domains.Ready = domainsReady
+	if view.Domains.Ready {
+		view.Domains.Tone = "green"
+		view.Domains.Label = ctx.Locale.TrString("platform.repo.ready")
+		view.Domains.Message = ctx.Locale.TrString("platform.repo.step_domains_ready")
+	} else {
+		view.Domains.Tone = "grey"
+		view.Domains.Label = ctx.Locale.TrString("platform.repo.waiting")
+		view.Domains.Message = ctx.Locale.TrString("platform.repo.step_domains_missing")
+	}
+	view.Release.Ready = releaseSynced
+	switch {
+	case release == nil:
+		view.Release.Tone = "grey"
+		view.Release.Label = ctx.Locale.TrString("platform.repo.waiting")
+		view.Release.Message = ctx.Locale.TrString("platform.repo.release_missing")
+	case release.Version == "":
+		view.Release.Tone = "grey"
+		view.Release.Label = ctx.Locale.TrString("platform.repo.waiting")
+		view.Release.Message = ctx.Locale.TrString("platform.repo.release_invalid", release.Tag)
+	case !releaseSynced:
+		view.Release.Tone = "blue"
+		view.Release.Label = ctx.Locale.TrString("platform.repo.automatic")
+		view.Release.Message = ctx.Locale.TrString("platform.repo.release_syncing", release.Tag)
+	default:
+		view.Release.Tone = "green"
+		view.Release.Label = ctx.Locale.TrString("platform.repo.ready")
+		view.Release.Message = ctx.Locale.TrString("platform.repo.release_ready", release.Tag)
+	}
 
 	switch {
-	case decision != nil && decision.Decision == "granted":
+	case view.Release.Ready && decision != nil && decision.Decision == "granted":
 		view.PPAStatus = "granted"
 		view.PPALevel = decision.Level
 		view.PPALabel = ctx.Locale.TrString("platform.ppa.granted")
 		view.PPAButton = ctx.Locale.TrString("platform.ppa.granted")
 		view.PPAMessage = ctx.Locale.TrString("platform.ppa.granted_help", decision.Level, version)
-	case decision != nil && decision.Decision == "denied":
+	case view.Release.Ready && decision != nil && decision.Decision == "denied":
 		view.PPAStatus = "denied"
 		view.PPALabel = ctx.Locale.TrString("platform.ppa.denied")
 		view.PPAButton = ctx.Locale.TrString("platform.ppa.denied")
@@ -392,7 +503,7 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 		view.PPALabel = ctx.Locale.TrString("platform.ppa.submitted")
 		view.PPAButton = ctx.Locale.TrString("platform.ppa.submitted")
 		view.PPAMessage = ctx.Locale.TrString("platform.ppa.submitted_version_help", version)
-	case view.Identity.Ready && view.Application.Ready:
+	case view.Identity.Ready && view.Application.Ready && view.Domains.Ready && view.Release.Ready:
 		view.PPAStatus = "ready"
 		view.PPALabel = ctx.Locale.TrString("platform.ppa.ready_to_apply")
 		view.PPAButton = ctx.Locale.TrString("platform.ppa.apply")
@@ -419,6 +530,22 @@ func currentPPADecision(status *w3ds.PublicationStatus, version string) *w3ds.Ac
 		return nil
 	}
 	return status.Decision
+}
+
+func loadLatestPlatformRelease(ctx *context.Context) (*w3dsReleaseView, error) {
+	release, err := repo_model.GetLatestReleaseByRepoID(ctx, ctx.Repo.Repository.ID)
+	if repo_model.IsErrReleaseNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	version, valid := w3ds.NormalizeReleaseVersion(release.TagName)
+	if !valid {
+		version = ""
+	}
+	release.Repo = ctx.Repo.Repository
+	return &w3dsReleaseView{Tag: release.TagName, Version: version, URL: release.Link()}, nil
 }
 
 func loadPlatformManifest(ctx *context.Context) (*w3ds.PlatformManifest, error) {

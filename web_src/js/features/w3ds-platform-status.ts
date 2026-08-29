@@ -22,9 +22,14 @@ export type W3DSStatus = {
   ppaButton: string;
   ppaVersion: string;
   ppaLevel?: string;
+  releaseTag: string;
+  releaseUrl: string;
+  releaseAction: string;
   identity: W3DSGuideStep;
   marketplace: W3DSGuideStep;
   application: W3DSGuideStep;
+  domains: W3DSGuideStep;
+  release: W3DSGuideStep;
 };
 
 function renderGuideStep(element: HTMLElement | null, step: W3DSGuideStep) {
@@ -70,8 +75,19 @@ export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
   renderGuideStep(root.querySelector('[data-w3ds-identity-step]'), data.identity);
   renderGuideStep(root.querySelector('[data-w3ds-marketplace-step]'), data.marketplace);
   renderGuideStep(root.querySelector('[data-w3ds-application-step]'), data.application);
+  renderGuideStep(root.querySelector('[data-w3ds-release-step]'), data.release);
   renderRequirement(root.querySelector('[data-w3ds-ppa-identity]'), data.identity);
   renderRequirement(root.querySelector('[data-w3ds-ppa-application]'), data.application);
+  renderRequirement(root.querySelector('[data-w3ds-ppa-domains]'), data.domains);
+  renderRequirement(root.querySelector('[data-w3ds-ppa-release]'), data.release);
+
+  const releaseVersion = root.querySelector<HTMLInputElement>('[data-w3ds-release-version]');
+  if (releaseVersion) releaseVersion.value = data.releaseTag;
+  const releaseLink = root.querySelector<HTMLAnchorElement>('[data-w3ds-release-link]');
+  if (releaseLink) {
+    releaseLink.href = data.releaseUrl || releaseLink.dataset.w3dsReleaseCreateUrl || '#';
+    releaseLink.textContent = data.releaseAction;
+  }
 
   const ppaLabel = root.querySelector<HTMLElement>('[data-w3ds-ppa-label]');
   if (ppaLabel) {

@@ -11,8 +11,12 @@ test('renders a published W3DS status and guide', () => {
       <li data-w3ds-identity-step><span data-w3ds-step-label></span><p data-w3ds-step-message></p></li>
       <li data-w3ds-marketplace-step><span data-w3ds-step-label></span><p data-w3ds-step-message></p></li>
       <li data-w3ds-application-step><span data-w3ds-step-label></span><p data-w3ds-step-message></p></li>
+      <li data-w3ds-release-step><span data-w3ds-step-label></span><p data-w3ds-step-message></p></li>
       <li data-w3ds-ppa-identity><svg></svg><svg></svg><span data-w3ds-requirement-label></span></li>
       <li data-w3ds-ppa-application><svg></svg><svg></svg><span data-w3ds-requirement-label></span></li>
+      <li data-w3ds-ppa-domains><svg></svg><svg></svg><span data-w3ds-requirement-label></span></li>
+      <li data-w3ds-ppa-release><svg></svg><svg></svg><span data-w3ds-requirement-label></span></li>
+      <input data-w3ds-release-version readonly><a data-w3ds-release-link data-w3ds-release-create-url="/releases/new"></a>
       <span data-w3ds-ppa-label class="ui label tw-hidden"></span>
       <button data-w3ds-ppa-apply data-can-edit="true" disabled><span data-w3ds-ppa-button-label></span></button>
       <span data-w3ds-ppa-note></span>
@@ -32,9 +36,14 @@ test('renders a published W3DS status and guide', () => {
     ppaMessage: 'Version 0.2.0 is ready to apply.',
     ppaButton: 'Apply for PPA certificate',
     ppaVersion: '0.2.0',
+    releaseTag: 'v0.2.0',
+    releaseUrl: '/releases/tag/v0.2.0',
+    releaseAction: 'View release',
     identity: {ready: true, tone: 'green', label: 'Ready', message: 'Identity is @platform.'},
     marketplace: {ready: true, tone: 'green', label: 'Ready', message: 'Listing is synchronized.'},
     application: {ready: true, tone: 'green', label: 'Ready', message: 'Application is deployed.'},
+    domains: {ready: true, tone: 'green', label: 'Ready', message: 'Domains are selected.'},
+    release: {ready: true, tone: 'green', label: 'Ready', message: 'Using v0.2.0.'},
   });
 
   expect(root.querySelector('#w3ds-publication-status')?.classList.contains('positive')).toBe(true);
@@ -42,10 +51,12 @@ test('renders a published W3DS status and guide', () => {
   expect(root.querySelector('[data-w3ds-identity-step]')?.classList.contains('complete')).toBe(true);
   expect(root.querySelector('[data-w3ds-marketplace-step]')?.classList.contains('complete')).toBe(true);
   expect(root.querySelector('[data-w3ds-application-step]')?.classList.contains('complete')).toBe(true);
+  expect(root.querySelector('[data-w3ds-release-step]')?.classList.contains('complete')).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-application] svg:last-of-type')?.classList.contains('tw-hidden')).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-apply]')?.disabled).toBe(false);
   expect(root.querySelector('[data-w3ds-ppa-label]')?.textContent).toBe('Ready to apply');
   expect(root.querySelector('[data-w3ds-ppa-note]')?.textContent).toContain('0.2.0');
+  expect(root.querySelector('[data-w3ds-release-version]')?.value).toBe('v0.2.0');
 });
 
 test('disables the version application when its eVault decision arrives', () => {
@@ -62,9 +73,12 @@ test('disables the version application when its eVault decision arrives', () => 
     isDraft: false, inSubmission: false, ppaStatus: 'granted', ppaLabel: 'PPA certificate granted',
     ppaMessage: 'PPA granted L2 access for version 0.2.0.', ppaButton: 'PPA certificate granted',
     ppaVersion: '0.2.0', ppaLevel: 'L2',
+    releaseTag: 'v0.2.0', releaseUrl: '/releases/tag/v0.2.0', releaseAction: 'View release',
     identity: {ready: true, tone: 'green', label: 'Ready', message: ''},
     marketplace: {ready: true, tone: 'green', label: 'Ready', message: ''},
     application: {ready: true, tone: 'green', label: 'Ready', message: ''},
+    domains: {ready: true, tone: 'green', label: 'Ready', message: ''},
+    release: {ready: true, tone: 'green', label: 'Ready', message: ''},
   });
 
   expect(root.querySelector('[data-w3ds-ppa-apply]')?.disabled).toBe(true);

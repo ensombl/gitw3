@@ -386,6 +386,10 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 		return err
 	}
 	now := time.Now().UTC()
+	domains := manifest.Domains
+	if domains == nil {
+		domains = []string{}
+	}
 	payload := map[string]any{
 		"platformName":      manifest.PlatformName,
 		"displayName":       manifest.DisplayName,
@@ -398,11 +402,15 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 		"updatedAt":         now.Format(time.RFC3339),
 		"url":               manifest.URL,
 		"logoUrl":           manifest.LogoURL,
-		"category":          manifest.Category,
+		"domains":           domains,
+		"requestedDomains":  domains,
 		"inSubmission":      manifest.InSubmission,
 		"submissionVersion": manifest.SubmissionVersion,
 		"isDraft":           manifest.IsDraft,
 		"authorEnames":      authorENames,
+	}
+	if manifest.Category != "" {
+		payload["category"] = manifest.Category
 	}
 	variables := map[string]any{
 		"id": envelopeID,
