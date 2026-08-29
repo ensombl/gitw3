@@ -45,6 +45,7 @@ type Job struct {
 	AuthorENames      []string                    `json:"authorEnames,omitempty"`
 	Manifest          *w3ds.PlatformManifest      `json:"manifest,omitempty"`
 	Decision          *w3ds.AccreditationDecision `json:"decision,omitempty"`
+	Decisions         []w3ds.AccreditationDecision `json:"decisions,omitempty"`
 	DecisionCheckedAt time.Time                   `json:"decisionCheckedAt,omitempty"`
 	Archive           bool                        `json:"archive"`
 	Status            Status                      `json:"status"`

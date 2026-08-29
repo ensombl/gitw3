@@ -136,6 +136,7 @@ func (s *Server) handleStatus(response http.ResponseWriter, request *http.Reques
 		"lastError":         job.LastError,
 		"attempts":          job.Attempts,
 		"decision":          job.Decision,
+		"decisions":         job.Decisions,
 		"decisionCheckedAt": job.DecisionCheckedAt,
 		"updatedAt":         job.UpdatedAt,
 	})

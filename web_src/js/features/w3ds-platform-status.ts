@@ -9,6 +9,15 @@ type W3DSGuideStep = {
   message: string;
 };
 
+type PPAHistoryEvent = {
+  kind: 'submission' | 'response' | 'decision';
+  tone: 'info' | 'positive' | 'negative';
+  title: string;
+  message: string;
+  actor?: string;
+  createdAt: string;
+};
+
 export type W3DSStatus = {
   status: string;
   tone: 'positive' | 'warning' | 'info';
@@ -26,6 +35,7 @@ export type W3DSStatus = {
   ppaVersion: string;
   ppaLevel?: string;
   ppaDecidedAt?: string;
+  ppaHistory: PPAHistoryEvent[];
   releaseTag: string;
   releaseUrl: string;
   releaseAction: string;
@@ -68,6 +78,43 @@ function renderRequirement(element: HTMLElement | null, step: W3DSGuideStep) {
   label?.classList.remove('green', 'grey');
   label?.classList.add(step.ready ? 'green' : 'grey');
   if (label) label.textContent = step.label;
+}
+
+function renderPPAHistory(root: HTMLElement, data: W3DSStatus) {
+  const history = root.querySelector<HTMLElement>('[data-w3ds-ppa-history]');
+  const list = history?.querySelector<HTMLOListElement>('[data-w3ds-ppa-history-list]');
+  if (!history || !list) return;
+  const events = data.ppaHistory ?? [];
+  history.classList.toggle('tw-hidden', events.length === 0);
+  const heading = history.querySelector<HTMLElement>('[data-w3ds-ppa-history-title]');
+  if (heading) heading.textContent = (heading.dataset.titlePrefix ?? '').replace('%s', data.ppaVersion);
+  list.replaceChildren(...events.map((event) => {
+    const item = document.createElement('li');
+    item.className = `ui ${event.tone} message`;
+    item.dataset.kind = event.kind;
+
+    const title = document.createElement('div');
+    title.className = 'header';
+    title.append(document.createTextNode(event.title));
+    if (event.actor) {
+      const actor = document.createElement('span');
+      actor.className = 'w3ds-ppa-history-actor';
+      actor.textContent = ` · ${event.actor}`;
+      title.append(actor);
+    }
+    const message = document.createElement('p');
+    message.textContent = event.message;
+    item.append(title, message);
+    if (event.createdAt) {
+      const time = document.createElement('p');
+      time.className = 'w3ds-ppa-decision-time';
+      const timestamp = new Date(event.createdAt);
+      const displayTime = Number.isNaN(timestamp.getTime()) ? event.createdAt : timestamp.toLocaleString();
+      time.textContent = `${history.dataset.timePrefix ?? ''} ${displayTime}`.trim();
+      item.append(time);
+    }
+    return item;
+  }));
 }
 
 export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
@@ -114,25 +161,7 @@ export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
   const hasDecision = data.ppaStatus === 'denied' || data.ppaStatus === 'granted';
   root.querySelector<HTMLElement>('[data-w3ds-ppa-help]')?.classList.toggle('tw-hidden', hasDecision);
   root.querySelector<HTMLElement>('[data-w3ds-ppa-checklist]')?.classList.toggle('tw-hidden', hasDecision);
-  const decision = root.querySelector<HTMLElement>('[data-w3ds-ppa-decision]');
-  if (decision) {
-    decision.classList.toggle('tw-hidden', !hasDecision);
-    decision.classList.toggle('negative', data.ppaStatus === 'denied');
-    decision.classList.toggle('positive', data.ppaStatus === 'granted');
-    const decisionTitle = decision.querySelector<HTMLElement>('[data-w3ds-ppa-decision-title]');
-    if (decisionTitle) decisionTitle.textContent = data.ppaLabel;
-    const decisionMessage = decision.querySelector<HTMLElement>('[data-w3ds-ppa-decision-message]');
-    if (decisionMessage) decisionMessage.textContent = data.ppaMessage;
-    const decidedAt = decision.querySelector<HTMLElement>('[data-w3ds-ppa-decision-time]');
-    if (decidedAt) {
-      decidedAt.classList.toggle('tw-hidden', !data.ppaDecidedAt);
-      if (data.ppaDecidedAt) {
-        const timestamp = new Date(data.ppaDecidedAt);
-        const displayTime = Number.isNaN(timestamp.getTime()) ? data.ppaDecidedAt : timestamp.toLocaleString();
-        decidedAt.textContent = `${decidedAt.dataset.prefix ?? ''} ${displayTime}`.trim();
-      }
-    }
-  }
+  renderPPAHistory(root, data);
   root.querySelector<HTMLElement>('[data-w3ds-ppa-action]')?.classList.toggle('tw-hidden', data.ppaStatus === 'granted');
   const responseField = root.querySelector<HTMLElement>('[data-w3ds-ppa-response]');
   const responseInput = responseField?.querySelector<HTMLTextAreaElement>('[data-w3ds-ppa-response-input]');

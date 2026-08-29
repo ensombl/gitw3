@@ -142,10 +142,17 @@
 						<span data-w3ds-ppa-label class="ui {{if eq $publication.PPAStatus "denied"}}red{{else if eq $publication.PPAStatus "granted"}}green{{else if eq $publication.PPAStatus "submitted"}}yellow{{else}}blue{{end}} label {{if eq $publication.PPAStatus "incomplete"}}tw-hidden{{end}}">{{$publication.PPALabel}}</span>
 					</div>
 					<p data-w3ds-ppa-help class="{{if or (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted")}}tw-hidden{{end}}">{{ctx.Locale.Tr "platform.ppa.help"}}</p>
-					<div data-w3ds-ppa-decision class="ui {{if eq $publication.PPAStatus "denied"}}negative{{else}}positive{{end}} message {{if not (or (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted"))}}tw-hidden{{end}}">
-						<div class="header" data-w3ds-ppa-decision-title>{{$publication.PPALabel}}</div>
-						<p data-w3ds-ppa-decision-message>{{$publication.PPAMessage}}</p>
-						{{if $publication.PPADecidedAt}}<p class="w3ds-ppa-decision-time" data-w3ds-ppa-decision-time data-prefix="{{ctx.Locale.Tr "platform.ppa.decision_recorded_prefix"}}">{{ctx.Locale.Tr "platform.ppa.decision_recorded" $publication.PPADecidedAt}}</p>{{else}}<p class="w3ds-ppa-decision-time tw-hidden" data-w3ds-ppa-decision-time data-prefix="{{ctx.Locale.Tr "platform.ppa.decision_recorded_prefix"}}"></p>{{end}}
+					<div class="w3ds-ppa-history {{if not $publication.PPAHistory}}tw-hidden{{end}}" data-w3ds-ppa-history data-time-prefix="{{ctx.Locale.Tr "platform.ppa.history_recorded_prefix"}}">
+						<h3 data-w3ds-ppa-history-title data-title-prefix="{{ctx.Locale.Tr "platform.ppa.conversation" "%s"}}">{{ctx.Locale.Tr "platform.ppa.conversation" $publication.PPAVersion}}</h3>
+						<ol data-w3ds-ppa-history-list>
+							{{range $event := $publication.PPAHistory}}
+								<li class="ui {{$event.Tone}} message" data-kind="{{$event.Kind}}">
+									<div class="header">{{$event.Title}}{{if $event.Actor}} <span class="w3ds-ppa-history-actor">· {{$event.Actor}}</span>{{end}}</div>
+									<p>{{$event.Message}}</p>
+									{{if $event.CreatedAt}}<p class="w3ds-ppa-decision-time" data-w3ds-event-time data-created-at="{{$event.CreatedAt}}">{{ctx.Locale.Tr "platform.ppa.decision_recorded" $event.CreatedAt}}</p>{{end}}
+								</li>
+							{{end}}
+						</ol>
 					</div>
 					<ul class="w3ds-ppa-checklist {{if or (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted")}}tw-hidden{{end}}" data-w3ds-ppa-checklist>
 						<li data-w3ds-ppa-release>{{if $publication.Release.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.release"}}</span> <span class="ui {{if $publication.Release.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Release.Label}}</span></li>

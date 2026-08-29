@@ -90,9 +90,9 @@ test('focuses a denied decision and shows a red tab status', () => {
     <div id="w3ds-publication-status" class="ui info message"><div data-w3ds-status-title></div><p data-w3ds-status-message></p></div>
     <p data-w3ds-ppa-help></p>
     <ul data-w3ds-ppa-checklist></ul>
-    <div data-w3ds-ppa-decision class="ui tw-hidden message">
-      <div data-w3ds-ppa-decision-title></div><p data-w3ds-ppa-decision-message></p>
-      <p data-w3ds-ppa-decision-time data-prefix="Decision recorded"></p>
+    <div data-w3ds-ppa-history class="tw-hidden" data-time-prefix="Recorded">
+      <h3 data-w3ds-ppa-history-title data-title-prefix="Review conversation for version %s"></h3>
+      <ol data-w3ds-ppa-history-list></ol>
     </div>
     <div data-w3ds-ppa-action>
       <div data-w3ds-ppa-response class="tw-hidden"><textarea data-w3ds-ppa-response-input></textarea></div>
@@ -108,6 +108,11 @@ test('focuses a denied decision and shows a red tab status', () => {
     isDraft: false, inSubmission: false, ppaStatus: 'denied', ppaLabel: 'PPA application denied',
     ppaMessage: 'PPA denied version 0.2.0. Reason: Missing security review.', ppaButton: 'Sign and reapply',
     ppaActionMessage: 'Address the decision and reapply.', ppaVersion: '0.2.0', ppaDecidedAt: '2026-08-30T00:00:00Z',
+    ppaHistory: [
+      {kind: 'decision', tone: 'negative', title: 'PPA application denied', message: 'Missing initial review.', actor: '@reviewer', createdAt: '2026-08-29T00:00:00Z'},
+      {kind: 'response', tone: 'info', title: 'Platform response', message: 'Security review is now attached.', actor: '@owner', createdAt: '2026-08-29T12:00:00Z'},
+      {kind: 'decision', tone: 'negative', title: 'PPA application denied', message: 'Missing security review.', actor: '@reviewer', createdAt: '2026-08-30T00:00:00Z'},
+    ],
     releaseTag: 'v0.2.0', releaseUrl: '/releases/tag/v0.2.0', releaseAction: 'View release',
     identity: {ready: true, tone: 'green', label: 'Ready', message: ''},
     application: {ready: true, tone: 'green', label: 'Ready', message: ''},
@@ -119,8 +124,10 @@ test('focuses a denied decision and shows a red tab status', () => {
   renderW3DSTabStatus(tab, data);
 
   expect(root.querySelector('[data-w3ds-ppa-checklist]')?.classList.contains('tw-hidden')).toBe(true);
-  expect(root.querySelector('[data-w3ds-ppa-decision]')?.classList.contains('negative')).toBe(true);
-  expect(root.querySelector('[data-w3ds-ppa-decision-message]')?.textContent).toContain('Missing security review');
+  expect(root.querySelector('[data-w3ds-ppa-history]')?.classList.contains('tw-hidden')).toBe(false);
+  expect(root.querySelectorAll('[data-w3ds-ppa-history-list] > li')).toHaveLength(3);
+  expect(root.querySelector('[data-w3ds-ppa-history-list] > li:last-child')?.textContent).toContain('Missing security review');
+  expect(root.querySelector('[data-w3ds-ppa-history-title]')?.textContent).toContain('0.2.0');
   expect(root.querySelector('[data-w3ds-ppa-response]')?.classList.contains('tw-hidden')).toBe(false);
   expect(root.querySelector('[data-w3ds-ppa-response-input]')?.required).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-apply]')?.disabled).toBe(false);

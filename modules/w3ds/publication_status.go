@@ -15,26 +15,30 @@ import (
 
 var ErrPublicationStatusNotFound = errors.New("platform publication status not found")
 
-// AccreditationDecision is the newest PPA decision for one platform version.
+// AccreditationDecision is one PPA decision for one platform version.
 type AccreditationDecision struct {
-	PlatformEName   string `json:"platformEName"`
-	PlatformVersion string `json:"platformVersion"`
-	Decision        string `json:"decision"`
-	Level           string `json:"level,omitempty"`
-	Statement       string `json:"statement,omitempty"`
-	CreatedAt       string `json:"createdAt"`
+	PlatformEName        string `json:"platformEName"`
+	PlatformVersion      string `json:"platformVersion"`
+	Decision             string `json:"decision"`
+	Level                string `json:"level,omitempty"`
+	Statement            string `json:"statement,omitempty"`
+	ApplicantResponse    string `json:"applicantResponse,omitempty"`
+	ApplicantSubmittedAt string `json:"applicantSubmittedAt,omitempty"`
+	ReviewedByEName      string `json:"reviewedByEName,omitempty"`
+	CreatedAt            string `json:"createdAt"`
 }
 
 // PublicationStatus is the safe subset of publisher state shown on repository pages.
 type PublicationStatus struct {
-	Status            string                 `json:"status"`
-	EName             string                 `json:"ename"`
-	ReleaseTag        string                 `json:"releaseTag"`
-	ReleaseVersion    string                 `json:"releaseVersion"`
-	LastError         string                 `json:"lastError"`
-	Attempts          int                    `json:"attempts"`
-	Decision          *AccreditationDecision `json:"decision,omitempty"`
-	DecisionCheckedAt string                 `json:"decisionCheckedAt,omitempty"`
+	Status            string                  `json:"status"`
+	EName             string                  `json:"ename"`
+	ReleaseTag        string                  `json:"releaseTag"`
+	ReleaseVersion    string                  `json:"releaseVersion"`
+	LastError         string                  `json:"lastError"`
+	Attempts          int                     `json:"attempts"`
+	Decision          *AccreditationDecision  `json:"decision,omitempty"`
+	Decisions         []AccreditationDecision `json:"decisions,omitempty"`
+	DecisionCheckedAt string                  `json:"decisionCheckedAt,omitempty"`
 }
 
 // FetchPublicationStatus loads state without exposing the internal service token to browsers.

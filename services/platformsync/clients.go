@@ -300,7 +300,7 @@ func (c *w3dsClient) provision(ctx context.Context, publicKey string) (string, e
 	return strings.TrimSpace(provisioned.W3ID), nil
 }
 
-func (c *w3dsClient) accreditation(ctx context.Context, ename, version string) (*w3ds.AccreditationDecision, error) {
+func (c *w3dsClient) accreditations(ctx context.Context, ename, version string) ([]w3ds.AccreditationDecision, error) {
 	endpoint, err := c.resolve(ctx, ename)
 	if err != nil {
 		return nil, err
@@ -316,7 +316,7 @@ func (c *w3dsClient) accreditation(ctx context.Context, ename, version string) (
 	}
 }`
 	headers := map[string]string{"Authorization": "Bearer " + token, "X-ENAME": ename}
-	var newest *w3ds.AccreditationDecision
+	decisions := make([]w3ds.AccreditationDecision, 0)
 	var after any
 	for {
 		graphql := map[string]any{
@@ -359,14 +359,14 @@ func (c *w3dsClient) accreditation(ctx context.Context, ename, version string) (
 			if decision.Decision != "granted" && decision.Decision != "denied" {
 				continue
 			}
-			if newest == nil || decision.CreatedAt > newest.CreatedAt {
-				copy := decision
-				newest = &copy
-			}
+			decisions = append(decisions, decision)
 		}
 		pageInfo := result.Data.MetaEnvelopes.PageInfo
 		if !pageInfo.HasNextPage || pageInfo.EndCursor == "" {
-			return newest, nil
+			sort.SliceStable(decisions, func(i, j int) bool {
+				return decisions[i].CreatedAt < decisions[j].CreatedAt
+			})
+			return decisions, nil
 		}
 		after = pageInfo.EndCursor
 	}

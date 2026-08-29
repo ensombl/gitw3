@@ -27,6 +27,12 @@ func TestCurrentPPADecisionIsVersionScoped(t *testing.T) {
 	status := &w3ds.PublicationStatus{Decision: decision}
 	assert.Same(t, decision, currentPPADecision(status, "1.0.0"))
 	assert.Nil(t, currentPPADecision(status, "2.0.0"))
+
+	status.Decisions = []w3ds.AccreditationDecision{
+		{PlatformVersion: "1.0.0", Decision: "denied"},
+		{PlatformVersion: "1.0.0", Decision: "granted"},
+	}
+	assert.Equal(t, "granted", currentPPADecision(status, "1.0.0").Decision)
 }
 
 func TestSubmissionSupersedesDeniedDecision(t *testing.T) {

@@ -87,6 +87,7 @@ func TestServerProtectsPublicationStatus(t *testing.T) {
 	job, err := store.Get(42)
 	require.NoError(t, err)
 	job.Decision = &w3ds.AccreditationDecision{PlatformEName: "@platform", PlatformVersion: "1.2.3", Decision: "granted", Level: "L2"}
+	job.Decisions = []w3ds.AccreditationDecision{{PlatformEName: "@platform", PlatformVersion: "1.2.3", Decision: "denied"}, *job.Decision}
 	require.NoError(t, store.Save(job))
 	server := NewServer(config, store)
 
@@ -102,4 +103,5 @@ func TestServerProtectsPublicationStatus(t *testing.T) {
 	assert.Equal(t, http.StatusOK, response.Code)
 	assert.Contains(t, response.Body.String(), string(StatusIdentityPending))
 	assert.Contains(t, response.Body.String(), `"platformVersion":"1.2.3"`)
+	assert.Contains(t, response.Body.String(), `"decisions":[`)
 }

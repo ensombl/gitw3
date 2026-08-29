@@ -298,6 +298,33 @@
   font-size: 0.85rem;
 }
 
+.w3ds-ppa-history {
+  margin: 1rem 0;
+}
+
+.w3ds-ppa-history h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.w3ds-ppa-history ol {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.w3ds-ppa-history .message {
+  margin: 0;
+}
+
+.w3ds-ppa-history-actor {
+  color: var(--color-text-light-2);
+  font-size: 0.9em;
+  font-weight: var(--font-weight-normal);
+}
+
 .w3ds-ppa-apply {
   display: grid;
   width: min(100%, 58rem);

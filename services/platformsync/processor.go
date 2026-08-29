@@ -90,6 +90,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 			job.ReleaseTag = ""
 			job.ReleaseVersion = ""
 			job.Decision = nil
+			job.Decisions = nil
 			job.DecisionCheckedAt = time.Time{}
 			if manifest.InSubmission {
 				manifest.InSubmission = false
@@ -117,6 +118,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 			}
 			if releaseChanged {
 				job.Decision = nil
+				job.Decisions = nil
 				job.DecisionCheckedAt = time.Time{}
 			}
 			manifestMessage = "chore: sync latest platform release"
@@ -170,11 +172,15 @@ func (p *Processor) RefreshAccreditation(ctx context.Context, job *Job) error {
 	if job.ReleaseVersion == "" || job.Manifest.Version != job.ReleaseVersion {
 		return nil
 	}
-	decision, err := p.w3ds.accreditation(ctx, job.EName, job.ReleaseVersion)
+	decisions, err := p.w3ds.accreditations(ctx, job.EName, job.ReleaseVersion)
 	if err != nil {
 		return err
 	}
-	job.Decision = decision
+	job.Decisions = decisions
+	job.Decision = nil
+	if len(decisions) > 0 {
+		job.Decision = &job.Decisions[len(job.Decisions)-1]
+	}
 	job.DecisionCheckedAt = time.Now().UTC()
 	return p.store.Save(job)
 }

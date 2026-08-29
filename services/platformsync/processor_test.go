@@ -246,6 +246,8 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	require.NotNil(t, job.Decision)
 	assert.Equal(t, "granted", job.Decision.Decision)
 	assert.Equal(t, "L2", job.Decision.Level)
+	require.Len(t, job.Decisions, 2)
+	assert.Equal(t, "denied", job.Decisions[0].Decision)
 	assert.False(t, job.DecisionCheckedAt.IsZero())
 
 	fake.mu.Lock()
@@ -257,6 +259,7 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	job, err = store.Get(42)
 	require.NoError(t, err)
 	assert.Nil(t, job.Decision, "an older version's decision must not accredit the current version")
+	assert.Empty(t, job.Decisions)
 
 	fake.mu.Lock()
 	fake.manifest.Description = "Updated description"

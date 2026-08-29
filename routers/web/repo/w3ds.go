@@ -52,30 +52,40 @@ type w3dsReleaseView struct {
 	URL     string
 }
 
+type w3dsPPAHistoryEvent struct {
+	Kind      string `json:"kind"`
+	Tone      string `json:"tone"`
+	Title     string `json:"title"`
+	Message   string `json:"message"`
+	Actor     string `json:"actor,omitempty"`
+	CreatedAt string `json:"createdAt"`
+}
+
 type w3dsPublicationView struct {
-	Status           string        `json:"status"`
-	Tone             string        `json:"tone"`
-	Title            string        `json:"title"`
-	Message          string        `json:"message"`
-	EName            string        `json:"ename"`
-	LastError        string        `json:"lastError,omitempty"`
-	IsDraft          bool          `json:"isDraft"`
-	InSubmission     bool          `json:"inSubmission"`
-	PPAStatus        string        `json:"ppaStatus"`
-	PPALabel         string        `json:"ppaLabel"`
-	PPAMessage       string        `json:"ppaMessage"`
-	PPAButton        string        `json:"ppaButton"`
-	PPAActionMessage string        `json:"ppaActionMessage"`
-	PPAVersion       string        `json:"ppaVersion"`
-	PPALevel         string        `json:"ppaLevel,omitempty"`
-	PPADecidedAt     string        `json:"ppaDecidedAt,omitempty"`
-	ReleaseTag       string        `json:"releaseTag"`
-	ReleaseURL       string        `json:"releaseUrl"`
-	ReleaseAction    string        `json:"releaseAction"`
-	Identity         w3dsGuideStep `json:"identity"`
-	Application      w3dsGuideStep `json:"application"`
-	Domains          w3dsGuideStep `json:"domains"`
-	Release          w3dsGuideStep `json:"release"`
+	Status           string                `json:"status"`
+	Tone             string                `json:"tone"`
+	Title            string                `json:"title"`
+	Message          string                `json:"message"`
+	EName            string                `json:"ename"`
+	LastError        string                `json:"lastError,omitempty"`
+	IsDraft          bool                  `json:"isDraft"`
+	InSubmission     bool                  `json:"inSubmission"`
+	PPAStatus        string                `json:"ppaStatus"`
+	PPALabel         string                `json:"ppaLabel"`
+	PPAMessage       string                `json:"ppaMessage"`
+	PPAButton        string                `json:"ppaButton"`
+	PPAActionMessage string                `json:"ppaActionMessage"`
+	PPAVersion       string                `json:"ppaVersion"`
+	PPALevel         string                `json:"ppaLevel,omitempty"`
+	PPADecidedAt     string                `json:"ppaDecidedAt,omitempty"`
+	PPAHistory       []w3dsPPAHistoryEvent `json:"ppaHistory"`
+	ReleaseTag       string                `json:"releaseTag"`
+	ReleaseURL       string                `json:"releaseUrl"`
+	ReleaseAction    string                `json:"releaseAction"`
+	Identity         w3dsGuideStep         `json:"identity"`
+	Application      w3dsGuideStep         `json:"application"`
+	Domains          w3dsGuideStep         `json:"domains"`
+	Release          w3dsGuideStep         `json:"release"`
 }
 
 // W3DS renders the repository's W3DS platform workspace.
@@ -706,6 +716,7 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 	}
 	domainsReady := len(manifest.Domains) > 0
 	publication := newW3DSPublicationView(ctx, status, eName, release, releaseSynced, manifest.URL, domainsReady, manifest.IsDraft, pending, decision)
+	publication.PPAHistory = ppaConversationHistory(ctx, status, version, manifest.SubmissionProof)
 	ctx.Data["PlatformManifest"] = manifest
 	ctx.Data["PlatformRelease"] = release
 	ctx.Data["PlatformPublication"] = publication
@@ -747,7 +758,9 @@ func W3DSStatus(ctx *context.Context) {
 	if pending && submissionSupersedesDecision(manifest, decision) {
 		decision = nil
 	}
-	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName, release, releaseSynced, manifest.URL, len(manifest.Domains) > 0, manifest.IsDraft, pending, decision))
+	publication := newW3DSPublicationView(ctx, status, eName, release, releaseSynced, manifest.URL, len(manifest.Domains) > 0, manifest.IsDraft, pending, decision)
+	publication.PPAHistory = ppaConversationHistory(ctx, status, version, manifest.SubmissionProof)
+	ctx.JSON(http.StatusOK, publication)
 }
 
 func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName string, release *w3dsReleaseView, releaseSynced bool, applicationURL string, domainsReady, isDraft, inSubmission bool, decision *w3ds.AccreditationDecision) w3dsPublicationView {
@@ -901,10 +914,103 @@ func currentPPASubmission(manifest *w3ds.PlatformManifest) bool {
 }
 
 func currentPPADecision(status *w3ds.PublicationStatus, version string) *w3ds.AccreditationDecision {
-	if status == nil || status.Decision == nil || status.Decision.PlatformVersion != version {
+	if status == nil {
 		return nil
 	}
-	return status.Decision
+	for i := len(status.Decisions) - 1; i >= 0; i-- {
+		if status.Decisions[i].PlatformVersion == version {
+			return &status.Decisions[i]
+		}
+	}
+	if status.Decision != nil && status.Decision.PlatformVersion == version {
+		return status.Decision
+	}
+	return nil
+}
+
+func ppaConversationHistory(ctx *context.Context, status *w3ds.PublicationStatus, version string, proof *w3ds.PPASubmissionProof) []w3dsPPAHistoryEvent {
+	decisions := make([]w3ds.AccreditationDecision, 0)
+	if status != nil {
+		for _, decision := range status.Decisions {
+			if decision.PlatformVersion == version {
+				decisions = append(decisions, decision)
+			}
+		}
+		if len(decisions) == 0 && status.Decision != nil && status.Decision.PlatformVersion == version {
+			decisions = append(decisions, *status.Decision)
+		}
+	}
+	slices.SortStableFunc(decisions, func(a, b w3ds.AccreditationDecision) int {
+		return strings.Compare(a.CreatedAt, b.CreatedAt)
+	})
+
+	history := make([]w3dsPPAHistoryEvent, 0, len(decisions)*2+1)
+	for _, decision := range decisions {
+		if response := strings.TrimSpace(decision.ApplicantResponse); response != "" {
+			history = append(history, w3dsPPAHistoryEvent{
+				Kind:      "response",
+				Tone:      "info",
+				Title:     ctx.Locale.TrString("platform.ppa.response_submitted"),
+				Message:   response,
+				CreatedAt: decision.ApplicantSubmittedAt,
+			})
+		}
+		title := ctx.Locale.TrString("platform.ppa.denied")
+		tone := "negative"
+		message := strings.TrimSpace(decision.Statement)
+		if decision.Decision == "granted" {
+			title = ctx.Locale.TrString("platform.ppa.granted")
+			tone = "positive"
+			if message == "" {
+				message = ctx.Locale.TrString("platform.ppa.granted_help", decision.Level, version)
+			}
+		} else if message == "" {
+			message = ctx.Locale.TrString("platform.ppa.denied_help", version)
+		}
+		history = append(history, w3dsPPAHistoryEvent{
+			Kind:      "decision",
+			Tone:      tone,
+			Title:     title,
+			Message:   message,
+			Actor:     decision.ReviewedByEName,
+			CreatedAt: decision.CreatedAt,
+		})
+	}
+
+	if proof != nil && proof.Statement.Version == version {
+		response := strings.TrimSpace(proof.Statement.ResponseToDecision)
+		createdAt := proof.Statement.IssuedAt
+		if createdAt == "" {
+			createdAt = proof.VerifiedAt
+		}
+		alreadyIncluded := false
+		for _, event := range history {
+			if event.Kind == "response" && event.Message == response && event.CreatedAt == createdAt {
+				alreadyIncluded = true
+				break
+			}
+		}
+		if !alreadyIncluded {
+			event := w3dsPPAHistoryEvent{
+				Kind:      "submission",
+				Tone:      "info",
+				Title:     ctx.Locale.TrString("platform.ppa.application_signed"),
+				Message:   ctx.Locale.TrString("platform.ppa.application_signed_help", proof.Statement.SignerEName),
+				Actor:     proof.Statement.SignerEName,
+				CreatedAt: createdAt,
+			}
+			if response != "" {
+				event.Kind = "response"
+				event.Title = ctx.Locale.TrString("platform.ppa.response_submitted")
+				event.Message = response
+			}
+			history = append(history, event)
+		}
+	}
+	slices.SortStableFunc(history, func(a, b w3dsPPAHistoryEvent) int {
+		return strings.Compare(a.CreatedAt, b.CreatedAt)
+	})
+	return history
 }
 
 func submissionSupersedesDecision(manifest *w3ds.PlatformManifest, decision *w3ds.AccreditationDecision) bool {

@@ -19,7 +19,7 @@ func TestFetchPublicationStatus(t *testing.T) {
 		assert.Equal(t, "/api/v1/status/42", request.URL.Path)
 		assert.Equal(t, "Bearer internal", request.Header.Get("Authorization"))
 		response.Header().Set("Content-Type", "application/json")
-		response.Write([]byte(`{"status":"published","ename":"@platform.w3id","decision":{"platformEName":"@platform.w3id","platformVersion":"1.2.3","decision":"granted","level":"L2","createdAt":"2026-08-29T00:00:00Z"}}`))
+		response.Write([]byte(`{"status":"published","ename":"@platform.w3id","decision":{"platformEName":"@platform.w3id","platformVersion":"1.2.3","decision":"granted","level":"L2","createdAt":"2026-08-29T00:00:00Z"},"decisions":[{"platformEName":"@platform.w3id","platformVersion":"1.2.3","decision":"denied","applicantResponse":"Fixed it","createdAt":"2026-08-28T00:00:00Z"}]}`))
 	}))
 	defer server.Close()
 
@@ -29,6 +29,8 @@ func TestFetchPublicationStatus(t *testing.T) {
 	assert.Equal(t, "@platform.w3id", status.EName)
 	require.NotNil(t, status.Decision)
 	assert.Equal(t, "1.2.3", status.Decision.PlatformVersion)
+	require.Len(t, status.Decisions, 1)
+	assert.Equal(t, "Fixed it", status.Decisions[0].ApplicantResponse)
 }
 
 func TestFetchPublicationStatusNotFound(t *testing.T) {
