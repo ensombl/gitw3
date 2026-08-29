@@ -93,6 +93,7 @@ import {initModalClose} from './modules/modal.ts';
 import {initAuthorizedIntegrationClaimRuleEditor} from './features/authorized-integration.js';
 import {initPlatformOnboarding} from './features/platform-onboarding.ts';
 import {initW3DSPlatformStatus} from './features/w3ds-platform-status.ts';
+import {initW3DSDeploy} from './features/w3ds-deploy.ts';
 
 // Init Gitea's Fomantic settings
 initGiteaFomantic();
@@ -201,6 +202,7 @@ onDomReady(() => {
   initAuthorizedIntegrationClaimRuleEditor();
   initPlatformOnboarding();
   initW3DSPlatformStatus();
+  initW3DSDeploy();
 
   // Deactivate CSS-only noJS usability supplements
   document.body.classList.remove('no-js');

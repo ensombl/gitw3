@@ -1,0 +1,145 @@
+#w3ds-deploy-page {
+  padding-top: 1.5rem;
+  padding-bottom: 3rem;
+}
+
+.deploy-identity-row,
+.deploy-form-grid,
+.deployment-identifiers,
+.deploy-preview-identities {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.deploy-identity-row > div,
+.deploy-preview-identities > div {
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  background: var(--color-input-background);
+}
+
+.deploy-kicker,
+.deploy-preview-identities span,
+.deployment-identifiers dt {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--color-text-light-2);
+  font-size: 0.78rem;
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+
+.deploy-identity-row strong,
+.deploy-preview-identities code,
+.deployment-identifiers code {
+  overflow-wrap: anywhere;
+}
+
+.deploy-intro > p {
+  margin: 1rem 0 0;
+  color: var(--color-text-light-1);
+}
+
+.deploy-form h3 {
+  margin: 1.5rem 0 0.35rem;
+}
+
+.deploy-key-choices {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.deploy-key-choices small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--color-text-light-2);
+  font-weight: var(--font-weight-normal);
+}
+
+.deploy-key-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-inline-start: 1rem;
+}
+
+.deploy-submit-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-secondary);
+}
+
+.deploy-submit-row span,
+.deploy-empty {
+  color: var(--color-text-light-2);
+}
+
+.deployment-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.deployment-card {
+  padding: 1rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  background: var(--color-input-background);
+}
+
+.deployment-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.deployment-card-heading h3 {
+  margin: 0 0 0.2rem;
+}
+
+.deployment-card-heading span:not(.label) {
+  color: var(--color-text-light-1);
+}
+
+.deployment-identifiers {
+  margin: 1rem 0 0;
+}
+
+.deployment-identifiers dd {
+  margin: 0;
+}
+
+.deploy-preview-identities {
+  margin: 1rem 0;
+}
+
+.deploy-signing-content [data-deployment-signing-status] {
+  min-height: 1.5rem;
+  margin-top: 1rem;
+  color: var(--color-text-light-1);
+}
+
+@media (max-width: 767px) {
+  .deploy-identity-row,
+  .deploy-form-grid,
+  .deployment-identifiers,
+  .deploy-preview-identities,
+  .deploy-key-choices {
+    grid-template-columns: 1fr;
+  }
+
+  .deploy-key-confirm {
+    display: flex;
+    margin: 0.75rem 0 0;
+  }
+
+  .deploy-submit-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

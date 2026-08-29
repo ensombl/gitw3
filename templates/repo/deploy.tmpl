@@ -1,0 +1,144 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository">
+	{{template "repo/header" .}}
+	<div id="w3ds-deploy-page" class="ui container" data-create-url="{{.RepoLink}}/deploy">
+		{{if .DeployUnavailable}}
+			<div class="w3ds-empty-state">
+				{{svg "octicon-rocket" 48}}
+				<h1>{{ctx.Locale.Tr "platform.deploy.not_platform"}}</h1>
+				<p>{{ctx.Locale.Tr "platform.deploy.not_platform_help"}}</p>
+				<a class="ui primary button" href="{{.RepoLink}}/w3ds">{{ctx.Locale.Tr "platform.repo.tab"}}</a>
+			</div>
+		{{else}}
+			<div class="w3ds-page-heading">
+				<div>
+					<h1>{{ctx.Locale.Tr "platform.deploy.title"}}</h1>
+					<p>{{ctx.Locale.Tr "platform.deploy.subtitle"}}</p>
+				</div>
+			</div>
+
+			<section class="w3ds-section deploy-intro">
+				<div class="deploy-identity-row">
+					<div>
+						<span class="deploy-kicker">{{ctx.Locale.Tr "platform.deploy.platform_identity"}}</span>
+						<strong>{{if .PlatformEName}}{{.PlatformEName}}{{else}}{{ctx.Locale.Tr "platform.deploy.identity_pending"}}{{end}}</strong>
+					</div>
+					<div>
+						<span class="deploy-kicker">{{ctx.Locale.Tr "platform.deploy.deployer_identity"}}</span>
+						<strong>{{if .DeploymentWalletEName}}{{.DeploymentWalletEName}}{{else}}{{ctx.Locale.Tr "platform.deploy.wallet_missing"}}{{end}}</strong>
+					</div>
+				</div>
+				<p>{{ctx.Locale.Tr "platform.deploy.identity_help"}}</p>
+			</section>
+
+			<section class="w3ds-section">
+				<h2>{{ctx.Locale.Tr "platform.deploy.new"}}</h2>
+				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.deploy.new_help"}}</p>
+				{{if not .PlatformEName}}
+					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.identity_wait"}}</div>
+				{{else if not .DeploymentWalletEName}}
+					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.wallet_help"}}</div>
+				{{else if not .DeploymentReleases}}
+					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.release_missing"}}</div>
+				{{else if not .CanCreateDeployment}}
+					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.publisher_missing"}}</div>
+				{{end}}
+
+				<form class="ui form deploy-form" data-deployment-form action="{{.RepoLink}}/deploy" method="post">
+					{{.CsrfTokenHtml}}
+					<div class="deploy-form-grid">
+						<div class="required field">
+							<label for="deployment_release">{{ctx.Locale.Tr "platform.deploy.release"}}</label>
+							<select id="deployment_release" name="release_id" required {{if not .CanCreateDeployment}}disabled{{end}}>
+								<option value="">{{ctx.Locale.Tr "platform.deploy.release_choose"}}</option>
+								{{range .DeploymentReleases}}<option value="{{.ID}}" data-version="{{.Version}}" data-tag="{{.Tag}}">{{.Tag}} · {{ShortSha .SHA}}</option>{{end}}
+							</select>
+							<p class="help">{{ctx.Locale.Tr "platform.deploy.release_help"}}</p>
+						</div>
+						<div class="required field">
+							<label for="deployment_name">{{ctx.Locale.Tr "platform.deploy.name"}}</label>
+							<input id="deployment_name" name="deployment_name" maxlength="100" placeholder="{{ctx.Locale.Tr "platform.deploy.name_placeholder"}}" required {{if not .CanCreateDeployment}}disabled{{end}}>
+						</div>
+						<div class="required field">
+							<label for="deployment_environment">{{ctx.Locale.Tr "platform.deploy.environment"}}</label>
+							<select id="deployment_environment" name="environment" required {{if not .CanCreateDeployment}}disabled{{end}}>
+								<option value="production">{{ctx.Locale.Tr "platform.deploy.production"}}</option>
+								<option value="staging">{{ctx.Locale.Tr "platform.deploy.staging"}}</option>
+								<option value="development">{{ctx.Locale.Tr "platform.deploy.development"}}</option>
+								<option value="custom">{{ctx.Locale.Tr "platform.deploy.custom"}}</option>
+							</select>
+						</div>
+						<div class="field tw-hidden" data-custom-environment>
+							<label for="deployment_custom_environment">{{ctx.Locale.Tr "platform.deploy.custom_environment"}}</label>
+							<input id="deployment_custom_environment" name="custom_environment" maxlength="100" placeholder="eu-west, customer-demo, edge-01">
+						</div>
+					</div>
+
+					<h3>{{ctx.Locale.Tr "platform.deploy.key_title"}}</h3>
+					<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.deploy.key_help"}}</p>
+					<div class="platform-wizard-choices deploy-key-choices">
+						<label class="platform-wizard-choice"><input type="radio" name="deployment_key_mode" value="generate" checked> <span>{{ctx.Locale.Tr "platform.deploy.key_generate"}}<small>{{ctx.Locale.Tr "platform.deploy.key_generate_help"}}</small></span></label>
+						<label class="platform-wizard-choice"><input type="radio" name="deployment_key_mode" value="paste"> <span>{{ctx.Locale.Tr "platform.deploy.key_paste"}}<small>{{ctx.Locale.Tr "platform.deploy.key_paste_help"}}</small></span></label>
+					</div>
+					<div data-generated-deployment-key>
+						<button type="button" class="ui button" data-generate-deployment-key {{if not .CanCreateDeployment}}disabled{{end}}>{{svg "octicon-key"}} {{ctx.Locale.Tr "platform.deploy.key_download"}}</button>
+						<label class="deploy-key-confirm"><input type="checkbox" data-deployment-key-saved> {{ctx.Locale.Tr "platform.deploy.key_saved"}}</label>
+					</div>
+					<div class="tw-hidden" data-pasted-deployment-key>
+						<div class="required field">
+							<label for="deployment_public_key_paste">{{ctx.Locale.Tr "platform.deploy.public_key"}}</label>
+							<textarea id="deployment_public_key_paste" rows="3" placeholder="z..." maxlength="8192"></textarea>
+						</div>
+					</div>
+					<input type="hidden" name="public_key" data-deployment-public-key>
+					<div class="deploy-submit-row">
+						<button type="submit" class="ui primary button" data-create-deployment {{if not .CanCreateDeployment}}disabled{{end}}>{{svg "octicon-rocket"}} {{ctx.Locale.Tr "platform.deploy.create"}}</button>
+						<span>{{ctx.Locale.Tr "platform.deploy.create_help"}}</span>
+					</div>
+				</form>
+			</section>
+
+			<section class="w3ds-section">
+				<h2>{{ctx.Locale.Tr "platform.deploy.yours"}}</h2>
+				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.deploy.yours_help"}}</p>
+				{{if .Deployments}}
+					<div class="deployment-list">
+						{{range .Deployments}}
+							<article class="deployment-card">
+								<div class="deployment-card-heading">
+									<div><h3>{{.Name}}</h3><span>{{.Environment}} · {{.ReleaseTag}}</span></div>
+									<span class="ui label {{if eq .Status "completed"}}green{{else if eq .Status "failed"}}red{{else if eq .Status "awaiting_signature"}}yellow{{else}}blue{{end}}">{{.Status}}</span>
+								</div>
+								<dl class="deployment-identifiers">
+									<div><dt>{{ctx.Locale.Tr "platform.deploy.deployment_ename"}}</dt><dd><code>{{.DeploymentEName}}</code></dd></div>
+									<div><dt>{{ctx.Locale.Tr "platform.deploy.version_ename"}}</dt><dd><code>{{.VersionEName}}</code></dd></div>
+								</dl>
+								{{if .Failure}}<div class="ui warning message">{{.Failure}}</div>{{end}}
+							</article>
+						{{end}}
+					</div>
+				{{else}}
+					<div class="deploy-empty">{{ctx.Locale.Tr "platform.deploy.none"}}</div>
+				{{end}}
+			</section>
+
+			<dialog id="w3ds-deployment-signing-modal">
+				<article>
+					<header>{{ctx.Locale.Tr "platform.deploy.sign_title"}}</header>
+					<div class="content deploy-signing-content">
+						<p>{{ctx.Locale.Tr "platform.deploy.sign_help" .DeploymentWalletEName}}</p>
+						<div class="deploy-preview-identities">
+							<div><span>{{ctx.Locale.Tr "platform.deploy.deployment_ename"}}</span><code data-preview-deployment-ename></code></div>
+							<div><span>{{ctx.Locale.Tr "platform.deploy.version_ename"}}</span><code data-preview-version-ename></code></div>
+						</div>
+						<div class="w3ds-ppa-signing-qr"><canvas data-deployment-qr aria-label="{{ctx.Locale.Tr "platform.deploy.sign_qr"}}"></canvas></div>
+						<a class="ui primary button" data-deployment-open-wallet href="#">{{svg "octicon-device-mobile"}} {{ctx.Locale.Tr "platform.ppa.signing_open"}}</a>
+						<p data-deployment-signing-status data-starting="{{ctx.Locale.Tr "platform.ppa.signing_starting"}}" data-waiting="{{ctx.Locale.Tr "platform.deploy.sign_waiting"}}" data-complete="{{ctx.Locale.Tr "platform.deploy.sign_complete"}}" data-failed="{{ctx.Locale.Tr "platform.deploy.sign_failed"}}" aria-live="polite"></p>
+					</div>
+					<footer><button type="button" class="ui cancel button">{{ctx.Locale.Tr "cancel"}}</button></footer>
+				</article>
+			</dialog>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}

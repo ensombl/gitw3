@@ -69,9 +69,9 @@ export async function generatePlatformKeyPair(subtle: SubtleCrypto | null | unde
   };
 }
 
-function downloadKeyBackup(publicKey: string, privateKey: Uint8Array) {
+export function downloadKeyBackup(publicKey: string, privateKey: Uint8Array, format = 'w3ds-platform-key-v1', filename = 'w3ds-platform-key.json') {
   const backup = {
-    format: 'w3ds-platform-key-v1',
+    format,
     algorithm: {name: 'ECDSA', namedCurve: 'P-256', hash: 'SHA-256'},
     publicKey,
     privateKeyPkcs8: bytesToBase64(privateKey),
@@ -81,7 +81,7 @@ function downloadKeyBackup(publicKey: string, privateKey: Uint8Array) {
   const blob = new Blob([`${JSON.stringify(backup, null, 2)}\n`], {type: 'application/json'});
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = 'w3ds-platform-key.json';
+  link.download = filename;
   document.body.append(link);
   link.click();
   setTimeout(() => {
