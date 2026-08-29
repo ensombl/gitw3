@@ -147,20 +147,19 @@
 						<ol data-w3ds-ppa-history-list>
 							{{range $event := $publication.PPAHistory}}
 								<li class="w3ds-ppa-turn w3ds-ppa-turn-{{$event.Kind}}" data-kind="{{$event.Kind}}">
-									{{if ne $event.Kind "submission"}}<span class="w3ds-ppa-avatar" aria-hidden="true">{{if eq $event.Kind "decision"}}PPA{{else}}APP{{end}}</span>{{end}}
 									<article class="ui {{$event.Tone}} message w3ds-ppa-bubble">
 										<div class="w3ds-ppa-bubble-heading">
 											<strong class="header">{{$event.Title}}</strong>
-											{{if $event.Actor}}<span class="w3ds-ppa-history-actor">{{$event.Actor}}</span>{{end}}
+											{{if $event.Actor}}<span class="w3ds-ppa-history-actor" title="{{$event.Actor}}">{{$event.Actor}}</span>{{end}}
 										</div>
 										<p class="w3ds-ppa-bubble-message">{{$event.Message}}</p>
-										{{if $event.CreatedAt}}<time class="w3ds-ppa-decision-time" data-w3ds-event-time data-created-at="{{$event.CreatedAt}}">{{ctx.Locale.Tr "platform.ppa.decision_recorded" $event.CreatedAt}}</time>{{end}}
+										{{if $event.CreatedAt}}<time class="w3ds-ppa-decision-time" data-w3ds-event-time data-created-at="{{$event.CreatedAt}}">{{ctx.Locale.Tr "platform.ppa.history_recorded_prefix"}} {{$event.CreatedAt}}</time>{{end}}
 									</article>
 								</li>
 							{{end}}
 						</ol>
 					</div>
-					<ul class="w3ds-ppa-checklist {{if or (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted")}}tw-hidden{{end}}" data-w3ds-ppa-checklist>
+					<ul class="w3ds-ppa-checklist {{if or (eq $publication.PPAStatus "submitted") (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted")}}tw-hidden{{end}}" data-w3ds-ppa-checklist>
 						<li data-w3ds-ppa-release>{{if $publication.Release.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.release"}}</span> <span class="ui {{if $publication.Release.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Release.Label}}</span></li>
 						<li data-w3ds-ppa-domains>{{if $publication.Domains.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.domains"}}</span> <span class="ui {{if $publication.Domains.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Domains.Label}}</span></li>
 						<li data-w3ds-ppa-identity>{{if .PlatformIdentityReady}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.identity"}}</span> <span class="ui {{if .PlatformIdentityReady}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
