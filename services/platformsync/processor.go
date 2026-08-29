@@ -102,25 +102,14 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 			releaseChanged := job.ReleaseVersion != release.Version
 			job.ReleaseTag = release.TagName
 			job.ReleaseVersion = release.Version
-			submittedVersion := manifest.SubmissionVersion
-			if manifest.InSubmission && submittedVersion == "" {
-				submittedVersion = manifest.Version
-			}
-			if manifest.InSubmission && submittedVersion != release.Version {
-				decision, err := p.w3ds.accreditation(ctx, job.EName, submittedVersion)
-				if err != nil {
-					return fmt.Errorf("check pending PPA decision for version %s: %w", submittedVersion, err)
-				}
-				if decision == nil {
-					manifest.SubmissionVersion = release.Version
-				} else {
-					manifest.InSubmission = false
-					manifest.SubmissionVersion = ""
-				}
-				manifestChanged = true
-			}
 			if manifest.Version != release.Version {
 				manifest.Version = release.Version
+				manifest.InSubmission = false
+				manifest.SubmissionVersion = ""
+				manifestChanged = true
+			} else if manifest.InSubmission && manifest.SubmissionVersion != "" && manifest.SubmissionVersion != release.Version {
+				manifest.InSubmission = false
+				manifest.SubmissionVersion = ""
 				manifestChanged = true
 			}
 			if releaseChanged {

@@ -241,9 +241,9 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	require.Len(t, fake.published, 2)
 	assert.Equal(t, "Updated description", fake.published[1]["description"])
 	assert.Equal(t, true, fake.published[1]["isActive"])
-	assert.Equal(t, true, fake.published[1]["inSubmission"])
+	assert.Equal(t, false, fake.published[1]["inSubmission"])
 	assert.Equal(t, "0.2.0", fake.published[1]["version"])
-	assert.Equal(t, "0.2.0", fake.published[1]["submissionVersion"])
+	assert.Equal(t, "", fake.published[1]["submissionVersion"])
 	assert.Equal(t, false, fake.published[1]["isDraft"])
 
 	fake.mu.Lock()
@@ -275,7 +275,7 @@ func TestProcessorIgnoresRepositoriesWithoutManifest(t *testing.T) {
 	assert.Nil(t, job)
 }
 
-func TestProcessorDoesNotCarryDecidedSubmissionToNewRelease(t *testing.T) {
+func TestProcessorClearsSubmissionOnNewRelease(t *testing.T) {
 	fake := newFakePlatformInfrastructure(t)
 	store := openTestStore(t)
 	processor := NewProcessor(testConfig(fake.server.URL, ""), store, &http.Client{Timeout: time.Second})
@@ -288,9 +288,6 @@ func TestProcessorDoesNotCarryDecidedSubmissionToNewRelease(t *testing.T) {
 	fake.manifest.InSubmission = true
 	fake.manifest.SubmissionVersion = "0.1.0"
 	fake.release = &platformRelease{TagName: "v0.2.0", Version: "0.2.0"}
-	fake.accreditations = []w3ds.AccreditationDecision{
-		{PlatformEName: "@guided.w3id", PlatformVersion: "0.1.0", Decision: "granted", Level: "L2", CreatedAt: "2026-08-29T00:00:00Z"},
-	}
 	fake.mu.Unlock()
 	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-2", false))
 	job, err = store.Get(42)

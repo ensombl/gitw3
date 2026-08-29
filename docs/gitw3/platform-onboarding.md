@@ -45,9 +45,8 @@ application carries the exact requested domain set. Legacy manifests containing 
 readable, but must select ontology domains before applying for PPA.
 
 `version` is controlled by the latest stable Forgejo release tag rather than an editable form field.
-Tags such as `v1.2.3` are normalized to `1.2.3`. PPA state is scoped by `submissionVersion`; when a newer
-release appears before the pending version receives an eVault decision, GitW3 moves the pending
-application to the new version automatically.
+Tags such as `v1.2.3` are normalized to `1.2.3`. PPA state is scoped by `submissionVersion`; every newer
+release clears the previous submission so the new version must be reviewed and submitted explicitly.
 
 The generated-key option creates an ECDSA P-256 key in the browser. Only the public SPKI key reaches
 GitW3. The PKCS#8 private key is delivered in a one-time JSON download and is never stored by GitW3 or
