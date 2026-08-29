@@ -150,6 +150,7 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	assert.Equal(t, 1, fake.provisionCalls)
 	require.Len(t, fake.published, 1)
 	assert.Equal(t, false, fake.published[0]["isArchived"])
+	assert.Equal(t, false, fake.published[0]["isActive"])
 	assert.Equal(t, false, fake.published[0]["inSubmission"])
 	assert.Equal(t, true, fake.published[0]["isDraft"])
 
@@ -165,6 +166,7 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	assert.Equal(t, 1, fake.provisionCalls)
 	require.Len(t, fake.published, 2)
 	assert.Equal(t, "Updated description", fake.published[1]["description"])
+	assert.Equal(t, true, fake.published[1]["isActive"])
 	assert.Equal(t, true, fake.published[1]["inSubmission"])
 	assert.Equal(t, false, fake.published[1]["isDraft"])
 
@@ -180,6 +182,7 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	assert.Equal(t, StatusArchived, job.Status)
 	require.Len(t, fake.published, 3)
 	assert.Equal(t, true, fake.published[2]["isArchived"])
+	assert.Equal(t, false, fake.published[2]["isActive"])
 }
 
 func TestProcessorIgnoresRepositoriesWithoutManifest(t *testing.T) {

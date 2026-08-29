@@ -190,7 +190,7 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 		"description":  manifest.Description,
 		"version":      manifest.Version,
 		"ename":        ename,
-		"isActive":     !archived,
+		"isActive":     !archived && !manifest.IsDraft,
 		"isArchived":   archived,
 		"createdAt":    createdAt.Format(time.RFC3339),
 		"updatedAt":    now.Format(time.RFC3339),
