@@ -183,7 +183,11 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 		"platform_public_key":   "z0123456789",
 	})
 	resp := session.MakeRequest(t, req, http.StatusSeeOther)
-	assert.Contains(t, test.RedirectURL(resp), "/"+user.Name+"/"+repoName+"?w3ds_onboarded=1")
+	redirect := test.RedirectURL(resp)
+	assert.Contains(t, redirect, "/"+user.Name+"/"+repoName+"?w3ds_onboarded=1")
+	pageResp := session.MakeRequest(t, NewRequest(t, "GET", redirect), http.StatusOK)
+	page := NewHTMLParser(t, pageResp.Body)
+	page.AssertElement(t, "#platform-publication-status", true)
 
 	raw := NewRequestf(t, "GET", "/%s/%s/raw/branch/master/%s", user.Name, repoName, w3ds.PlatformManifestPath)
 	rawResp := session.MakeRequest(t, raw, http.StatusOK)

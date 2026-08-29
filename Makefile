@@ -862,6 +862,10 @@ frontend: $(WEBPACK_DEST)
 .PHONY: backend
 backend: go-check generate-backend $(EXECUTABLE)
 
+.PHONY: platform-manifest-sync
+platform-manifest-sync: | verify-version
+	CGO_ENABLED=0 $(GO) build $(GOFLAGS) -o platform-manifest-sync ./cmd/platform-manifest-sync
+
 # We generate the backend before the frontend in case we in future we want to generate things in the frontend from generated files in backend
 .PHONY: generate
 generate: generate-backend

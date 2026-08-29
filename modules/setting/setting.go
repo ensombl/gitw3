@@ -227,6 +227,7 @@ func LoadSettings() {
 	loadMimeTypeMapFrom(CfgProvider)
 	loadF3From(CfgProvider)
 	loadAuthorizedIntegrationFrom(CfgProvider)
+	loadPlatformManifestSyncFrom(CfgProvider)
 }
 
 // LoadSettingsForInstall initializes the settings for install

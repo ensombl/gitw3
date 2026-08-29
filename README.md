@@ -149,6 +149,16 @@ the admin Users API. To exercise it locally:
 7. Don't register the webhook twice — two system webhooks pointed at the same URL produce two envelopes per
    push; the sync service has no deduplication for that case by design.
 
+### Platform onboarding and Marketplace publication
+
+The **New** action now offers guided W3DS platform creation. New-platform repositories receive a
+versioned `.w3ds/platform.json`, optional browser-generated identity keys, and the documented W3DS AI
+skill quick install. A companion process provisions the platform eName and keeps its Marketplace
+PlatformProfile synchronized from the default branch.
+
+See **[docs/gitw3/platform-onboarding.md](docs/gitw3/platform-onboarding.md)** for the manifest contract,
+service deployment, system webhook, credentials, status integration, and failure behavior.
+
 ## Licence
 
 Forgejo is GPL-3.0-or-later, and so is GitW3. See [LICENSE](LICENSE).
