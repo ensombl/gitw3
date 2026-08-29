@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -205,6 +206,8 @@ func addSubmissionProof(t *testing.T, manifest *w3ds.PlatformManifest, repositor
 
 func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	var server *httptest.Server
+	provisioned := false
+	createdDocuments := 0
 	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/entropy":
@@ -213,6 +216,33 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 			_ = json.NewEncoder(response).Encode(map[string]any{
 				"success": true, "w3id": "@11111111-1111-5111-8111-111111111111",
 			})
+		case "/platforms/certification":
+			_ = json.NewEncoder(response).Encode(map[string]any{"token": "platform-token"})
+		case "/records/software-versions":
+			assert.Equal(t, "Bearer platform-token", request.Header.Get("Authorization"))
+			_ = json.NewEncoder(response).Encode(map[string]string{"ename": "@c4cc7cd1-8670-5a37-8a7b-8ebc0b6022d8"})
+		case "/resolve":
+			if !provisioned {
+				http.NotFound(response, request)
+				return
+			}
+			_ = json.NewEncoder(response).Encode(map[string]string{"uri": server.URL})
+		case "/provision":
+			provisioned = true
+			_ = json.NewEncoder(response).Encode(map[string]any{"success": true, "w3id": "@11111111-1111-5111-8111-111111111111"})
+		case "/graphql":
+			var input map[string]any
+			require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
+			query := input["query"].(string)
+			switch {
+			case strings.Contains(query, "ExistingDeploymentBindings"):
+				_ = json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"bindingDocuments": map[string]any{"edges": []any{}}}})
+			case strings.Contains(query, "CreateDeploymentBinding"):
+				createdDocuments++
+				_ = json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"createBindingDocument": map[string]any{"metaEnvelopeId": fmt.Sprintf("document-%d", createdDocuments), "errors": []any{}}}})
+			case strings.Contains(query, "PublishDeployment"):
+				_ = json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"updateMetaEnvelopeById": map[string]any{"metaEnvelope": map[string]string{"id": "profile"}}}})
+			}
 		default:
 			http.NotFound(response, request)
 		}
@@ -229,7 +259,7 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, DeploymentAwaitingSignature, job.Status)
 	assert.Equal(t, "@11111111-1111-5111-8111-111111111111", job.DeploymentEName)
-	assert.True(t, strings.HasPrefix(job.VersionEName, "@"))
+	assert.Equal(t, "@c4cc7cd1-8670-5a37-8a7b-8ebc0b6022d8", job.VersionEName)
 	assert.Contains(t, job.BundlePayload, w3ds.DeploymentAttestationType)
 
 	require.NoError(t, processor.FinalizeDeployment(FinalizeDeploymentRequest{
@@ -239,6 +269,15 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, DeploymentPublishing, stored.Status)
 	assert.Equal(t, "wallet-signature", stored.WalletSignature)
+
+	require.NoError(t, processor.ReconcileDeployment(context.Background(), stored))
+	stored, err = store.GetDeployment(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, DeploymentCompleted, stored.Status)
+	assert.Equal(t, "document-1", stored.DeploymentKeyDocumentID)
+	assert.Equal(t, "document-2", stored.SoftwareVersionDocumentID)
+	assert.True(t, provisioned)
+	assert.Empty(t, stored.RegistryEntropy)
 }
 
 func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
