@@ -1684,6 +1684,10 @@ func registerRoutes(m *web.Route) {
 			}, repo.MustBeNotEmpty, context.RequireRepoReaderOr(unit.TypeCode))
 		}, context.RepoRef(), context.RequireRepoReaderOr(unit.TypeCode, unit.TypePullRequests, unit.TypeIssues, unit.TypeReleases))
 
+		m.Group("/w3ds", func() {
+			m.Get("", repo.W3DS)
+		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
+
 		m.Group("/activity_author_data", func() {
 			m.Get("", repo.ActivityAuthors)
 			m.Get("/{period}", repo.ActivityAuthors)

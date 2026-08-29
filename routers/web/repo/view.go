@@ -50,7 +50,6 @@ import (
 	"forgejo.org/modules/svg"
 	"forgejo.org/modules/typesniffer"
 	"forgejo.org/modules/util"
-	"forgejo.org/modules/w3ds"
 	"forgejo.org/routers/web/feed"
 	"forgejo.org/services/context"
 	issue_service "forgejo.org/services/issue"
@@ -1046,8 +1045,6 @@ func renderHomeCode(ctx *context.Context) {
 		HandleGitError(ctx, "Repo.Commit.GetTreeEntryByPath", err)
 		return
 	}
-	loadPlatformPublication(ctx)
-
 	checkOutdatedBranch(ctx)
 
 	checkCitationFile(ctx, entry)
@@ -1202,32 +1199,6 @@ PostRecentBranchCheck:
 		ctx.Data["CodeSearchOptions"] = git.GrepSearchOptions
 	}
 	ctx.HTML(http.StatusOK, tplRepoHome)
-}
-
-func loadPlatformPublication(ctx *context.Context) {
-	if ctx.Repo.TreePath != "" || ctx.Repo.Commit == nil {
-		return
-	}
-	if _, err := ctx.Repo.Commit.GetTreeEntryByPath(w3ds.PlatformManifestPath); err != nil {
-		return
-	}
-	ctx.Data["IsW3DSPlatform"] = true
-	ctx.Data["W3DSOnboarded"] = ctx.FormBool("w3ds_onboarded")
-	ctx.Data["W3DSUseAI"] = ctx.FormBool("ai")
-	status := &w3ds.PublicationStatus{Status: "identity_pending"}
-	ctx.Data["PlatformPublication"] = status
-	if !setting.PlatformManifestSync.Enabled || setting.PlatformManifestSync.URL == "" || setting.PlatformManifestSync.InternalToken == "" {
-		return
-	}
-	client := &http.Client{Timeout: setting.PlatformManifestSync.Timeout}
-	loaded, err := w3ds.FetchPublicationStatus(ctx, client, setting.PlatformManifestSync.URL, setting.PlatformManifestSync.InternalToken, ctx.Repo.Repository.ID)
-	if err == nil {
-		ctx.Data["PlatformPublication"] = loaded
-		return
-	}
-	if !errors.Is(err, w3ds.ErrPublicationStatusNotFound) {
-		log.Warn("Load platform publication status for repository %d: %v", ctx.Repo.Repository.ID, err)
-	}
 }
 
 func checkOutdatedBranch(ctx *context.Context) {

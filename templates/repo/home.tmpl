@@ -3,32 +3,6 @@
 	{{template "repo/header" .}}
 	<div class="ui container {{if .IsBlame}}fluid padded{{end}}">
 		{{template "base/alert" .}}
-		{{if .W3DSOnboarded}}
-			<div class="ui positive message">
-				<div class="header">{{ctx.Locale.Tr "platform.status.created"}}</div>
-				<p>{{ctx.Locale.Tr "platform.status.created_help"}}</p>
-				{{if .W3DSUseAI}}
-					<p>{{ctx.Locale.Tr "platform.status.ai_help"}}</p>
-					<div class="ui action input fluid"><input readonly value="npx skills add MetaState-Prototype-Project/prototype@w3ds"><button type="button" class="ui button" data-clipboard-text="npx skills add MetaState-Prototype-Project/prototype@w3ds">{{ctx.Locale.Tr "copy"}}</button></div>
-				{{end}}
-			</div>
-		{{end}}
-		{{if .IsW3DSPlatform}}
-			{{$publication := .PlatformPublication}}
-			<div id="platform-publication-status" class="tw-mb-4">
-				{{if eq $publication.Status "published"}}
-					<div class="ui positive message"><div class="header">{{ctx.Locale.Tr "platform.status.published"}}</div><p>{{ctx.Locale.Tr "platform.status.published_help" $publication.EName}}</p></div>
-				{{else if eq $publication.Status "failed"}}
-					<div class="ui warning message"><div class="header">{{ctx.Locale.Tr "platform.status.failed"}}</div><p>{{ctx.Locale.Tr "platform.status.failed_help"}}</p>{{if and $.Permission.IsAdmin $publication.LastError}}<p><code>{{$publication.LastError}}</code></p>{{end}}</div>
-				{{else if eq $publication.Status "archived"}}
-					<div class="ui warning message"><div class="header">{{ctx.Locale.Tr "platform.status.archived"}}</div></div>
-				{{else if eq $publication.Status "publishing"}}
-					<div class="ui info message"><div class="header">{{ctx.Locale.Tr "platform.status.publishing"}}</div><p>{{ctx.Locale.Tr "platform.status.pending_help"}}</p></div>
-				{{else}}
-					<div class="ui info message"><div class="header">{{ctx.Locale.Tr "platform.status.identity_pending"}}</div><p>{{ctx.Locale.Tr "platform.status.pending_help"}}</p></div>
-				{{end}}
-			</div>
-		{{end}}
 		{{if and (not .HideRepoInfo) (not .IsBlame)}}
 		<div class="repo-description">
 			<div id="repo-desc" class="tw-break-anywhere tw-text-16">

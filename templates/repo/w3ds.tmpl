@@ -1,0 +1,81 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository">
+	{{template "repo/header" .}}
+	<div id="w3ds-platform-page" class="ui container">
+		{{template "base/alert" .}}
+		{{if .W3DSOnboarded}}
+			<div class="ui positive message">
+				<div class="header">{{ctx.Locale.Tr "platform.status.created"}}</div>
+				<p>{{ctx.Locale.Tr "platform.status.created_help"}}</p>
+				{{if .W3DSUseAI}}
+					<p>{{ctx.Locale.Tr "platform.status.ai_help"}}</p>
+					<div class="ui action input fluid"><input readonly value="npx skills add MetaState-Prototype-Project/prototype@w3ds"><button type="button" class="ui button" data-clipboard-text="npx skills add MetaState-Prototype-Project/prototype@w3ds">{{ctx.Locale.Tr "copy"}}</button></div>
+				{{end}}
+			</div>
+		{{end}}
+
+		{{if .IsW3DSPlatform}}
+			{{$publication := .PlatformPublication}}
+			{{$manifest := .PlatformManifest}}
+			<div class="w3ds-page-heading">
+				<div>
+					<h1>{{ctx.Locale.Tr "platform.repo.heading"}}</h1>
+					<p>{{ctx.Locale.Tr "platform.repo.intro"}}</p>
+				</div>
+				<a class="ui basic button" href="{{.RepoLink}}/src/branch/{{PathEscapeSegments .Repository.DefaultBranch}}/{{.PlatformManifestPath}}">{{svg "octicon-file-code"}} {{ctx.Locale.Tr "platform.repo.view_manifest"}}</a>
+			</div>
+
+			<section class="w3ds-section" aria-labelledby="w3ds-live-heading">
+				<h2 id="w3ds-live-heading">{{ctx.Locale.Tr "platform.repo.live_status"}}</h2>
+				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.repo.live_help"}}</p>
+				<div id="w3ds-publication-status" data-status="{{$publication.Status}}" class="ui {{if eq $publication.Status "published"}}positive{{else if or (eq $publication.Status "failed") (eq $publication.Status "archived")}}warning{{else}}info{{end}} message">
+					{{if eq $publication.Status "published"}}
+						<div class="header">{{ctx.Locale.Tr "platform.status.published"}}</div><p>{{ctx.Locale.Tr "platform.status.published_help" .PlatformEName}}</p>
+					{{else if eq $publication.Status "failed"}}
+						<div class="header">{{ctx.Locale.Tr "platform.status.failed"}}</div><p>{{ctx.Locale.Tr "platform.status.failed_help"}}</p>{{if and $.Permission.IsAdmin $publication.LastError}}<p><code>{{$publication.LastError}}</code></p>{{end}}
+					{{else if eq $publication.Status "archived"}}
+						<div class="header">{{ctx.Locale.Tr "platform.status.archived"}}</div>
+					{{else if eq $publication.Status "publishing"}}
+						<div class="header">{{ctx.Locale.Tr "platform.status.publishing"}}</div><p>{{ctx.Locale.Tr "platform.status.pending_help"}}</p>
+					{{else if eq $publication.Status "unavailable"}}
+						<div class="header">{{ctx.Locale.Tr "platform.status.unavailable"}}</div><p>{{ctx.Locale.Tr "platform.status.unavailable_help"}}</p>
+					{{else}}
+						<div class="header">{{ctx.Locale.Tr "platform.status.identity_pending"}}</div><p>{{ctx.Locale.Tr "platform.status.pending_help"}}</p>
+					{{end}}
+				</div>
+			</section>
+
+			<section class="w3ds-section" aria-labelledby="w3ds-guide-heading">
+				<h2 id="w3ds-guide-heading">{{ctx.Locale.Tr "platform.repo.guide_title"}}</h2>
+				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.repo.guide_help"}}</p>
+				<ol class="w3ds-guide">
+					<li class="complete"><span class="w3ds-guide-number">1</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_manifest"}} <span class="ui green label">{{ctx.Locale.Tr "platform.repo.ready"}}</span></div><p>{{ctx.Locale.Tr "platform.repo.step_manifest_help"}}</p></div></li>
+					<li class="{{if .PlatformIdentityReady}}complete{{end}}"><span class="w3ds-guide-number">2</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_identity"}} <span class="ui {{if .PlatformIdentityReady}}green{{else}}blue{{end}} label">{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.automatic"}}{{end}}</span></div><p>{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.step_identity_ready" .PlatformEName}}{{else}}{{ctx.Locale.Tr "platform.repo.step_identity_pending"}}{{end}}</p></div></li>
+					<li class="{{if .PlatformPublished}}complete{{end}}"><span class="w3ds-guide-number">3</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_marketplace"}} <span class="ui {{if .PlatformPublished}}green{{else}}blue{{end}} label">{{if .PlatformPublished}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></div><p>{{if .PlatformPublished}}{{ctx.Locale.Tr "platform.repo.step_marketplace_ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.step_marketplace_pending"}}{{end}}</p></div></li>
+					<li class="{{if $manifest.URL}}complete{{end}}"><span class="w3ds-guide-number">4</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_application"}} <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label">{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></div><p>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.step_application_ready" $manifest.URL}}{{else}}{{ctx.Locale.Tr "platform.repo.step_application_missing"}}{{end}}</p></div></li>
+				</ol>
+			</section>
+
+			<section class="w3ds-section" aria-labelledby="w3ds-details-heading">
+				<h2 id="w3ds-details-heading">{{ctx.Locale.Tr "platform.repo.details"}}</h2>
+				<dl class="w3ds-details">
+					<div><dt>{{ctx.Locale.Tr "platform.repo.display_name"}}</dt><dd>{{$manifest.DisplayName}}</dd></div>
+					<div><dt>{{ctx.Locale.Tr "platform.repo.version"}}</dt><dd>{{$manifest.Version}}</dd></div>
+					<div><dt>{{ctx.Locale.Tr "platform.repo.category"}}</dt><dd>{{$manifest.Category}}</dd></div>
+					<div><dt>{{ctx.Locale.Tr "platform.repo.application_url"}}</dt><dd>{{if $manifest.URL}}<a href="{{$manifest.URL}}" rel="noopener noreferrer">{{$manifest.URL}}</a>{{else}}{{ctx.Locale.Tr "platform.repo.not_set"}}{{end}}</dd></div>
+				</dl>
+			</section>
+		{{else}}
+			<div class="w3ds-empty-state">
+				{{svg "octicon-shield-check" 48}}
+				<h1>{{ctx.Locale.Tr "platform.repo.setup_title"}}</h1>
+				<p>{{ctx.Locale.Tr "platform.repo.setup_help"}}</p>
+				<div class="tw-flex tw-gap-2 tw-flex-wrap tw-justify-center">
+					<a class="ui primary button" href="{{AppSubUrl}}/repo/create/new">{{ctx.Locale.Tr "platform.new.make"}}</a>
+					<a class="ui basic button" href="{{AppSubUrl}}/repo/create/port">{{ctx.Locale.Tr "platform.new.port"}}</a>
+				</div>
+			</div>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}

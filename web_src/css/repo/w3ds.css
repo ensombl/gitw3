@@ -1,0 +1,121 @@
+#w3ds-platform-page {
+  padding-top: 1.5rem;
+  padding-bottom: 3rem;
+}
+
+.w3ds-page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.w3ds-page-heading h1,
+.w3ds-section h2,
+.w3ds-empty-state h1 {
+  margin-bottom: 0.4rem;
+}
+
+.w3ds-page-heading p,
+.w3ds-section-help,
+.w3ds-empty-state p {
+  color: var(--color-text-light-1);
+}
+
+.w3ds-section {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  background: var(--color-box-body);
+}
+
+.w3ds-guide {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.w3ds-guide li {
+  display: flex;
+  gap: 1rem;
+}
+
+.w3ds-guide-number {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid var(--color-secondary-dark-2);
+  border-radius: 9999px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.w3ds-guide li.complete .w3ds-guide-number {
+  border-color: var(--color-success);
+  background: var(--color-success);
+  color: var(--color-success-contrast);
+}
+
+.w3ds-guide-title {
+  margin-bottom: 0.25rem;
+  font-size: 1.05rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.w3ds-guide p {
+  margin: 0;
+  color: var(--color-text-light-1);
+}
+
+.w3ds-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 0;
+}
+
+.w3ds-details div {
+  min-width: 0;
+}
+
+.w3ds-details dt {
+  color: var(--color-text-light-2);
+  font-size: 0.85rem;
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+
+.w3ds-details dd {
+  overflow-wrap: anywhere;
+  margin: 0.25rem 0 0;
+}
+
+.w3ds-empty-state {
+  max-width: 46rem;
+  margin: 3rem auto;
+  padding: 3rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  background: var(--color-box-body);
+  text-align: center;
+}
+
+@media (max-width: 767px) {
+  .w3ds-page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .w3ds-details {
+    grid-template-columns: 1fr;
+  }
+
+  .w3ds-empty-state {
+    padding: 2rem 1rem;
+  }
+}

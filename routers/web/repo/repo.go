@@ -299,7 +299,7 @@ func CreatePlatformPost(ctx *context.Context) {
 	}
 
 	log.Trace("W3DS platform repository created [%d]: %s/%s", repo.ID, ctxUser.Name, repo.Name)
-	redirect := repo.Link() + "?w3ds_onboarded=1"
+	redirect := repo.Link() + "/w3ds?w3ds_onboarded=1"
 	if form.UseAITooling {
 		redirect += "&ai=1"
 	}
