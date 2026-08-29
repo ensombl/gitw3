@@ -15,4 +15,3 @@ ENV PLATFORM_SYNC_LISTEN_ADDR=:8090 \
     PLATFORM_SYNC_STATE_PATH=/var/lib/platform-manifest-sync/state.db
 EXPOSE 8090
 ENTRYPOINT ["platform-manifest-sync"]
-
