@@ -21,6 +21,7 @@ type AccreditationDecision struct {
 	PlatformVersion string `json:"platformVersion"`
 	Decision        string `json:"decision"`
 	Level           string `json:"level,omitempty"`
+	Statement       string `json:"statement,omitempty"`
 	CreatedAt       string `json:"createdAt"`
 }
 

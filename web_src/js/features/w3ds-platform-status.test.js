@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {renderW3DSStatus} from './w3ds-platform-status.ts';
+import {renderW3DSStatus, renderW3DSTabStatus} from './w3ds-platform-status.ts';
 
 test('renders a published W3DS status and guide', () => {
   document.body.innerHTML = `
@@ -34,6 +34,7 @@ test('renders a published W3DS status and guide', () => {
     ppaLabel: 'Ready to apply',
     ppaMessage: 'Version 0.2.0 is ready to apply.',
     ppaButton: 'Apply for PPA certificate',
+    ppaActionMessage: 'Version 0.2.0 is ready to apply.',
     ppaVersion: '0.2.0',
     releaseTag: 'v0.2.0',
     releaseUrl: '/releases/tag/v0.2.0',
@@ -69,6 +70,7 @@ test('disables the version application when its eVault decision arrives', () => 
     status: 'published', tone: 'positive', title: 'Platform published', message: '', ename: '@platform',
     isDraft: false, inSubmission: false, ppaStatus: 'granted', ppaLabel: 'PPA certificate granted',
     ppaMessage: 'PPA granted L2 access for version 0.2.0.', ppaButton: 'PPA certificate granted',
+    ppaActionMessage: '',
     ppaVersion: '0.2.0', ppaLevel: 'L2',
     releaseTag: 'v0.2.0', releaseUrl: '/releases/tag/v0.2.0', releaseAction: 'View release',
     identity: {ready: true, tone: 'green', label: 'Ready', message: ''},
@@ -80,4 +82,46 @@ test('disables the version application when its eVault decision arrives', () => 
   expect(root.querySelector('[data-w3ds-ppa-apply]')?.disabled).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-apply]')?.classList.contains('positive')).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-button-label]')?.textContent).toBe('PPA certificate granted');
+});
+
+test('focuses a denied decision and shows a red tab status', () => {
+  document.body.innerHTML = `<nav><a data-w3ds-tab><span data-w3ds-tab-status class="tw-hidden"></span></a></nav>
+  <main id="w3ds-platform-page">
+    <div id="w3ds-publication-status" class="ui info message"><div data-w3ds-status-title></div><p data-w3ds-status-message></p></div>
+    <p data-w3ds-ppa-help></p>
+    <ul data-w3ds-ppa-checklist></ul>
+    <div data-w3ds-ppa-decision class="ui tw-hidden message">
+      <div data-w3ds-ppa-decision-title></div><p data-w3ds-ppa-decision-message></p>
+      <p data-w3ds-ppa-decision-time data-prefix="Decision recorded"></p>
+    </div>
+    <div data-w3ds-ppa-action>
+      <button data-w3ds-ppa-apply data-can-edit="true"><span data-w3ds-ppa-button-label></span></button>
+      <span data-w3ds-ppa-note></span>
+    </div>
+    <span data-w3ds-ppa-label></span>
+  </main>`;
+  const root = document.getElementById('w3ds-platform-page');
+  const tab = document.querySelector('[data-w3ds-tab]');
+  const data = {
+    status: 'published', tone: 'positive', title: 'Platform published', message: '', ename: '@platform',
+    isDraft: false, inSubmission: false, ppaStatus: 'denied', ppaLabel: 'PPA application denied',
+    ppaMessage: 'PPA denied version 0.2.0. Reason: Missing security review.', ppaButton: 'Sign and reapply',
+    ppaActionMessage: 'Address the decision and reapply.', ppaVersion: '0.2.0', ppaDecidedAt: '2026-08-30T00:00:00Z',
+    releaseTag: 'v0.2.0', releaseUrl: '/releases/tag/v0.2.0', releaseAction: 'View release',
+    identity: {ready: true, tone: 'green', label: 'Ready', message: ''},
+    application: {ready: true, tone: 'green', label: 'Ready', message: ''},
+    domains: {ready: true, tone: 'green', label: 'Ready', message: ''},
+    release: {ready: true, tone: 'green', label: 'Ready', message: ''},
+  };
+
+  renderW3DSStatus(root, data);
+  renderW3DSTabStatus(tab, data);
+
+  expect(root.querySelector('[data-w3ds-ppa-checklist]')?.classList.contains('tw-hidden')).toBe(true);
+  expect(root.querySelector('[data-w3ds-ppa-decision]')?.classList.contains('negative')).toBe(true);
+  expect(root.querySelector('[data-w3ds-ppa-decision-message]')?.textContent).toContain('Missing security review');
+  expect(root.querySelector('[data-w3ds-ppa-apply]')?.disabled).toBe(false);
+  expect(root.querySelector('[data-w3ds-ppa-button-label]')?.textContent).toBe('Sign and reapply');
+  expect(tab.querySelector('[data-w3ds-tab-status]')?.classList.contains('denied')).toBe(true);
+  expect(tab.querySelector('[data-w3ds-tab-status]')?.title).toContain('PPA application denied');
 });

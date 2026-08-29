@@ -139,26 +139,33 @@
 				<div class="w3ds-ppa-content">
 					<div class="tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
 						<h2 id="w3ds-ppa-heading">{{ctx.Locale.Tr "platform.ppa.title"}}</h2>
-						<span data-w3ds-ppa-label class="ui {{if eq $publication.PPAStatus "denied"}}red{{else if or (eq $publication.PPAStatus "submitted") (eq $publication.PPAStatus "granted")}}green{{else}}blue{{end}} label {{if eq $publication.PPAStatus "incomplete"}}tw-hidden{{end}}">{{$publication.PPALabel}}</span>
+						<span data-w3ds-ppa-label class="ui {{if eq $publication.PPAStatus "denied"}}red{{else if eq $publication.PPAStatus "granted"}}green{{else if eq $publication.PPAStatus "submitted"}}yellow{{else}}blue{{end}} label {{if eq $publication.PPAStatus "incomplete"}}tw-hidden{{end}}">{{$publication.PPALabel}}</span>
 					</div>
-					<p>{{ctx.Locale.Tr "platform.ppa.help"}}</p>
-					<ul class="w3ds-ppa-checklist">
+					<p data-w3ds-ppa-help class="{{if or (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted")}}tw-hidden{{end}}">{{ctx.Locale.Tr "platform.ppa.help"}}</p>
+					<div data-w3ds-ppa-decision class="ui {{if eq $publication.PPAStatus "denied"}}negative{{else}}positive{{end}} message {{if not (or (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted"))}}tw-hidden{{end}}">
+						<div class="header" data-w3ds-ppa-decision-title>{{$publication.PPALabel}}</div>
+						<p data-w3ds-ppa-decision-message>{{$publication.PPAMessage}}</p>
+						{{if $publication.PPADecidedAt}}<p class="w3ds-ppa-decision-time" data-w3ds-ppa-decision-time data-prefix="{{ctx.Locale.Tr "platform.ppa.decision_recorded_prefix"}}">{{ctx.Locale.Tr "platform.ppa.decision_recorded" $publication.PPADecidedAt}}</p>{{else}}<p class="w3ds-ppa-decision-time tw-hidden" data-w3ds-ppa-decision-time data-prefix="{{ctx.Locale.Tr "platform.ppa.decision_recorded_prefix"}}"></p>{{end}}
+					</div>
+					<ul class="w3ds-ppa-checklist {{if or (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted")}}tw-hidden{{end}}" data-w3ds-ppa-checklist>
 						<li data-w3ds-ppa-release>{{if $publication.Release.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.release"}}</span> <span class="ui {{if $publication.Release.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Release.Label}}</span></li>
 						<li data-w3ds-ppa-domains>{{if $publication.Domains.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.domains"}}</span> <span class="ui {{if $publication.Domains.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Domains.Label}}</span></li>
 						<li data-w3ds-ppa-identity>{{if .PlatformIdentityReady}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.identity"}}</span> <span class="ui {{if .PlatformIdentityReady}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
 						<li data-w3ds-ppa-application>{{if $manifest.URL}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.deployment"}}</span> <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
 						<li>{{if .PPAWalletReady}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.wallet"}}</span> <span class="ui {{if .PPAWalletReady}}green{{else}}grey{{end}} label">{{if .PPAWalletReady}}{{.PPAWalletEName}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
 					</ul>
+					<div data-w3ds-ppa-action class="{{if eq $publication.PPAStatus "granted"}}tw-hidden{{end}}">
 					{{if .CanAdminW3DS}}
 						<form class="w3ds-ppa-apply" data-w3ds-ppa-form action="{{.RepoLink}}/w3ds/ppa" method="post">
 							<input type="hidden" name="last_commit_id" value="{{$lastCommitID}}">
-							<button type="submit" class="ui {{if eq $publication.PPAStatus "denied"}}negative{{else if or (eq $publication.PPAStatus "submitted") (eq $publication.PPAStatus "granted")}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="{{if .PPAWalletReady}}true{{else}}false{{end}}" {{if not .CanApplyPPA}}disabled{{end}}>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
-							<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if and (eq $publication.PPAStatus "ready") (not .PPAWalletReady)}}{{ctx.Locale.Tr "platform.ppa.wallet_required"}}{{else}}{{$publication.PPAMessage}}{{end}}</span>
+							<button type="submit" class="ui {{if eq $publication.PPAStatus "submitted"}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="{{if .PPAWalletReady}}true{{else}}false{{end}}" {{if not .CanApplyPPA}}disabled{{end}}>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
+							<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if and (or (eq $publication.PPAStatus "ready") (eq $publication.PPAStatus "denied")) (not .PPAWalletReady)}}{{ctx.Locale.Tr "platform.ppa.wallet_required"}}{{else}}{{$publication.PPAActionMessage}}{{end}}</span>
 						</form>
 					{{else}}
-						<button type="button" class="ui {{if eq $publication.PPAStatus "denied"}}negative{{else if or (eq $publication.PPAStatus "submitted") (eq $publication.PPAStatus "granted")}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="false" disabled>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
-						<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if eq $publication.PPAStatus "ready"}}{{ctx.Locale.Tr "platform.ppa.admin_required"}}{{else}}{{$publication.PPAMessage}}{{end}}</span>
+						<button type="button" class="ui {{if eq $publication.PPAStatus "submitted"}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="false" disabled>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
+						<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if or (eq $publication.PPAStatus "ready") (eq $publication.PPAStatus "denied")}}{{ctx.Locale.Tr "platform.ppa.admin_required"}}{{else}}{{$publication.PPAActionMessage}}{{end}}</span>
 					{{end}}
+					</div>
 				</div>
 			</section>
 

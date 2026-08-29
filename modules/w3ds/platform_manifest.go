@@ -29,19 +29,21 @@ const (
 // PPASubmissionStatement is the canonical release application an authorized
 // repository owner signs with their eID wallet.
 type PPASubmissionStatement struct {
-	Type             string   `json:"type"`
-	SchemaVersion    int      `json:"schemaVersion"`
-	RepositoryID     int64    `json:"repositoryId"`
-	Repository       string   `json:"repository"`
-	PlatformEName    string   `json:"platformEName"`
-	PlatformName     string   `json:"platformName"`
-	ReleaseTag       string   `json:"releaseTag"`
-	Version          string   `json:"version"`
-	ManifestCommitID string   `json:"manifestCommitId"`
-	Domains          []string `json:"domains"`
-	SignerEName      string   `json:"signerEName"`
-	IssuedAt         string   `json:"issuedAt"`
-	Nonce            string   `json:"nonce"`
+	Type               string   `json:"type"`
+	SchemaVersion      int      `json:"schemaVersion"`
+	RepositoryID       int64    `json:"repositoryId"`
+	Repository         string   `json:"repository"`
+	PlatformEName      string   `json:"platformEName"`
+	PlatformName       string   `json:"platformName"`
+	ReleaseTag         string   `json:"releaseTag"`
+	Version            string   `json:"version"`
+	ManifestCommitID   string   `json:"manifestCommitId"`
+	Domains            []string `json:"domains"`
+	SignerEName        string   `json:"signerEName"`
+	IssuedAt           string   `json:"issuedAt"`
+	Nonce              string   `json:"nonce"`
+	PreviousDecision   string   `json:"previousDecision,omitempty"`
+	PreviousDecisionAt string   `json:"previousDecisionAt,omitempty"`
 }
 
 // PPASubmissionProof travels with the PlatformProfile in the platform eVault.
@@ -210,6 +212,14 @@ func (m *PlatformManifest) validateSubmissionProof() error {
 	issuedAt, err := time.Parse(time.RFC3339, statement.IssuedAt)
 	if err != nil || issuedAt.IsZero() || strings.TrimSpace(statement.Nonce) == "" {
 		return errors.New("submissionProof has invalid issuance details")
+	}
+	if (statement.PreviousDecision == "") != (statement.PreviousDecisionAt == "") || (statement.PreviousDecision != "" && statement.PreviousDecision != "denied") {
+		return errors.New("submissionProof has invalid reapplication details")
+	}
+	if statement.PreviousDecisionAt != "" {
+		if _, err := time.Parse(time.RFC3339, statement.PreviousDecisionAt); err != nil {
+			return errors.New("submissionProof has an invalid previous decision time")
+		}
 	}
 	if _, err := time.Parse(time.RFC3339, proof.VerifiedAt); err != nil {
 		return errors.New("submissionProof has an invalid verification time")

@@ -22,8 +22,10 @@ export type W3DSStatus = {
   ppaLabel: string;
   ppaMessage: string;
   ppaButton: string;
+  ppaActionMessage: string;
   ppaVersion: string;
   ppaLevel?: string;
+  ppaDecidedAt?: string;
   releaseTag: string;
   releaseUrl: string;
   releaseAction: string;
@@ -106,19 +108,53 @@ export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
   if (ppaLabel) {
     ppaLabel.textContent = data.ppaLabel;
     ppaLabel.classList.toggle('tw-hidden', data.ppaStatus === 'incomplete');
-    ppaLabel.classList.remove('blue', 'green', 'red');
-    ppaLabel.classList.add(data.ppaStatus === 'denied' ? 'red' : data.ppaStatus === 'ready' ? 'blue' : 'green');
+    ppaLabel.classList.remove('blue', 'green', 'red', 'yellow');
+    ppaLabel.classList.add(data.ppaStatus === 'denied' ? 'red' : data.ppaStatus === 'granted' ? 'green' : data.ppaStatus === 'submitted' ? 'yellow' : 'blue');
   }
+  const hasDecision = data.ppaStatus === 'denied' || data.ppaStatus === 'granted';
+  root.querySelector<HTMLElement>('[data-w3ds-ppa-help]')?.classList.toggle('tw-hidden', hasDecision);
+  root.querySelector<HTMLElement>('[data-w3ds-ppa-checklist]')?.classList.toggle('tw-hidden', hasDecision);
+  const decision = root.querySelector<HTMLElement>('[data-w3ds-ppa-decision]');
+  if (decision) {
+    decision.classList.toggle('tw-hidden', !hasDecision);
+    decision.classList.toggle('negative', data.ppaStatus === 'denied');
+    decision.classList.toggle('positive', data.ppaStatus === 'granted');
+    const decisionTitle = decision.querySelector<HTMLElement>('[data-w3ds-ppa-decision-title]');
+    if (decisionTitle) decisionTitle.textContent = data.ppaLabel;
+    const decisionMessage = decision.querySelector<HTMLElement>('[data-w3ds-ppa-decision-message]');
+    if (decisionMessage) decisionMessage.textContent = data.ppaMessage;
+    const decidedAt = decision.querySelector<HTMLElement>('[data-w3ds-ppa-decision-time]');
+    if (decidedAt) {
+      decidedAt.classList.toggle('tw-hidden', !data.ppaDecidedAt);
+      if (data.ppaDecidedAt) {
+        const timestamp = new Date(data.ppaDecidedAt);
+        const displayTime = Number.isNaN(timestamp.getTime()) ? data.ppaDecidedAt : timestamp.toLocaleString();
+        decidedAt.textContent = `${decidedAt.dataset.prefix ?? ''} ${displayTime}`.trim();
+      }
+    }
+  }
+  root.querySelector<HTMLElement>('[data-w3ds-ppa-action]')?.classList.toggle('tw-hidden', data.ppaStatus === 'granted');
   const apply = root.querySelector<HTMLButtonElement>('[data-w3ds-ppa-apply]');
   if (apply) {
-    apply.disabled = apply.dataset.canEdit !== 'true' || apply.dataset.signing === 'true' || data.ppaStatus !== 'ready';
+    apply.disabled = apply.dataset.canEdit !== 'true' || apply.dataset.signing === 'true' || !['ready', 'denied'].includes(data.ppaStatus);
     apply.classList.remove('primary', 'positive', 'negative');
-    apply.classList.add(data.ppaStatus === 'denied' ? 'negative' : ['submitted', 'granted'].includes(data.ppaStatus) ? 'positive' : 'primary');
+    apply.classList.add(['submitted', 'granted'].includes(data.ppaStatus) ? 'positive' : 'primary');
   }
   const buttonLabel = root.querySelector<HTMLElement>('[data-w3ds-ppa-button-label]');
   if (buttonLabel) buttonLabel.textContent = data.ppaButton;
   const note = root.querySelector<HTMLElement>('[data-w3ds-ppa-note]');
-  if (note && (data.ppaStatus !== 'ready' || apply?.dataset.canEdit === 'true')) note.textContent = data.ppaMessage;
+  if (note && (!['ready', 'denied'].includes(data.ppaStatus) || apply?.dataset.canEdit === 'true')) note.textContent = data.ppaActionMessage;
+}
+
+export function renderW3DSTabStatus(tab: HTMLElement, data: W3DSStatus) {
+  const dot = tab.querySelector<HTMLElement>('[data-w3ds-tab-status]');
+  if (!dot) return;
+  const visible = ['submitted', 'granted', 'denied'].includes(data.ppaStatus);
+  dot.classList.toggle('tw-hidden', !visible);
+  dot.classList.remove('submitted', 'granted', 'denied');
+  if (visible) dot.classList.add(data.ppaStatus);
+  dot.title = visible ? `${data.ppaLabel}: ${data.ppaMessage}` : '';
+  dot.setAttribute('aria-label', dot.title);
 }
 
 async function responseMessage(response: Response, fallback: string) {
@@ -210,23 +246,30 @@ function initPPASigning(root: HTMLElement) {
 
 export function initW3DSPlatformStatus() {
   const root = document.getElementById('w3ds-platform-page');
-  const statusUrl = root?.dataset.w3dsStatusUrl;
-  if (!root || !statusUrl) return;
+  const tab = document.querySelector<HTMLElement>('[data-w3ds-tab]');
+  const statusUrl = root?.dataset.w3dsStatusUrl || tab?.dataset.w3dsStatusUrl;
+  if (!statusUrl || (!root && !tab)) return;
 
-  const interval = Number(root.dataset.w3dsPollInterval) || 5000;
-  const checked = root.querySelector<HTMLElement>('[data-w3ds-status-checked]');
+  const interval = Number(root?.dataset.w3dsPollInterval) || 15000;
+  const checked = root?.querySelector<HTMLElement>('[data-w3ds-status-checked]');
   let stopped = false;
 
-  initPPASigning(root);
+  if (root) initPPASigning(root);
 
   const refresh = async () => {
     try {
       const response = await GET(statusUrl, {cache: 'no-store', headers: {accept: 'application/json'}});
+      if (response.status === 404) {
+        stopped = true;
+        return;
+      }
       if (!response.ok) throw new Error(`W3DS status returned ${response.status}`);
-      renderW3DSStatus(root, await response.json());
-      if (checked) checked.textContent = root.dataset.w3dsCheckedText ?? '';
+      const data = await response.json() as W3DSStatus;
+      if (root) renderW3DSStatus(root, data);
+      if (tab) renderW3DSTabStatus(tab, data);
+      if (checked) checked.textContent = root?.dataset.w3dsCheckedText ?? '';
     } catch {
-      if (checked) checked.textContent = root.dataset.w3dsRefreshFailedText ?? '';
+      if (checked) checked.textContent = root?.dataset.w3dsRefreshFailedText ?? '';
     } finally {
       if (!stopped) window.setTimeout(refresh, interval);
     }
