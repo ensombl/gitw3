@@ -15,7 +15,7 @@
 		{{end}}
 		{{if .IsW3DSPlatform}}
 			{{$publication := .PlatformPublication}}
-			<div id="platform-publication-status">
+			<div id="platform-publication-status" class="tw-mb-4">
 				{{if eq $publication.Status "published"}}
 					<div class="ui positive message"><div class="header">{{ctx.Locale.Tr "platform.status.published"}}</div><p>{{ctx.Locale.Tr "platform.status.published_help" $publication.EName}}</p></div>
 				{{else if eq $publication.Status "failed"}}
