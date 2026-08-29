@@ -89,7 +89,18 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 	if job.CreatedAt.IsZero() {
 		job.CreatedAt = time.Now().UTC()
 	}
-	if err := p.w3ds.publish(ctx, job.EnvelopeID, manifest, job.CreatedAt, job.Archive); err != nil {
+	if !job.Archive {
+		ref := job.TargetSHA
+		if ref == "" {
+			ref = job.DefaultBranch
+		}
+		authorENames, err := p.forgejo.authorENames(ctx, job.FullName, ref)
+		if err != nil {
+			return err
+		}
+		job.AuthorENames = authorENames
+	}
+	if err := p.w3ds.publish(ctx, job.EnvelopeID, manifest, job.CreatedAt, job.Archive, job.AuthorENames); err != nil {
 		return err
 	}
 

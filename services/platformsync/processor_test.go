@@ -72,6 +72,22 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		f.manifest = &manifest
 		f.mu.Unlock()
 		json.NewEncoder(response).Encode(map[string]any{"content": map[string]string{"sha": "updated"}})
+	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/repos/alice/platform/commits":
+		assert.Contains(t, []string{"commit-1", "commit-2"}, request.URL.Query().Get("sha"))
+		if request.URL.Query().Get("page") == "1" {
+			json.NewEncoder(response).Encode([]map[string]any{
+				{"author": map[string]string{"login": "alice"}, "committer": map[string]string{"login": "alice"}},
+				{"author": map[string]string{"login": "bob"}, "committer": map[string]string{"login": "platform-sync"}},
+			})
+		} else {
+			json.NewEncoder(response).Encode([]any{})
+		}
+	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/alice":
+		json.NewEncoder(response).Encode(map[string]any{"login": "alice", "login_name": "@alice.w3id"})
+	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/bob":
+		json.NewEncoder(response).Encode(map[string]any{"login": "bob", "login_name": "@bob.w3id"})
+	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/platform-sync":
+		json.NewEncoder(response).Encode(map[string]any{"login": "platform-sync", "login_name": ""})
 	case request.Method == http.MethodGet && request.URL.Path == "/entropy":
 		json.NewEncoder(response).Encode(map[string]string{"token": "entropy"})
 	case request.Method == http.MethodPost && request.URL.Path == "/provision":
@@ -153,6 +169,7 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	assert.Equal(t, false, fake.published[0]["isActive"])
 	assert.Equal(t, false, fake.published[0]["inSubmission"])
 	assert.Equal(t, true, fake.published[0]["isDraft"])
+	assert.Equal(t, []any{"@alice.w3id", "@bob.w3id"}, fake.published[0]["authorEnames"])
 
 	fake.mu.Lock()
 	fake.manifest.Description = "Updated description"

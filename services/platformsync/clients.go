@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -119,6 +120,96 @@ func (c *forgejoClient) updateManifest(ctx context.Context, fullName, branch, sh
 	return nil
 }
 
+func (c *forgejoClient) authorENames(ctx context.Context, fullName, ref string) ([]string, error) {
+	owner, repo, ok := strings.Cut(fullName, "/")
+	if !ok || owner == "" || repo == "" {
+		return nil, errors.New("invalid repository full name")
+	}
+
+	const pageSize = 50
+	usernames := make(map[string]struct{})
+	for page := 1; ; page++ {
+		endpoint := fmt.Sprintf("%s/api/v1/repos/%s/%s/commits?sha=%s&page=%d&limit=%d&stat=false&files=false&verification=false",
+			c.baseURL, url.PathEscape(owner), url.PathEscape(repo), url.QueryEscape(ref), page, pageSize)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		request.Header.Set("Authorization", "token "+c.token)
+		response, err := c.http.Do(request)
+		if err != nil {
+			return nil, err
+		}
+		if response.StatusCode != http.StatusOK {
+			err := responseError("fetch platform committers", response)
+			response.Body.Close()
+			return nil, err
+		}
+		var commits []*structs.Commit
+		decodeErr := json.NewDecoder(response.Body).Decode(&commits)
+		response.Body.Close()
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode platform committers: %w", decodeErr)
+		}
+		for _, commit := range commits {
+			if commit.Author != nil && commit.Author.UserName != "" {
+				usernames[commit.Author.UserName] = struct{}{}
+			}
+			if commit.Committer != nil && commit.Committer.UserName != "" {
+				usernames[commit.Committer.UserName] = struct{}{}
+			}
+		}
+		if len(commits) < pageSize {
+			break
+		}
+	}
+
+	orderedUsers := make([]string, 0, len(usernames))
+	for username := range usernames {
+		orderedUsers = append(orderedUsers, username)
+	}
+	sort.Strings(orderedUsers)
+	authorENames := make([]string, 0, len(orderedUsers))
+	seenENames := make(map[string]struct{}, len(orderedUsers))
+	for _, username := range orderedUsers {
+		endpoint := fmt.Sprintf("%s/api/v1/users/%s", c.baseURL, url.PathEscape(username))
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		request.Header.Set("Authorization", "token "+c.token)
+		response, err := c.http.Do(request)
+		if err != nil {
+			return nil, err
+		}
+		if response.StatusCode == http.StatusNotFound {
+			response.Body.Close()
+			continue
+		}
+		if response.StatusCode != http.StatusOK {
+			err := responseError("resolve platform committer identity", response)
+			response.Body.Close()
+			return nil, err
+		}
+		var user structs.User
+		decodeErr := json.NewDecoder(response.Body).Decode(&user)
+		response.Body.Close()
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode platform committer identity: %w", decodeErr)
+		}
+		eName := strings.TrimSpace(user.LoginName)
+		if !strings.HasPrefix(eName, "@") || len(eName) < 2 {
+			continue
+		}
+		if _, seen := seenENames[eName]; seen {
+			continue
+		}
+		seenENames[eName] = struct{}{}
+		authorENames = append(authorENames, eName)
+	}
+	return authorENames, nil
+}
+
 type w3dsClient struct {
 	config Config
 	http   *http.Client
@@ -170,7 +261,7 @@ func (c *w3dsClient) provision(ctx context.Context, publicKey string) (string, e
 	return strings.TrimSpace(provisioned.W3ID), nil
 }
 
-func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w3ds.PlatformManifest, createdAt time.Time, archived bool) error {
+func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w3ds.PlatformManifest, createdAt time.Time, archived bool, authorENames []string) error {
 	if manifest == nil || manifest.EName == nil {
 		return errors.New("cannot publish a platform without an eName")
 	}
@@ -199,6 +290,7 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 		"category":     manifest.Category,
 		"inSubmission": manifest.InSubmission,
 		"isDraft":      manifest.IsDraft,
+		"authorEnames": authorENames,
 	}
 	variables := map[string]any{
 		"id": envelopeID,
