@@ -1685,7 +1685,7 @@ func registerRoutes(m *web.Route) {
 		}, context.RepoRef(), context.RequireRepoReaderOr(unit.TypeCode, unit.TypePullRequests, unit.TypeIssues, unit.TypeReleases))
 
 		m.Group("/w3ds", func() {
-			m.Get("", repo.W3DS)
+			m.Combo("").Get(repo.W3DS).Post(context.RepoMustNotBeArchived(), reqSignIn, reqRepoCodeWriter, web.Bind(forms.UpdatePlatformForm{}), repo.W3DSUpdate)
 			m.Get("/status", repo.W3DSStatus)
 		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
 

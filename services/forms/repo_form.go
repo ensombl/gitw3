@@ -68,6 +68,23 @@ func (f *CreateRepoForm) Validate(req *http.Request, errs binding.Errors) bindin
 	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
 }
 
+// UpdatePlatformForm contains the editable W3DS platform profile fields.
+type UpdatePlatformForm struct {
+	PlatformDisplayName string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDescription string `binding:"Required;MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformVersion     string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformURL         string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformLogoURL     string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformCategory    string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	LastCommitID        string `binding:"Required;MaxSize(64)"`
+}
+
+// Validate validates the editable platform profile fields.
+func (f *UpdatePlatformForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
+	ctx := context.GetValidateContext(req)
+	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
+}
+
 // MigrateRepoForm form for migrating repository
 // this is used to interact with web ui
 type MigrateRepoForm struct {

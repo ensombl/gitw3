@@ -224,7 +224,7 @@ func preparePlatformCreatePage(ctx *context.Context, uid int64) *user_model.User
 	ctx.Data["default_branch"] = setting.Repository.DefaultBranch
 	ctx.Data["platform_version"] = "0.1.0"
 	ctx.Data["platform_category"] = "Other"
-	ctx.Data["PlatformCategories"] = []string{"Identity", "Social", "Governance", "Wellness", "Finance", "Storage", "Productivity", "Other"}
+	ctx.Data["PlatformCategories"] = w3ds.PlatformCategories()
 	ctx.Data["CanCreateRepo"] = ctx.Doer.CanCreateRepo()
 	ctx.Data["MaxCreationLimit"] = ctx.Doer.MaxCreationLimit()
 	ctx.Data["SupportedObjectFormats"] = git.SupportedObjectFormats

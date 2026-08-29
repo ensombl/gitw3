@@ -21,11 +21,17 @@ const (
 var (
 	platformNamePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 	semverPattern       = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+	platformCategories  = []string{"Identity", "Social", "Governance", "Wellness", "Finance", "Storage", "Productivity", "Other"}
 	knownCategories     = map[string]struct{}{
 		"Identity": {}, "Social": {}, "Governance": {}, "Wellness": {},
 		"Finance": {}, "Storage": {}, "Productivity": {}, "Other": {},
 	}
 )
+
+// PlatformCategories returns the supported marketplace categories.
+func PlatformCategories() []string {
+	return append([]string(nil), platformCategories...)
+}
 
 // PlatformManifest is the repository-owned source of truth for a W3DS platform.
 type PlatformManifest struct {

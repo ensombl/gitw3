@@ -17,12 +17,17 @@
 		{{if .IsW3DSPlatform}}
 			{{$publication := .PlatformPublication}}
 			{{$manifest := .PlatformManifest}}
+			{{$edit := .PlatformEditForm}}
 			<div class="w3ds-page-heading">
 				<div>
 					<h1>{{ctx.Locale.Tr "platform.repo.heading"}}</h1>
 					<p>{{ctx.Locale.Tr "platform.repo.intro"}}</p>
 				</div>
-				<a class="ui basic button" href="{{.RepoLink}}/src/branch/{{PathEscapeSegments .Repository.DefaultBranch}}/{{.PlatformManifestPath}}">{{svg "octicon-file-code"}} {{ctx.Locale.Tr "platform.repo.view_manifest"}}</a>
+				{{if .CanEditW3DS}}
+					<a class="ui primary button" href="#w3ds-platform-edit">{{svg "octicon-pencil"}} {{ctx.Locale.Tr "platform.edit.action"}}</a>
+				{{else}}
+					<a class="ui basic button" href="{{.RepoLink}}/src/branch/{{PathEscapeSegments .Repository.DefaultBranch}}/{{.PlatformManifestPath}}">{{svg "octicon-file-code"}} {{ctx.Locale.Tr "platform.repo.view_manifest"}}</a>
+				{{end}}
 			</div>
 
 			<section class="w3ds-section" aria-labelledby="w3ds-live-heading">
@@ -58,14 +63,60 @@
 				</ol>
 			</section>
 
-			<section class="w3ds-section" aria-labelledby="w3ds-details-heading">
+			<section id="w3ds-platform-edit" class="w3ds-section" aria-labelledby="w3ds-details-heading">
 				<h2 id="w3ds-details-heading">{{ctx.Locale.Tr "platform.repo.details"}}</h2>
-				<dl class="w3ds-details">
-					<div><dt>{{ctx.Locale.Tr "platform.repo.display_name"}}</dt><dd>{{$manifest.DisplayName}}</dd></div>
-					<div><dt>{{ctx.Locale.Tr "platform.repo.version"}}</dt><dd>{{$manifest.Version}}</dd></div>
-					<div><dt>{{ctx.Locale.Tr "platform.repo.category"}}</dt><dd>{{$manifest.Category}}</dd></div>
-					<div><dt>{{ctx.Locale.Tr "platform.repo.application_url"}}</dt><dd>{{if $manifest.URL}}<a href="{{$manifest.URL}}" rel="noopener noreferrer">{{$manifest.URL}}</a>{{else}}{{ctx.Locale.Tr "platform.repo.not_set"}}{{end}}</dd></div>
-				</dl>
+				{{if .CanEditW3DS}}
+					<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.edit.help"}}</p>
+					<form class="ui form" action="{{.RepoLink}}/w3ds" method="post">
+						<input type="hidden" name="last_commit_id" value="{{$edit.LastCommitID}}">
+						<div class="w3ds-edit-grid">
+							<div class="required field {{if .Err_PlatformDisplayName}}error{{end}}">
+								<label for="platform_display_name">{{ctx.Locale.Tr "platform.repo.display_name"}}</label>
+								<input id="platform_display_name" name="platform_display_name" value="{{$edit.PlatformDisplayName}}" maxlength="100" required>
+							</div>
+							<div class="required field {{if .Err_PlatformVersion}}error{{end}}">
+								<label for="platform_version">{{ctx.Locale.Tr "platform.repo.version"}}</label>
+								<input id="platform_version" name="platform_version" value="{{$edit.PlatformVersion}}" maxlength="100" placeholder="0.1.0" required>
+							</div>
+						</div>
+						<div class="required field {{if .Err_PlatformDescription}}error{{end}}">
+							<label for="platform_description">{{ctx.Locale.Tr "platform.edit.description"}}</label>
+							<textarea id="platform_description" name="platform_description" rows="4" maxlength="2048" required>{{$edit.PlatformDescription}}</textarea>
+						</div>
+						<div class="w3ds-edit-grid">
+							<div class="required field {{if .Err_PlatformCategory}}error{{end}}">
+								<label for="platform_category">{{ctx.Locale.Tr "platform.repo.category"}}</label>
+								<select id="platform_category" name="platform_category" required>
+									{{range $category := .PlatformCategories}}<option value="{{$category}}" {{if eq $edit.PlatformCategory $category}}selected{{end}}>{{$category}}</option>{{end}}
+								</select>
+							</div>
+							<div class="field {{if .Err_PlatformURL}}error{{end}}">
+								<label for="platform_url">{{ctx.Locale.Tr "platform.repo.application_url"}}</label>
+								<input id="platform_url" name="platform_url" type="url" value="{{$edit.PlatformURL}}" maxlength="2048" placeholder="https://my-platform.example">
+								<span class="help">{{ctx.Locale.Tr "platform.edit.application_help"}}</span>
+							</div>
+						</div>
+						<div class="field {{if .Err_PlatformLogoURL}}error{{end}}">
+							<label for="platform_logo_url">{{ctx.Locale.Tr "platform.edit.logo_url"}}</label>
+							<input id="platform_logo_url" name="platform_logo_url" type="url" value="{{$edit.PlatformLogoURL}}" maxlength="2048" placeholder="https://my-platform.example/logo.png">
+						</div>
+						<div class="ui info message w3ds-stable-identity">
+							<div class="header">{{ctx.Locale.Tr "platform.edit.stable_title"}}</div>
+							<p>{{ctx.Locale.Tr "platform.edit.stable_help" $manifest.PlatformName}}</p>
+						</div>
+						<div class="w3ds-edit-actions">
+							<button type="submit" class="ui primary button">{{svg "octicon-check"}} {{ctx.Locale.Tr "platform.edit.save"}}</button>
+							<span>{{ctx.Locale.Tr "platform.edit.commit_help"}}</span>
+						</div>
+					</form>
+				{{else}}
+					<dl class="w3ds-details">
+						<div><dt>{{ctx.Locale.Tr "platform.repo.display_name"}}</dt><dd>{{$manifest.DisplayName}}</dd></div>
+						<div><dt>{{ctx.Locale.Tr "platform.repo.version"}}</dt><dd>{{$manifest.Version}}</dd></div>
+						<div><dt>{{ctx.Locale.Tr "platform.repo.category"}}</dt><dd>{{$manifest.Category}}</dd></div>
+						<div><dt>{{ctx.Locale.Tr "platform.repo.application_url"}}</dt><dd>{{if $manifest.URL}}<a href="{{$manifest.URL}}" rel="noopener noreferrer">{{$manifest.URL}}</a>{{else}}{{ctx.Locale.Tr "platform.repo.not_set"}}{{end}}</dd></div>
+					</dl>
+				{{end}}
 			</section>
 
 			<section class="w3ds-section w3ds-ppa" aria-labelledby="w3ds-ppa-heading">

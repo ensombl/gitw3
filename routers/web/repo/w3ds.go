@@ -9,12 +9,17 @@ import (
 	"net/http"
 	"strings"
 
+	"forgejo.org/models"
+	"forgejo.org/models/unit"
 	"forgejo.org/modules/base"
 	"forgejo.org/modules/git"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/w3ds"
+	"forgejo.org/modules/web"
 	"forgejo.org/services/context"
+	"forgejo.org/services/forms"
+	files_service "forgejo.org/services/repository/files"
 )
 
 const tplRepoW3DS base.TplName = "repo/w3ds"
@@ -40,32 +45,113 @@ type w3dsPublicationView struct {
 
 // W3DS renders the repository's W3DS platform workspace.
 func W3DS(ctx *context.Context) {
-	ctx.Data["Title"] = ctx.Tr("platform.repo.title")
-	ctx.Data["PageIsW3DS"] = true
-	ctx.Data["W3DSOnboarded"] = ctx.FormBool("w3ds_onboarded")
-	ctx.Data["W3DSUseAI"] = ctx.FormBool("ai")
-	ctx.Data["PlatformManifestPath"] = w3ds.PlatformManifestPath
-
 	manifest, err := loadPlatformManifest(ctx)
 	if err != nil {
 		ctx.ServerError("loadPlatformManifest", err)
 		return
 	}
+	var form *forms.UpdatePlatformForm
 	if manifest != nil {
-		status := loadPlatformPublicationStatus(ctx)
-		eName := strings.TrimSpace(status.EName)
-		if eName == "" && manifest.EName != nil {
-			eName = strings.TrimSpace(*manifest.EName)
+		form = &forms.UpdatePlatformForm{
+			PlatformDisplayName: manifest.DisplayName,
+			PlatformDescription: manifest.Description,
+			PlatformVersion:     manifest.Version,
+			PlatformURL:         manifest.URL,
+			PlatformLogoURL:     manifest.LogoURL,
+			PlatformCategory:    manifest.Category,
+			LastCommitID:        ctx.Repo.CommitID,
 		}
-		ctx.Data["IsW3DSPlatform"] = true
-		ctx.Data["PlatformManifest"] = manifest
-		ctx.Data["PlatformPublication"] = status
-		ctx.Data["PlatformEName"] = eName
-		ctx.Data["PlatformIdentityReady"] = eName != ""
-		ctx.Data["PlatformPublished"] = status.Status == "published"
+	}
+	prepareW3DSPage(ctx, manifest, form)
+	ctx.HTML(http.StatusOK, tplRepoW3DS)
+}
+
+// W3DSUpdate commits edited platform profile fields back to the repository manifest.
+func W3DSUpdate(ctx *context.Context) {
+	form := web.GetForm(ctx).(*forms.UpdatePlatformForm)
+	manifest, err := loadPlatformManifest(ctx)
+	if err != nil {
+		ctx.ServerError("loadPlatformManifest", err)
+		return
+	}
+	if manifest == nil {
+		ctx.NotFound("W3DS platform manifest", nil)
+		return
+	}
+	prepareW3DSPage(ctx, manifest, form)
+	if ctx.HasError() {
+		ctx.RenderWithErr(ctx.Tr("platform.edit.invalid"), tplRepoW3DS, form)
+		return
 	}
 
-	ctx.HTML(http.StatusOK, tplRepoW3DS)
+	updated := *manifest
+	updated.DisplayName = form.PlatformDisplayName
+	updated.Description = form.PlatformDescription
+	updated.Version = form.PlatformVersion
+	updated.URL = form.PlatformURL
+	updated.LogoURL = form.PlatformLogoURL
+	updated.Category = form.PlatformCategory
+	if err := updated.Validate(!setting.IsProd); err != nil {
+		ctx.RenderWithErr(ctx.Tr("platform.create.invalid_manifest", err), tplRepoW3DS, form)
+		return
+	}
+	content, err := updated.Marshal()
+	if err != nil {
+		ctx.ServerError("marshalPlatformManifest", err)
+		return
+	}
+
+	_, err = files_service.ChangeRepoFiles(ctx, ctx.Repo.Repository, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+		LastCommitID: form.LastCommitID,
+		OldBranch:    ctx.Repo.Repository.DefaultBranch,
+		NewBranch:    ctx.Repo.Repository.DefaultBranch,
+		Message:      "chore: update platform profile",
+		Files: []*files_service.ChangeRepoFile{{
+			Operation:     "update",
+			TreePath:      w3ds.PlatformManifestPath,
+			ContentReader: strings.NewReader(string(content)),
+		}},
+	})
+	if err != nil {
+		switch {
+		case models.IsErrCommitIDDoesNotMatch(err), git.IsErrPushOutOfDate(err):
+			ctx.RenderWithErr(ctx.Tr("platform.edit.conflict"), tplRepoW3DS, form)
+		case models.IsErrUserCannotCommit(err), models.IsErrFilePathProtected(err), git.IsErrPushRejected(err):
+			ctx.RenderWithErr(ctx.Tr("platform.edit.protected"), tplRepoW3DS, form)
+		default:
+			log.Error("Update W3DS platform manifest for repository %d: %v", ctx.Repo.Repository.ID, err)
+			ctx.RenderWithErr(ctx.Tr("platform.edit.failed"), tplRepoW3DS, form)
+		}
+		return
+	}
+
+	ctx.Flash.Success(ctx.Tr("platform.edit.saved"))
+	ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+}
+
+func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form *forms.UpdatePlatformForm) {
+	ctx.Data["Title"] = ctx.Tr("platform.repo.title")
+	ctx.Data["PageIsW3DS"] = true
+	ctx.Data["W3DSOnboarded"] = ctx.FormBool("w3ds_onboarded")
+	ctx.Data["W3DSUseAI"] = ctx.FormBool("ai")
+	ctx.Data["PlatformManifestPath"] = w3ds.PlatformManifestPath
+	ctx.Data["PlatformCategories"] = w3ds.PlatformCategories()
+	ctx.Data["PlatformEditForm"] = form
+	ctx.Data["CanEditW3DS"] = ctx.Repo.CanWrite(unit.TypeCode) && !ctx.Repo.Repository.IsArchived
+	if manifest == nil {
+		return
+	}
+	status := loadPlatformPublicationStatus(ctx)
+	eName := strings.TrimSpace(status.EName)
+	if eName == "" && manifest.EName != nil {
+		eName = strings.TrimSpace(*manifest.EName)
+	}
+	ctx.Data["IsW3DSPlatform"] = true
+	ctx.Data["PlatformManifest"] = manifest
+	ctx.Data["PlatformPublication"] = status
+	ctx.Data["PlatformEName"] = eName
+	ctx.Data["PlatformIdentityReady"] = eName != ""
+	ctx.Data["PlatformPublished"] = status.Status == "published"
 }
 
 // W3DSStatus returns the current publication state for the repository workspace.

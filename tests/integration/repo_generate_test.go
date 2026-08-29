@@ -22,6 +22,7 @@ import (
 	"forgejo.org/modules/test"
 	"forgejo.org/modules/translation"
 	"forgejo.org/modules/w3ds"
+	files_service "forgejo.org/services/repository/files"
 	"forgejo.org/tests"
 	"forgejo.org/tests/forgery"
 
@@ -201,6 +202,8 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	page.AssertElement(t, "#w3ds-publication-status", true)
 	page.AssertElement(t, "#w3ds-platform-page[data-w3ds-status-url='/"+user.Name+"/"+repoName+"/w3ds/status']", true)
 	page.AssertElement(t, "button[data-w3ds-ppa-apply][disabled]", true)
+	page.AssertElement(t, "form[action='/"+user.Name+"/"+repoName+"/w3ds']", true)
+	assert.Equal(t, "Guided Platform", page.GetInputValueByName("platform_display_name"))
 	statusResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds/status", user.Name, repoName), http.StatusOK)
 	var status map[string]any
 	require.NoError(t, json.Unmarshal(statusResp.Body.Bytes(), &status))
@@ -213,8 +216,71 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	var manifest w3ds.PlatformManifest
 	require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &manifest))
 	assert.Equal(t, "guided-platform", manifest.PlatformName)
+	assert.Equal(t, "Guided Platform", manifest.DisplayName)
 	assert.Empty(t, manifest.URL)
+	assert.Equal(t, "z0123456789", manifest.PublicKey)
 	assert.Nil(t, manifest.EName)
+}
+
+func TestW3DSEditPlatform(t *testing.T) {
+	onApplicationRun(t, func(t *testing.T, _ *url.URL) {
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user2"})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user.ID, Name: "repo1"})
+		manifest := w3ds.NewPlatformManifest(
+			"fixture-platform",
+			"Fixture Platform",
+			"A platform profile used to test inline editing",
+			"0.1.0",
+			"",
+			"",
+			"Productivity",
+			"z0123456789",
+		)
+		content, err := manifest.Marshal()
+		require.NoError(t, err)
+		_, err = files_service.ChangeRepoFiles(t.Context(), repo, user, &files_service.ChangeRepoFilesOptions{
+			OldBranch: repo.DefaultBranch,
+			NewBranch: repo.DefaultBranch,
+			Message:   "test: add platform manifest",
+			Files: []*files_service.ChangeRepoFile{{
+				Operation:     "create",
+				TreePath:      w3ds.PlatformManifestPath,
+				ContentReader: strings.NewReader(string(content)),
+			}},
+		})
+		require.NoError(t, err)
+
+		session := loginUser(t, user.Name)
+		pageResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds", user.Name, repo.Name), http.StatusOK)
+		page := NewHTMLParser(t, pageResp.Body)
+		page.AssertElement(t, "form[action='/"+user.Name+"/"+repo.Name+"/w3ds']", true)
+		assert.Equal(t, "Fixture Platform", page.GetInputValueByName("platform_display_name"))
+
+		update := NewRequestWithValues(t, "POST", "/"+user.Name+"/"+repo.Name+"/w3ds", map[string]string{
+			"platform_display_name": "Fixture Platform Updated",
+			"platform_description":  "The profile was edited directly from the W3DS tab",
+			"platform_version":      "0.2.0",
+			"platform_category":     "Social",
+			"platform_url":          "https://guided.example",
+			"platform_logo_url":     "https://guided.example/logo.png",
+			"last_commit_id":        page.GetInputValueByName("last_commit_id"),
+		})
+		updateResp := session.MakeRequest(t, update, http.StatusSeeOther)
+		assert.Equal(t, "/"+user.Name+"/"+repo.Name+"/w3ds", test.RedirectURL(updateResp))
+
+		raw := NewRequestf(t, "GET", "/%s/%s/raw/branch/%s/%s", user.Name, repo.Name, repo.DefaultBranch, w3ds.PlatformManifestPath)
+		rawResp := session.MakeRequest(t, raw, http.StatusOK)
+		var updated w3ds.PlatformManifest
+		require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &updated))
+		assert.Equal(t, "fixture-platform", updated.PlatformName)
+		assert.Equal(t, "Fixture Platform Updated", updated.DisplayName)
+		assert.Equal(t, "The profile was edited directly from the W3DS tab", updated.Description)
+		assert.Equal(t, "0.2.0", updated.Version)
+		assert.Equal(t, "Social", updated.Category)
+		assert.Equal(t, "https://guided.example", updated.URL)
+		assert.Equal(t, "https://guided.example/logo.png", updated.LogoURL)
+		assert.Equal(t, "z0123456789", updated.PublicKey)
+	})
 }
 
 func TestRepoCreateFormRepoLimit(t *testing.T) {
