@@ -9,7 +9,6 @@ test('renders a published W3DS status and guide', () => {
         <p data-w3ds-status-error class="tw-hidden"><code></code></p>
       </div>
       <li data-w3ds-identity-step><span data-w3ds-step-label></span><p data-w3ds-step-message></p></li>
-      <li data-w3ds-marketplace-step><span data-w3ds-step-label></span><p data-w3ds-step-message></p></li>
       <li data-w3ds-application-step><span data-w3ds-step-label></span><p data-w3ds-step-message></p></li>
       <li data-w3ds-release-step><span data-w3ds-step-label></span><p data-w3ds-step-message></p></li>
       <li data-w3ds-ppa-identity><svg></svg><svg></svg><span data-w3ds-requirement-label></span></li>
@@ -40,7 +39,6 @@ test('renders a published W3DS status and guide', () => {
     releaseUrl: '/releases/tag/v0.2.0',
     releaseAction: 'View release',
     identity: {ready: true, tone: 'green', label: 'Ready', message: 'Identity is @platform.'},
-    marketplace: {ready: true, tone: 'green', label: 'Ready', message: 'Listing is synchronized.'},
     application: {ready: true, tone: 'green', label: 'Ready', message: 'Application is deployed.'},
     domains: {ready: true, tone: 'green', label: 'Ready', message: 'Domains are selected.'},
     release: {ready: true, tone: 'green', label: 'Ready', message: 'Using v0.2.0.'},
@@ -49,7 +47,6 @@ test('renders a published W3DS status and guide', () => {
   expect(root.querySelector('#w3ds-publication-status')?.classList.contains('positive')).toBe(true);
   expect(root.querySelector('[data-w3ds-status-title]')?.textContent).toBe('Platform published');
   expect(root.querySelector('[data-w3ds-identity-step]')?.classList.contains('complete')).toBe(true);
-  expect(root.querySelector('[data-w3ds-marketplace-step]')?.classList.contains('complete')).toBe(true);
   expect(root.querySelector('[data-w3ds-application-step]')?.classList.contains('complete')).toBe(true);
   expect(root.querySelector('[data-w3ds-release-step]')?.classList.contains('complete')).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-application] svg:last-of-type')?.classList.contains('tw-hidden')).toBe(true);
@@ -75,7 +72,6 @@ test('disables the version application when its eVault decision arrives', () => 
     ppaVersion: '0.2.0', ppaLevel: 'L2',
     releaseTag: 'v0.2.0', releaseUrl: '/releases/tag/v0.2.0', releaseAction: 'View release',
     identity: {ready: true, tone: 'green', label: 'Ready', message: ''},
-    marketplace: {ready: true, tone: 'green', label: 'Ready', message: ''},
     application: {ready: true, tone: 'green', label: 'Ready', message: ''},
     domains: {ready: true, tone: 'green', label: 'Ready', message: ''},
     release: {ready: true, tone: 'green', label: 'Ready', message: ''},

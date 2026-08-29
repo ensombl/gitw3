@@ -26,7 +26,6 @@ export type W3DSStatus = {
   releaseUrl: string;
   releaseAction: string;
   identity: W3DSGuideStep;
-  marketplace: W3DSGuideStep;
   application: W3DSGuideStep;
   domains: W3DSGuideStep;
   release: W3DSGuideStep;
@@ -73,7 +72,6 @@ export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
   }
 
   renderGuideStep(root.querySelector('[data-w3ds-identity-step]'), data.identity);
-  renderGuideStep(root.querySelector('[data-w3ds-marketplace-step]'), data.marketplace);
   renderGuideStep(root.querySelector('[data-w3ds-application-step]'), data.application);
   renderGuideStep(root.querySelector('[data-w3ds-release-step]'), data.release);
   renderRequirement(root.querySelector('[data-w3ds-ppa-identity]'), data.identity);

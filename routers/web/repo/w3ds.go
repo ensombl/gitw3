@@ -57,7 +57,6 @@ type w3dsPublicationView struct {
 	ReleaseURL    string        `json:"releaseUrl"`
 	ReleaseAction string        `json:"releaseAction"`
 	Identity      w3dsGuideStep `json:"identity"`
-	Marketplace   w3dsGuideStep `json:"marketplace"`
 	Application   w3dsGuideStep `json:"application"`
 	Domains       w3dsGuideStep `json:"domains"`
 	Release       w3dsGuideStep `json:"release"`
@@ -332,7 +331,6 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 	ctx.Data["PlatformPublication"] = publication
 	ctx.Data["PlatformEName"] = eName
 	ctx.Data["PlatformIdentityReady"] = eName != ""
-	ctx.Data["PlatformPublished"] = publication.Marketplace.Ready
 	ctx.Data["PPARequirementsReady"] = eName != "" && strings.TrimSpace(manifest.URL) != "" && domainsReady && releaseSynced
 	ctx.Data["CanApplyPPA"] = canEdit && publication.PPAStatus == "ready"
 	return catalog
@@ -392,13 +390,8 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 	switch status.Status {
 	case "published":
 		view.Tone = "positive"
-		if isDraft {
-			view.Title = ctx.Locale.TrString("platform.visibility.draft_synced")
-			view.Message = ctx.Locale.TrString("platform.visibility.draft_synced_help")
-		} else {
-			view.Title = ctx.Locale.TrString("platform.status.published")
-			view.Message = ctx.Locale.TrString("platform.status.published_help", eName)
-		}
+		view.Title = ctx.Locale.TrString("platform.status.published")
+		view.Message = ctx.Locale.TrString("platform.status.published_help", eName)
 	case "failed":
 		view.Tone = "warning"
 		view.Title = ctx.Locale.TrString("platform.status.failed")
@@ -430,21 +423,6 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 		view.Identity.Tone = "blue"
 		view.Identity.Label = ctx.Locale.TrString("platform.repo.automatic")
 		view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_pending")
-	}
-	view.Marketplace.Ready = status.Status == "published" && !isDraft
-	if view.Marketplace.Ready {
-		view.Marketplace.Tone = "green"
-		view.Marketplace.Label = ctx.Locale.TrString("platform.repo.ready")
-		view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_ready")
-	} else {
-		view.Marketplace.Tone = "blue"
-		if status.Status == "published" && isDraft {
-			view.Marketplace.Label = ctx.Locale.TrString("platform.visibility.draft")
-			view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_draft")
-		} else {
-			view.Marketplace.Label = ctx.Locale.TrString("platform.repo.waiting")
-			view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_pending")
-		}
 	}
 	view.Application.Ready = applicationURL != ""
 	if view.Application.Ready {
