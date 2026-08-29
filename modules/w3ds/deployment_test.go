@@ -25,4 +25,8 @@ func TestBuildDeploymentAttestation(t *testing.T) {
 	assert.Len(t, bundle.Documents, 2)
 	assert.Len(t, bundle.Documents[0].Hash, 64)
 	assert.NotEqual(t, bundle.Documents[0].Hash, bundle.Documents[1].Hash)
+	signingPayload, err := DeploymentSigningPayload(payload)
+	require.NoError(t, err)
+	assert.True(t, len(signingPayload) < 80)
+	assert.Contains(t, signingPayload, DeploymentPayloadPrefix)
 }

@@ -88,6 +88,20 @@ type PlatformManifestActionForm struct {
 	LastCommitID string `binding:"Required;MaxSize(64)"`
 }
 
+// CreateDeploymentForm contains the user-selected release and runtime identity.
+type CreateDeploymentForm struct {
+	ReleaseID         int64  `binding:"Required"`
+	DeploymentName    string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	Environment       string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	CustomEnvironment string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PublicKey         string `binding:"Required;MaxSize(8192)" preprocess:"TrimSpace"`
+}
+
+func (f *CreateDeploymentForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
+	ctx := context.GetValidateContext(req)
+	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
+}
+
 // Validate validates a platform manifest action.
 func (f *PlatformManifestActionForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
 	ctx := context.GetValidateContext(req)

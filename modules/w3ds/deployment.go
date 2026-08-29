@@ -5,6 +5,7 @@ package w3ds
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,7 @@ const (
 	BindingDocumentOntology   = "b1d0a8c3-4e5f-6789-0abc-def012345678"
 	DeploymentAttestationType = "deployment_attestation_bundle"
 	DeploymentAttestationV1   = 1
+	DeploymentPayloadPrefix   = "gitw3:deployment:v1:"
 )
 
 type DeploymentKeyData struct {
@@ -26,6 +28,14 @@ type DeploymentKeyData struct {
 	PlatformEName  string `json:"platformEname"`
 	PublicKey      string `json:"publicKey"`
 	Algorithm      string `json:"algorithm"`
+}
+
+func DeploymentSigningPayload(bundle string) (string, error) {
+	if strings.TrimSpace(bundle) == "" {
+		return "", errors.New("deployment bundle is required")
+	}
+	digest := sha256.Sum256([]byte(bundle))
+	return DeploymentPayloadPrefix + base64.RawURLEncoding.EncodeToString(digest[:]), nil
 }
 
 type SoftwareVersionData struct {

@@ -710,6 +710,7 @@ func registerRoutes(m *web.Route) {
 
 	m.Any("/user/events", routing.MarkLongPolling, events.Events)
 	m.Methods("POST, OPTIONS", "/w3ds/ppa/callback", ignoreCSRF, repo.W3DSPPACallback)
+	m.Methods("POST, OPTIONS", "/w3ds/deploy/callback", ignoreCSRF, repo.DeploymentCallback)
 
 	m.Group("/login/oauth", func() {
 		m.Group("", func() {
@@ -1691,6 +1692,12 @@ func registerRoutes(m *web.Route) {
 			m.Post("/ppa", context.RepoMustNotBeArchived(), reqSignIn, reqRepoAdmin, repo.W3DSCreatePPASigningSession)
 			m.Get("/ppa/{session}", reqSignIn, reqRepoAdmin, repo.W3DSPPASigningStatus)
 			m.Get("/status", repo.W3DSStatus)
+		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
+
+		m.Group("/deploy", func() {
+			m.Get("", reqSignIn, repo.Deploy)
+			m.Post("", context.RepoMustNotBeArchived(), reqSignIn, web.Bind(forms.CreateDeploymentForm{}), repo.CreateDeployment)
+			m.Get("/{deployment}/status", reqSignIn, repo.DeploymentStatus)
 		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
 
 		m.Group("/activity_author_data", func() {
