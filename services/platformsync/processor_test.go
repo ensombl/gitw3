@@ -200,6 +200,7 @@ func addSubmissionProof(t *testing.T, manifest *w3ds.PlatformManifest, repositor
 		KeyBindingCertificate: "registry-certificate",
 		VerifiedAt:            time.Now().UTC().Format(time.RFC3339),
 	}
+	manifest.SubmissionHistory = []w3ds.PPASubmissionProof{*manifest.SubmissionProof}
 }
 
 func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
@@ -362,4 +363,7 @@ func TestProcessorPublishesSubmissionProof(t *testing.T) {
 	assert.Equal(t, "0.1.0", statement["version"])
 	assert.Equal(t, "@alice.w3id", statement["signerEName"])
 	assert.Equal(t, "@alice.w3id", fake.published[1]["submittedBy"])
+	history, ok := fake.published[1]["submissionHistory"].([]any)
+	require.True(t, ok)
+	require.Len(t, history, 1)
 }

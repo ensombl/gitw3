@@ -50,6 +50,7 @@ func submitManifest(t *testing.T, manifest *PlatformManifest) {
 		KeyBindingCertificate: "registry-certificate",
 		VerifiedAt:            time.Now().UTC().Format(time.RFC3339),
 	}
+	manifest.SubmissionHistory = []PPASubmissionProof{*manifest.SubmissionProof}
 }
 
 func TestPlatformManifestValidate(t *testing.T) {
@@ -144,6 +145,11 @@ func TestPlatformManifestValidatesSubmissionProof(t *testing.T) {
 		proof.Payload = payload
 		invalid.SubmissionProof = &proof
 		assert.ErrorContains(t, invalid.Validate(false), "response requires a previous denial")
+	})
+	t.Run("duplicate history proof", func(t *testing.T) {
+		invalid := *manifest
+		invalid.SubmissionHistory = append(invalid.SubmissionHistory, invalid.SubmissionHistory[0])
+		assert.ErrorContains(t, invalid.Validate(false), "duplicate signed submissions")
 	})
 }
 

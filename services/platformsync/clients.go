@@ -413,6 +413,9 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 		payload["submissionProof"] = manifest.SubmissionProof
 		payload["submittedBy"] = manifest.SubmissionProof.Statement.SignerEName
 	}
+	if len(manifest.SubmissionHistory) > 0 {
+		payload["submissionHistory"] = manifest.SubmissionHistory
+	}
 	if manifest.Category != "" {
 		payload["category"] = manifest.Category
 	}

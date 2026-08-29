@@ -37,7 +37,10 @@ import (
 	files_service "forgejo.org/services/repository/files"
 )
 
-const tplRepoW3DS base.TplName = "repo/w3ds"
+const (
+	tplRepoW3DS             base.TplName = "repo/w3ds"
+	platformManifestMaxSize              = 512 * 1024
+)
 
 type w3dsGuideStep struct {
 	Ready   bool   `json:"ready"`
@@ -536,10 +539,7 @@ func completePPASubmission(ctx gocontext.Context, session *w3ds_model.PPASigning
 		return errors.New("platform release is already submitted")
 	}
 
-	updated := *manifest
-	updated.InSubmission = true
-	updated.SubmissionVersion = version
-	updated.SubmissionProof = &w3ds.PPASubmissionProof{
+	proof := &w3ds.PPASubmissionProof{
 		Statement:             *statement,
 		Payload:               session.ID,
 		Signature:             signature,
@@ -547,6 +547,17 @@ func completePPASubmission(ctx gocontext.Context, session *w3ds_model.PPASigning
 		KeyBindingCertificate: verification.KeyBindingCertificate,
 		VerifiedAt:            time.Now().UTC().Format(time.RFC3339),
 	}
+	history, err := loadPPASubmissionHistoryForRepository(ctx, repository, commitID)
+	if err != nil {
+		return err
+	}
+	history = appendUniquePPASubmissionProofs(history, *proof)
+
+	updated := *manifest
+	updated.InSubmission = true
+	updated.SubmissionVersion = version
+	updated.SubmissionProof = proof
+	updated.SubmissionHistory = history
 	return commitPlatformManifestForUser(ctx, repository, user, &updated, commitID, "chore: submit signed PPA application")
 }
 
@@ -560,7 +571,7 @@ func loadPlatformManifestForRepository(ctx gocontext.Context, repository *repo_m
 	if err != nil {
 		return nil, "", err
 	}
-	content, err := commit.GetFileContent(w3ds.PlatformManifestPath, 64*1024)
+	content, err := commit.GetFileContent(w3ds.PlatformManifestPath, platformManifestMaxSize)
 	if git.IsErrNotExist(err) {
 		return nil, commit.ID.String(), nil
 	}
@@ -716,7 +727,16 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 	}
 	domainsReady := len(manifest.Domains) > 0
 	publication := newW3DSPublicationView(ctx, status, eName, release, releaseSynced, manifest.URL, domainsReady, manifest.IsDraft, pending, decision)
-	publication.PPAHistory = ppaConversationHistory(ctx, status, version, manifest.SubmissionProof)
+	proofs := currentPPASubmissionProofs(manifest)
+	if ctx.Repo.GitRepo != nil {
+		gitProofs, historyErr := loadPPASubmissionHistory(ctx.Repo.GitRepo, ctx.Repo.CommitID)
+		if historyErr != nil {
+			log.Warn("Load PPA submission history for repository %d: %v", ctx.Repo.Repository.ID, historyErr)
+		} else {
+			proofs = appendUniquePPASubmissionProofs(gitProofs, proofs...)
+		}
+	}
+	publication.PPAHistory = ppaConversationHistory(ctx, status, version, proofs)
 	ctx.Data["PlatformManifest"] = manifest
 	ctx.Data["PlatformRelease"] = release
 	ctx.Data["PlatformPublication"] = publication
@@ -759,7 +779,16 @@ func W3DSStatus(ctx *context.Context) {
 		decision = nil
 	}
 	publication := newW3DSPublicationView(ctx, status, eName, release, releaseSynced, manifest.URL, len(manifest.Domains) > 0, manifest.IsDraft, pending, decision)
-	publication.PPAHistory = ppaConversationHistory(ctx, status, version, manifest.SubmissionProof)
+	proofs := currentPPASubmissionProofs(manifest)
+	if ctx.Repo.GitRepo != nil {
+		gitProofs, historyErr := loadPPASubmissionHistory(ctx.Repo.GitRepo, ctx.Repo.CommitID)
+		if historyErr != nil {
+			log.Warn("Load PPA submission history for repository %d: %v", ctx.Repo.Repository.ID, historyErr)
+		} else {
+			proofs = appendUniquePPASubmissionProofs(gitProofs, proofs...)
+		}
+	}
+	publication.PPAHistory = ppaConversationHistory(ctx, status, version, proofs)
 	ctx.JSON(http.StatusOK, publication)
 }
 
@@ -928,7 +957,76 @@ func currentPPADecision(status *w3ds.PublicationStatus, version string) *w3ds.Ac
 	return nil
 }
 
-func ppaConversationHistory(ctx *context.Context, status *w3ds.PublicationStatus, version string, proof *w3ds.PPASubmissionProof) []w3dsPPAHistoryEvent {
+func currentPPASubmissionProofs(manifest *w3ds.PlatformManifest) []w3ds.PPASubmissionProof {
+	if manifest == nil {
+		return nil
+	}
+	history := appendUniquePPASubmissionProofs(nil, manifest.SubmissionHistory...)
+	if manifest.SubmissionProof != nil {
+		history = appendUniquePPASubmissionProofs(history, *manifest.SubmissionProof)
+	}
+	return history
+}
+
+func appendUniquePPASubmissionProofs(history []w3ds.PPASubmissionProof, proofs ...w3ds.PPASubmissionProof) []w3ds.PPASubmissionProof {
+	seen := make(map[string]struct{}, len(history)+len(proofs))
+	for i := range history {
+		seen[history[i].Payload] = struct{}{}
+	}
+	for _, proof := range proofs {
+		if proof.Payload == "" {
+			continue
+		}
+		if _, exists := seen[proof.Payload]; exists {
+			continue
+		}
+		seen[proof.Payload] = struct{}{}
+		history = append(history, proof)
+	}
+	return history
+}
+
+func loadPPASubmissionHistory(gitRepository *git.Repository, revision string) ([]w3ds.PPASubmissionProof, error) {
+	commits, err := gitRepository.CommitsByFileAndRange(git.CommitsByFileAndRangeOptions{
+		Revision: revision,
+		File:     w3ds.PlatformManifestPath,
+		Page:     1,
+		PageSize: 100,
+	})
+	if err != nil {
+		return nil, err
+	}
+	history := make([]w3ds.PPASubmissionProof, 0)
+	for i := len(commits) - 1; i >= 0; i-- {
+		content, err := commits[i].GetFileContent(w3ds.PlatformManifestPath, platformManifestMaxSize)
+		if err != nil {
+			continue
+		}
+		var historical w3ds.PlatformManifest
+		if err := json.Unmarshal([]byte(content), &historical); err != nil {
+			continue
+		}
+		if err := historical.Validate(!setting.IsProd); err != nil {
+			continue
+		}
+		history = appendUniquePPASubmissionProofs(history, historical.SubmissionHistory...)
+		if historical.SubmissionProof != nil {
+			history = appendUniquePPASubmissionProofs(history, *historical.SubmissionProof)
+		}
+	}
+	return history, nil
+}
+
+func loadPPASubmissionHistoryForRepository(ctx gocontext.Context, repository *repo_model.Repository, revision string) ([]w3ds.PPASubmissionProof, error) {
+	gitRepository, err := gitrepo.OpenRepository(ctx, repository)
+	if err != nil {
+		return nil, err
+	}
+	defer gitRepository.Close()
+	return loadPPASubmissionHistory(gitRepository, revision)
+}
+
+func ppaConversationHistory(ctx *context.Context, status *w3ds.PublicationStatus, version string, proofs []w3ds.PPASubmissionProof) []w3dsPPAHistoryEvent {
 	decisions := make([]w3ds.AccreditationDecision, 0)
 	if status != nil {
 		for _, decision := range status.Decisions {
@@ -977,7 +1075,11 @@ func ppaConversationHistory(ctx *context.Context, status *w3ds.PublicationStatus
 		})
 	}
 
-	if proof != nil && proof.Statement.Version == version {
+	for i := range proofs {
+		proof := &proofs[i]
+		if proof.Statement.Version != version {
+			continue
+		}
 		response := strings.TrimSpace(proof.Statement.ResponseToDecision)
 		createdAt := proof.Statement.IssuedAt
 		if createdAt == "" {
@@ -1042,7 +1144,7 @@ func loadPlatformManifest(ctx *context.Context) (*w3ds.PlatformManifest, error) 
 	if ctx.Repo.Commit == nil {
 		return nil, nil
 	}
-	content, err := ctx.Repo.Commit.GetFileContent(w3ds.PlatformManifestPath, 64*1024)
+	content, err := ctx.Repo.Commit.GetFileContent(w3ds.PlatformManifestPath, platformManifestMaxSize)
 	if git.IsErrNotExist(err) {
 		return nil, nil
 	}

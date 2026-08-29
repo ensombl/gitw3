@@ -98,21 +98,22 @@ var (
 
 // PlatformManifest is the repository-owned source of truth for a W3DS platform.
 type PlatformManifest struct {
-	SchemaVersion     int                 `json:"schemaVersion"`
-	PlatformName      string              `json:"platformName"`
-	DisplayName       string              `json:"displayName"`
-	Description       string              `json:"description"`
-	Version           string              `json:"version"`
-	EName             *string             `json:"ename"`
-	URL               string              `json:"url"`
-	LogoURL           string              `json:"logoUrl"`
-	Domains           []string            `json:"domains,omitempty"`
-	Category          string              `json:"category,omitempty"`
-	PublicKey         string              `json:"publicKey"`
-	InSubmission      bool                `json:"inSubmission"`
-	SubmissionVersion string              `json:"submissionVersion,omitempty"`
-	SubmissionProof   *PPASubmissionProof `json:"submissionProof,omitempty"`
-	IsDraft           bool                `json:"isDraft"`
+	SchemaVersion     int                  `json:"schemaVersion"`
+	PlatformName      string               `json:"platformName"`
+	DisplayName       string               `json:"displayName"`
+	Description       string               `json:"description"`
+	Version           string               `json:"version"`
+	EName             *string              `json:"ename"`
+	URL               string               `json:"url"`
+	LogoURL           string               `json:"logoUrl"`
+	Domains           []string             `json:"domains,omitempty"`
+	Category          string               `json:"category,omitempty"`
+	PublicKey         string               `json:"publicKey"`
+	InSubmission      bool                 `json:"inSubmission"`
+	SubmissionVersion string               `json:"submissionVersion,omitempty"`
+	SubmissionProof   *PPASubmissionProof  `json:"submissionProof,omitempty"`
+	SubmissionHistory []PPASubmissionProof `json:"submissionHistory,omitempty"`
+	IsDraft           bool                 `json:"isDraft"`
 }
 
 // NewPlatformManifest creates a manifest whose eName will be filled by the publisher.
@@ -159,6 +160,9 @@ func (m *PlatformManifest) Validate(allowLocalHTTP bool) error {
 		return errors.New("submissionVersion must be a semantic version")
 	}
 	if err := m.validateSubmissionProof(); err != nil {
+		return err
+	}
+	if err := m.validateSubmissionHistory(); err != nil {
 		return err
 	}
 	if err := validateManifestDomains(m.Domains, m.Category); err != nil {
@@ -238,6 +242,34 @@ func (m *PlatformManifest) validateSubmissionProof() error {
 	}
 	if proof.Signature == "" || len(proof.Signature) > 8192 || proof.PublicKey == "" || len(proof.PublicKey) > 8192 || proof.KeyBindingCertificate == "" || len(proof.KeyBindingCertificate) > 32768 {
 		return errors.New("submissionProof is missing cryptographic evidence")
+	}
+	return nil
+}
+
+func (m *PlatformManifest) validateSubmissionHistory() error {
+	if len(m.SubmissionHistory) > 100 {
+		return errors.New("submissionHistory must not contain more than 100 signed submissions")
+	}
+	seen := make(map[string]struct{}, len(m.SubmissionHistory))
+	for i := range m.SubmissionHistory {
+		proof := &m.SubmissionHistory[i]
+		if _, exists := seen[proof.Payload]; exists {
+			return errors.New("submissionHistory must not contain duplicate signed submissions")
+		}
+		seen[proof.Payload] = struct{}{}
+		historical := *m
+		historical.Version = proof.Statement.Version
+		historical.Domains = append([]string(nil), proof.Statement.Domains...)
+		historical.InSubmission = true
+		historical.SubmissionVersion = proof.Statement.Version
+		historical.SubmissionProof = proof
+		historical.SubmissionHistory = nil
+		if err := historical.validateSubmissionProof(); err != nil {
+			return fmt.Errorf("submissionHistory[%d]: %w", i, err)
+		}
+		if err := validateManifestDomains(historical.Domains, ""); err != nil {
+			return fmt.Errorf("submissionHistory[%d]: %w", i, err)
+		}
 	}
 	return nil
 }
