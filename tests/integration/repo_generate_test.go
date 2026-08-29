@@ -5,6 +5,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -20,11 +21,22 @@ import (
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/test"
 	"forgejo.org/modules/translation"
+	"forgejo.org/modules/w3ds"
 	"forgejo.org/tests"
 	"forgejo.org/tests/forgery"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func assertPlatformCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.User) {
+	form := htmlDoc.doc.Find("form#platform-onboarding-form[action='/repo/create/new']")
+	assert.Equal(t, 1, form.Length(), "Expected the guided platform creation form")
+	htmlDoc.AssertDropdownHasSelectedOption(t, "uid", strconv.FormatInt(owner.ID, 10))
+	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_url", "platform_public_key"} {
+		assert.Equal(t, 1, form.Find(fmt.Sprintf("[name='%s']", name)).Length(), "missing %s", name)
+	}
+}
 
 func assertRepoCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.User, templateID string) {
 	_, exists := htmlDoc.doc.Find("form.ui.form[action^='/repo/create']").Attr("action")
@@ -132,15 +144,53 @@ func TestRepoCreateForm(t *testing.T) {
 	session := loginUser(t, userName)
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: userName})
 
-	req := NewRequest(t, "GET", "/repo/create")
+	req := NewRequest(t, "GET", "/repo/create/new")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	htmlDoc := NewHTMLParser(t, resp.Body)
-	assertRepoCreateForm(t, htmlDoc, user, "")
+	assertPlatformCreateForm(t, htmlDoc, user)
 
-	req = NewRequestWithValues(t, "POST", "/repo/create", map[string]string{})
+	req = NewRequestWithValues(t, "POST", "/repo/create/new", map[string]string{})
 	resp = session.MakeRequest(t, req, http.StatusOK)
 	htmlDoc = NewHTMLParser(t, resp.Body)
-	assertRepoCreateForm(t, htmlDoc, user, "")
+	assertPlatformCreateForm(t, htmlDoc, user)
+}
+
+func TestPlatformCreateChoice(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	session := loginUser(t, "user1")
+	resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create"), http.StatusOK)
+	htmlDoc := NewHTMLParser(t, resp.Body)
+	htmlDoc.AssertElement(t, "a[href='/repo/create/new']", true)
+	htmlDoc.AssertElement(t, "a[href='/repo/create/port']", true)
+}
+
+func TestPlatformCreateCommitsManifest(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	session := loginUser(t, "user1")
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user1"})
+	repoName := "guided-platform"
+	req := NewRequestWithValues(t, "POST", "/repo/create/new", map[string]string{
+		"uid":                   strconv.FormatInt(user.ID, 10),
+		"repo_name":             repoName,
+		"default_branch":        "master",
+		"object_format_name":    "sha1",
+		"platform_name":         "guided-platform",
+		"platform_display_name": "Guided Platform",
+		"platform_description":  "A platform created through the guided flow",
+		"platform_version":      "0.1.0",
+		"platform_url":          "https://guided.example.com",
+		"platform_category":     "Productivity",
+		"platform_public_key":   "z0123456789",
+	})
+	resp := session.MakeRequest(t, req, http.StatusSeeOther)
+	assert.Contains(t, test.RedirectURL(resp), "/"+user.Name+"/"+repoName+"?w3ds_onboarded=1")
+
+	raw := NewRequestf(t, "GET", "/%s/%s/raw/branch/master/%s", user.Name, repoName, w3ds.PlatformManifestPath)
+	rawResp := session.MakeRequest(t, raw, http.StatusOK)
+	var manifest w3ds.PlatformManifest
+	require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &manifest))
+	assert.Equal(t, "guided-platform", manifest.PlatformName)
+	assert.Nil(t, manifest.EName)
 }
 
 func TestRepoCreateFormRepoLimit(t *testing.T) {
@@ -160,9 +210,9 @@ func TestRepoCreateFormRepoLimit(t *testing.T) {
 		creationLimitTr := locale.TrN(maxCreationLimit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", maxCreationLimit)
 		defer test.MockVariableValue(&setting.Repository.MaxCreationLimit, maxCreationLimit)()
 
-		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create"), http.StatusOK)
+		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create/new"), http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
-		assertRepoCreateForm(t, htmlDoc, org, "")
+		assertPlatformCreateForm(t, htmlDoc, org)
 
 		alert := htmlDoc.doc.Find("div.ui.negative.message").Text()
 		assert.Contains(t, alert, creationLimitTr)
@@ -175,9 +225,9 @@ func TestRepoCreateFormRepoLimit(t *testing.T) {
 		maxCreationLimit := 0
 		defer test.MockVariableValue(&setting.Repository.MaxCreationLimit, maxCreationLimit)()
 
-		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create"), http.StatusOK)
+		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create/new"), http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
-		assertRepoCreateForm(t, htmlDoc, org, "")
+		assertPlatformCreateForm(t, htmlDoc, org)
 
 		htmlDoc.AssertElement(t, "div.ui.negative.message", false)
 	})
@@ -192,7 +242,7 @@ func TestRepoCreateFormRepoLimit(t *testing.T) {
 
 		session := loginUser(t, "user8")
 
-		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create"), http.StatusOK)
+		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create/new"), http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
 
 		alert := htmlDoc.doc.Find("div.ui.negative.message").Text()

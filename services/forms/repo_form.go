@@ -50,6 +50,16 @@ type CreateRepoForm struct {
 
 	ForkSingleBranch string
 	ObjectFormatName string
+
+	PlatformName        string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDisplayName string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDescription string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformVersion     string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformURL         string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformLogoURL     string `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformCategory    string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformPublicKey   string `binding:"MaxSize(8192)" preprocess:"TrimSpace"`
+	UseAITooling        bool
 }
 
 // Validate validates the fields

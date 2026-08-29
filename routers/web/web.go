@@ -1172,8 +1172,11 @@ func registerRoutes(m *web.Route) {
 
 	// ***** START: Repository *****
 	m.Group("/repo", func() {
-		m.Get("/create", repo.Create)
+		m.Get("/create", repo.CreateChoice)
 		m.Post("/create", web.Bind(forms.CreateRepoForm{}), repo.CreatePost)
+		m.Get("/create/new", repo.CreatePlatform)
+		m.Post("/create/new", web.Bind(forms.CreateRepoForm{}), repo.CreatePlatformPost)
+		m.Get("/create/port", repo.PortPlatform)
 		m.Get("/migrate", repo.Migrate)
 		m.Post("/migrate", web.Bind(forms.MigrateRepoForm{}), repo.MigratePost)
 		if !setting.Repository.DisableForks {

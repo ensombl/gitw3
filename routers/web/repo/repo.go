@@ -31,6 +31,7 @@ import (
 	"forgejo.org/modules/storage"
 	api "forgejo.org/modules/structs"
 	"forgejo.org/modules/util"
+	"forgejo.org/modules/w3ds"
 	"forgejo.org/modules/web"
 	"forgejo.org/services/context"
 	"forgejo.org/services/convert"
@@ -41,8 +42,11 @@ import (
 )
 
 const (
-	tplCreate       base.TplName = "repo/create"
-	tplAlertDetails base.TplName = "base/alert_details"
+	tplCreate         base.TplName = "repo/create"
+	tplCreateChoice   base.TplName = "repo/create_choice"
+	tplCreatePlatform base.TplName = "repo/create_platform"
+	tplPortPlatform   base.TplName = "repo/port_platform"
+	tplAlertDetails   base.TplName = "base/alert_details"
 )
 
 // MustBeNotEmpty render when a repo is a empty git dir
@@ -186,6 +190,120 @@ func Create(ctx *context.Context) {
 	ctx.Data["DefaultObjectFormat"] = git.Sha1ObjectFormat
 
 	ctx.HTML(http.StatusOK, tplCreate)
+}
+
+// CreateChoice renders the W3DS platform entry point shown by the global New action.
+func CreateChoice(ctx *context.Context) {
+	// Template generation remains the upstream Forgejo flow and is not W3DS platform onboarding.
+	if ctx.FormInt64("template_id") > 0 {
+		Create(ctx)
+		return
+	}
+	ctx.Data["Title"] = ctx.Tr("platform.new.title")
+	query := ctx.Req.URL.RawQuery
+	if query != "" {
+		query = "?" + query
+	}
+	ctx.Data["NewPlatformLink"] = setting.AppSubURL + "/repo/create/new" + query
+	ctx.Data["PortPlatformLink"] = setting.AppSubURL + "/repo/create/port" + query
+	ctx.HTML(http.StatusOK, tplCreateChoice)
+}
+
+// PortPlatform explains the reserved meaning of porting until replacement is implemented.
+func PortPlatform(ctx *context.Context) {
+	ctx.Data["Title"] = ctx.Tr("platform.port.title")
+	ctx.HTML(http.StatusOK, tplPortPlatform)
+}
+
+func preparePlatformCreatePage(ctx *context.Context, uid int64) *user_model.User {
+	ctx.Data["Title"] = ctx.Tr("platform.create.title")
+	ctx.Data["Gitignores"] = repo_module.Gitignores
+	ctx.Data["Licenses"] = repo_module.Licenses
+	ctx.Data["private"] = getRepoPrivate(ctx)
+	ctx.Data["IsForcedPrivate"] = setting.Repository.ForcePrivate
+	ctx.Data["default_branch"] = setting.Repository.DefaultBranch
+	ctx.Data["platform_version"] = "0.1.0"
+	ctx.Data["platform_category"] = "Other"
+	ctx.Data["PlatformCategories"] = []string{"Identity", "Social", "Governance", "Wellness", "Finance", "Storage", "Productivity", "Other"}
+	ctx.Data["CanCreateRepo"] = ctx.Doer.CanCreateRepo()
+	ctx.Data["MaxCreationLimit"] = ctx.Doer.MaxCreationLimit()
+	ctx.Data["SupportedObjectFormats"] = git.SupportedObjectFormats
+	ctx.Data["DefaultObjectFormat"] = git.Sha1ObjectFormat
+
+	ctxUser := checkContextUser(ctx, uid)
+	if !ctx.Written() {
+		ctx.Data["ContextUser"] = ctxUser
+	}
+	return ctxUser
+}
+
+// CreatePlatform renders the guided new-platform wizard.
+func CreatePlatform(ctx *context.Context) {
+	preparePlatformCreatePage(ctx, ctx.FormInt64("org"))
+	if ctx.Written() {
+		return
+	}
+	ctx.HTML(http.StatusOK, tplCreatePlatform)
+}
+
+// CreatePlatformPost creates an initialized repository with a W3DS platform manifest.
+func CreatePlatformPost(ctx *context.Context) {
+	form := web.GetForm(ctx).(*forms.CreateRepoForm)
+	ctxUser := preparePlatformCreatePage(ctx, form.UID)
+	if ctx.Written() {
+		return
+	}
+	if !ctx.CheckQuota(quota_model.LimitSubjectSizeReposAll, ctxUser.ID, ctxUser.Name) {
+		return
+	}
+	if ctx.HasError() {
+		ctx.HTML(http.StatusOK, tplCreatePlatform)
+		return
+	}
+
+	manifest := w3ds.NewPlatformManifest(
+		form.PlatformName,
+		form.PlatformDisplayName,
+		form.PlatformDescription,
+		form.PlatformVersion,
+		form.PlatformURL,
+		form.PlatformLogoURL,
+		form.PlatformCategory,
+		form.PlatformPublicKey,
+	)
+	if err := manifest.Validate(!setting.IsProd); err != nil {
+		ctx.RenderWithErr(ctx.Tr("platform.create.invalid_manifest", err), tplCreatePlatform, form)
+		return
+	}
+
+	readme := form.Readme
+	if readme == "" {
+		readme = "Default"
+	}
+	repo, err := repo_service.CreateRepository(ctx, ctx.Doer, ctxUser, repo_service.CreateRepoOptions{
+		Name:             form.RepoName,
+		Description:      form.PlatformDescription,
+		Gitignores:       form.Gitignores,
+		License:          form.License,
+		Readme:           readme,
+		IsPrivate:        form.Private || setting.Repository.ForcePrivate,
+		DefaultBranch:    form.DefaultBranch,
+		AutoInit:         true,
+		TrustModel:       repo_model.DefaultTrustModel,
+		ObjectFormatName: form.ObjectFormatName,
+		PlatformManifest: manifest,
+	})
+	if err != nil {
+		handleCreateError(ctx, ctxUser, err, "CreatePlatformPost", tplCreatePlatform, form)
+		return
+	}
+
+	log.Trace("W3DS platform repository created [%d]: %s/%s", repo.ID, ctxUser.Name, repo.Name)
+	redirect := repo.Link() + "?w3ds_onboarded=1"
+	if form.UseAITooling {
+		redirect += "&ai=1"
+	}
+	ctx.Redirect(redirect)
 }
 
 func handleCreateError(ctx *context.Context, owner *user_model.User, err error, name string, tpl base.TplName, form any) {

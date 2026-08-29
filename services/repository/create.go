@@ -24,6 +24,7 @@ import (
 	api "forgejo.org/modules/structs"
 	"forgejo.org/modules/templates/vars"
 	"forgejo.org/modules/util"
+	"forgejo.org/modules/w3ds"
 )
 
 // CreateRepoOptions contains the create repository options
@@ -46,6 +47,7 @@ type CreateRepoOptions struct {
 	MirrorInterval   string
 	ObjectFormatName string
 	Website          string
+	PlatformManifest *w3ds.PlatformManifest
 }
 
 func prepareRepoCommit(ctx context.Context, repo *repo_model.Repository, tmpDir, repoPath string, opts CreateRepoOptions) error {
@@ -92,6 +94,23 @@ func prepareRepoCommit(ctx context.Context, repo *repo_model.Repository, tmpDir,
 	if err = os.WriteFile(filepath.Join(tmpDir, "README.md"),
 		[]byte(res), 0o644); err != nil {
 		return fmt.Errorf("write README.md: %w", err)
+	}
+
+	if opts.PlatformManifest != nil {
+		if err := opts.PlatformManifest.Validate(!setting.IsProd); err != nil {
+			return fmt.Errorf("validate platform manifest: %w", err)
+		}
+		data, err := opts.PlatformManifest.Marshal()
+		if err != nil {
+			return fmt.Errorf("marshal platform manifest: %w", err)
+		}
+		manifestPath := filepath.Join(tmpDir, filepath.FromSlash(w3ds.PlatformManifestPath))
+		if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+			return fmt.Errorf("create platform manifest directory: %w", err)
+		}
+		if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
+			return fmt.Errorf("write platform manifest: %w", err)
+		}
 	}
 
 	// .gitignore

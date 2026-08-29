@@ -91,6 +91,7 @@ import {initColorPickers} from './features/colorpicker.js';
 import {initRepoMilestoneEditor} from './features/repo-milestone.js';
 import {initModalClose} from './modules/modal.ts';
 import {initAuthorizedIntegrationClaimRuleEditor} from './features/authorized-integration.js';
+import {initPlatformOnboarding} from './features/platform-onboarding.ts';
 
 // Init Gitea's Fomantic settings
 initGiteaFomantic();
@@ -197,6 +198,7 @@ onDomReady(() => {
   initColorPickers();
   initModalClose();
   initAuthorizedIntegrationClaimRuleEditor();
+  initPlatformOnboarding();
 
   // Deactivate CSS-only noJS usability supplements
   document.body.classList.remove('no-js');

@@ -1,0 +1,19 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository new repo">
+	<div class="ui middle very relaxed page one column grid">
+		<div class="column">
+			<div class="ui attached segment">
+				<h2 class="ui header">{{ctx.Locale.Tr "platform.port.title"}}</h2>
+				<div class="ui info message">
+					<div class="header">{{ctx.Locale.Tr "platform.port.coming_soon"}}</div>
+					<p>{{ctx.Locale.Tr "platform.port.explanation"}}</p>
+				</div>
+				<p>{{ctx.Locale.Tr "platform.port.not_code_import"}}</p>
+				<a class="ui primary button" href="{{AppSubUrl}}/repo/create/new">{{ctx.Locale.Tr "platform.new.make"}}</a>
+				<a class="ui button" href="{{AppSubUrl}}/repo/migrate">{{ctx.Locale.Tr "platform.port.import_code"}}</a>
+			</div>
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}
+
