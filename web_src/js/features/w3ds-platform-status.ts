@@ -2,6 +2,7 @@ import {GET} from '../modules/fetch.js';
 
 type W3DSGuideStep = {
   ready: boolean;
+  tone: 'green' | 'blue' | 'grey';
   label: string;
   message: string;
 };
@@ -15,17 +16,29 @@ export type W3DSStatus = {
   lastError?: string;
   identity: W3DSGuideStep;
   marketplace: W3DSGuideStep;
+  application: W3DSGuideStep;
 };
 
 function renderGuideStep(element: HTMLElement | null, step: W3DSGuideStep) {
   if (!element) return;
   element.classList.toggle('complete', step.ready);
   const label = element.querySelector<HTMLElement>('[data-w3ds-step-label]');
-  label?.classList.remove('green', 'blue');
-  label?.classList.add(step.ready ? 'green' : 'blue');
+  label?.classList.remove('green', 'blue', 'grey');
+  label?.classList.add(step.tone);
   if (label) label.textContent = step.label;
   const message = element.querySelector<HTMLElement>('[data-w3ds-step-message]');
   if (message) message.textContent = step.message;
+}
+
+function renderRequirement(element: HTMLElement | null, step: W3DSGuideStep) {
+  if (!element) return;
+  const icons = element.querySelectorAll<SVGElement>('svg');
+  icons[0]?.classList.toggle('tw-hidden', !step.ready);
+  icons[1]?.classList.toggle('tw-hidden', step.ready);
+  const label = element.querySelector<HTMLElement>('[data-w3ds-requirement-label]');
+  label?.classList.remove('green', 'grey');
+  label?.classList.add(step.ready ? 'green' : 'grey');
+  if (label) label.textContent = step.label;
 }
 
 export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
@@ -48,6 +61,9 @@ export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
 
   renderGuideStep(root.querySelector('[data-w3ds-identity-step]'), data.identity);
   renderGuideStep(root.querySelector('[data-w3ds-marketplace-step]'), data.marketplace);
+  renderGuideStep(root.querySelector('[data-w3ds-application-step]'), data.application);
+  renderRequirement(root.querySelector('[data-w3ds-ppa-identity]'), data.identity);
+  renderRequirement(root.querySelector('[data-w3ds-ppa-application]'), data.application);
 }
 
 export function initW3DSPlatformStatus() {

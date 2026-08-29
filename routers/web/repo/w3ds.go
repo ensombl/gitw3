@@ -21,6 +21,7 @@ const tplRepoW3DS base.TplName = "repo/w3ds"
 
 type w3dsGuideStep struct {
 	Ready   bool   `json:"ready"`
+	Tone    string `json:"tone"`
 	Label   string `json:"label"`
 	Message string `json:"message"`
 }
@@ -34,6 +35,7 @@ type w3dsPublicationView struct {
 	LastError   string        `json:"lastError,omitempty"`
 	Identity    w3dsGuideStep `json:"identity"`
 	Marketplace w3dsGuideStep `json:"marketplace"`
+	Application w3dsGuideStep `json:"application"`
 }
 
 // W3DS renders the repository's W3DS platform workspace.
@@ -82,10 +84,10 @@ func W3DSStatus(ctx *context.Context) {
 	if eName == "" && manifest.EName != nil {
 		eName = strings.TrimSpace(*manifest.EName)
 	}
-	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName))
+	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName, manifest.URL))
 }
 
-func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName string) w3dsPublicationView {
+func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName, applicationURL string) w3dsPublicationView {
 	view := w3dsPublicationView{
 		Status: status.Status,
 		Tone:   "info",
@@ -120,19 +122,33 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 
 	view.Identity.Ready = eName != ""
 	if view.Identity.Ready {
+		view.Identity.Tone = "green"
 		view.Identity.Label = ctx.Locale.TrString("platform.repo.ready")
 		view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_ready", eName)
 	} else {
+		view.Identity.Tone = "blue"
 		view.Identity.Label = ctx.Locale.TrString("platform.repo.automatic")
 		view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_pending")
 	}
 	view.Marketplace.Ready = status.Status == "published"
 	if view.Marketplace.Ready {
+		view.Marketplace.Tone = "green"
 		view.Marketplace.Label = ctx.Locale.TrString("platform.repo.ready")
 		view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_ready")
 	} else {
+		view.Marketplace.Tone = "blue"
 		view.Marketplace.Label = ctx.Locale.TrString("platform.repo.waiting")
 		view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_pending")
+	}
+	view.Application.Ready = applicationURL != ""
+	if view.Application.Ready {
+		view.Application.Tone = "green"
+		view.Application.Label = ctx.Locale.TrString("platform.repo.ready")
+		view.Application.Message = ctx.Locale.TrString("platform.repo.step_application_ready", applicationURL)
+	} else {
+		view.Application.Tone = "grey"
+		view.Application.Label = ctx.Locale.TrString("platform.repo.waiting")
+		view.Application.Message = ctx.Locale.TrString("platform.repo.step_application_missing")
 	}
 	return view
 }
