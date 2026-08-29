@@ -265,7 +265,7 @@ function initPPASigning(root: HTMLElement) {
       const response = await POST(form.action, {data: new FormData(form), headers: {accept: 'application/json'}});
       if (!response.ok) throw new Error(await responseMessage(response, signingStatus.dataset.failed ?? ''));
       const offer = await response.json() as PPASigningOffer;
-      await toCanvas(canvas, offer.uri, {width: 260, margin: 1, errorCorrectionLevel: 'M'});
+      await toCanvas(canvas, offer.uri, {scale: 5, margin: 4, errorCorrectionLevel: 'M'});
       openWallet.href = offer.uri;
       setSigningStatus(signingStatus.dataset.waiting ?? '');
       pollSigningStatus(offer.statusUrl);

@@ -340,7 +340,7 @@ func W3DSCreatePPASigningSession(ctx *context.Context) {
 	query := url.Values{}
 	query.Set("session", payload)
 	displayJSON, err := json.Marshal(map[string]string{
-		"message":   "Submit " + manifest.DisplayName + " " + release.Version + " for PPA review (" + strings.Join(manifest.Domains, ", ") + ")",
+		"message":   "Submit " + manifest.DisplayName + " " + release.Version + " for PPA review",
 		"sessionId": payload,
 	})
 	if err != nil {
