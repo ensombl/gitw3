@@ -15,9 +15,20 @@ import (
 const (
 	PlatformManifestPath          = ".w3ds/platform.json"
 	PlatformManifestVersion       = 1
+	DefaultPlatformVersion        = "0.1.0"
 	UserProfileOntology           = "550e8400-e29b-41d4-a716-446655440000"
 	PlatformAccreditationOntology = "e1749947-5a10-4973-b9fa-230d8714c36a"
 )
+
+// NormalizeReleaseVersion converts a conventional release tag into the
+// semantic version stored in the platform profile.
+func NormalizeReleaseVersion(tag string) (string, bool) {
+	version := strings.TrimSpace(tag)
+	if len(version) > 1 && (version[0] == 'v' || version[0] == 'V') {
+		version = version[1:]
+	}
+	return version, semverPattern.MatchString(version)
+}
 
 var (
 	platformNamePattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)

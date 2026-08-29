@@ -77,9 +77,61 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		}
 	}
 
+	manifestChanged := false
+	manifestMessage := "chore: sync platform metadata"
 	if manifest.EName == nil {
 		manifest.EName = &job.EName
-		if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, manifest); err != nil {
+		manifestChanged = true
+	}
+	if !job.Archive {
+		release, err := p.forgejo.latestRelease(ctx, job.FullName)
+		switch {
+		case errors.Is(err, ErrReleaseNotFound):
+			job.ReleaseTag = ""
+			job.ReleaseVersion = ""
+			job.Decision = nil
+			job.DecisionCheckedAt = time.Time{}
+			if manifest.InSubmission {
+				manifest.InSubmission = false
+				manifest.SubmissionVersion = ""
+				manifestChanged = true
+			}
+		case err != nil:
+			return err
+		default:
+			releaseChanged := job.ReleaseVersion != release.Version
+			job.ReleaseTag = release.TagName
+			job.ReleaseVersion = release.Version
+			submittedVersion := manifest.SubmissionVersion
+			if manifest.InSubmission && submittedVersion == "" {
+				submittedVersion = manifest.Version
+			}
+			if manifest.InSubmission && submittedVersion != release.Version {
+				decision, err := p.w3ds.accreditation(ctx, job.EName, submittedVersion)
+				if err != nil {
+					return fmt.Errorf("check pending PPA decision for version %s: %w", submittedVersion, err)
+				}
+				if decision == nil {
+					manifest.SubmissionVersion = release.Version
+				} else {
+					manifest.InSubmission = false
+					manifest.SubmissionVersion = ""
+				}
+				manifestChanged = true
+			}
+			if manifest.Version != release.Version {
+				manifest.Version = release.Version
+				manifestChanged = true
+			}
+			if releaseChanged {
+				job.Decision = nil
+				job.DecisionCheckedAt = time.Time{}
+			}
+			manifestMessage = "chore: sync latest platform release"
+		}
+	}
+	if manifestChanged && !job.Archive {
+		if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, manifestMessage, manifest); err != nil {
 			return err
 		}
 	}
@@ -123,7 +175,10 @@ func (p *Processor) RefreshAccreditation(ctx context.Context, job *Job) error {
 	if job == nil || job.EName == "" || job.Manifest == nil || job.Status != StatusPublished {
 		return nil
 	}
-	decision, err := p.w3ds.accreditation(ctx, job.EName, job.Manifest.Version)
+	if job.ReleaseVersion == "" || job.Manifest.Version != job.ReleaseVersion {
+		return nil
+	}
+	decision, err := p.w3ds.accreditation(ctx, job.EName, job.ReleaseVersion)
 	if err != nil {
 		return err
 	}

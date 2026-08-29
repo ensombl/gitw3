@@ -25,6 +25,7 @@ type fakePlatformInfrastructure struct {
 	mu             sync.Mutex
 	manifest       *w3ds.PlatformManifest
 	manifestExists bool
+	release        *platformRelease
 	provisionCalls int
 	published      []map[string]any
 	accreditations []w3ds.AccreditationDecision
@@ -39,6 +40,7 @@ func newFakePlatformInfrastructure(t *testing.T) *fakePlatformInfrastructure {
 			"https://guided.example.com", "", "Productivity", "z0123456789",
 		),
 		manifestExists: true,
+		release:        &platformRelease{TagName: "v0.1.0", Version: "0.1.0"},
 	}
 	fake.server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		fake.handle(t, response, request)
@@ -90,6 +92,14 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		json.NewEncoder(response).Encode(map[string]any{"login": "bob", "login_name": "@bob.w3id"})
 	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/platform-sync":
 		json.NewEncoder(response).Encode(map[string]any{"login": "platform-sync", "login_name": ""})
+	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/repos/alice/platform/releases/latest":
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.release == nil {
+			http.NotFound(response, request)
+			return
+		}
+		json.NewEncoder(response).Encode(map[string]any{"tag_name": f.release.TagName})
 	case request.Method == http.MethodGet && request.URL.Path == "/entropy":
 		json.NewEncoder(response).Encode(map[string]string{"token": "entropy"})
 	case request.Method == http.MethodPost && request.URL.Path == "/provision":
@@ -175,6 +185,8 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, StatusPublished, job.Status)
 	assert.Equal(t, "@guided.w3id", job.EName)
+	assert.Equal(t, "v0.1.0", job.ReleaseTag)
+	assert.Equal(t, "0.1.0", job.ReleaseVersion)
 	assert.NotEmpty(t, job.EnvelopeID)
 	require.NotNil(t, fake.manifest.EName)
 	assert.Equal(t, "@guided.w3id", *fake.manifest.EName)
@@ -215,7 +227,9 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	fake.mu.Lock()
 	fake.manifest.Description = "Updated description"
 	fake.manifest.InSubmission = true
+	fake.manifest.SubmissionVersion = "0.1.0"
 	fake.manifest.IsDraft = false
+	fake.release = &platformRelease{TagName: "v0.2.0", Version: "0.2.0"}
 	fake.mu.Unlock()
 	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-2", false))
 	job, err = store.Get(42)
@@ -226,6 +240,8 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	assert.Equal(t, "Updated description", fake.published[1]["description"])
 	assert.Equal(t, true, fake.published[1]["isActive"])
 	assert.Equal(t, true, fake.published[1]["inSubmission"])
+	assert.Equal(t, "0.2.0", fake.published[1]["version"])
+	assert.Equal(t, "0.2.0", fake.published[1]["submissionVersion"])
 	assert.Equal(t, false, fake.published[1]["isDraft"])
 
 	fake.mu.Lock()
@@ -255,4 +271,33 @@ func TestProcessorIgnoresRepositoriesWithoutManifest(t *testing.T) {
 	job, err = store.Get(7)
 	require.NoError(t, err)
 	assert.Nil(t, job)
+}
+
+func TestProcessorDoesNotCarryDecidedSubmissionToNewRelease(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, &http.Client{Timeout: time.Second})
+	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-1", false))
+	job, err := store.Get(42)
+	require.NoError(t, err)
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+
+	fake.mu.Lock()
+	fake.manifest.InSubmission = true
+	fake.manifest.SubmissionVersion = "0.1.0"
+	fake.release = &platformRelease{TagName: "v0.2.0", Version: "0.2.0"}
+	fake.accreditations = []w3ds.AccreditationDecision{
+		{PlatformEName: "@guided.w3id", PlatformVersion: "0.1.0", Decision: "granted", Level: "L2", CreatedAt: "2026-08-29T00:00:00Z"},
+	}
+	fake.mu.Unlock()
+	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-2", false))
+	job, err = store.Get(42)
+	require.NoError(t, err)
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	assert.Equal(t, "0.2.0", fake.manifest.Version)
+	assert.False(t, fake.manifest.InSubmission)
+	assert.Empty(t, fake.manifest.SubmissionVersion)
 }

@@ -40,6 +40,8 @@ type Job struct {
 	EName             string                      `json:"ename,omitempty"`
 	EnvelopeID        string                      `json:"envelopeId,omitempty"`
 	PlatformName      string                      `json:"platformName,omitempty"`
+	ReleaseTag        string                      `json:"releaseTag,omitempty"`
+	ReleaseVersion    string                      `json:"releaseVersion,omitempty"`
 	AuthorENames      []string                    `json:"authorEnames,omitempty"`
 	Manifest          *w3ds.PlatformManifest      `json:"manifest,omitempty"`
 	Decision          *w3ds.AccreditationDecision `json:"decision,omitempty"`

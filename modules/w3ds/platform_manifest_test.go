@@ -88,3 +88,20 @@ func TestPlatformManifestLifecycleDefaultsAreBackwardsCompatible(t *testing.T) {
 	assert.False(t, legacy.IsDraft)
 	require.NoError(t, legacy.Validate(false))
 }
+
+func TestNormalizeReleaseVersion(t *testing.T) {
+	for _, test := range []struct {
+		tag     string
+		version string
+		valid   bool
+	}{
+		{"v1.2.3", "1.2.3", true},
+		{"1.2.3-beta.1", "1.2.3-beta.1", true},
+		{"V2.0.0", "2.0.0", true},
+		{"latest", "latest", false},
+	} {
+		version, valid := NormalizeReleaseVersion(test.tag)
+		assert.Equal(t, test.version, version)
+		assert.Equal(t, test.valid, valid)
+	}
+}

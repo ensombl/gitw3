@@ -53,6 +53,23 @@ func TestServerSchedulesDefaultBranchWebhooks(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, response.Code)
 }
 
+func TestServerSchedulesReleaseWebhooks(t *testing.T) {
+	store := openTestStore(t)
+	config := testConfig("https://gitw3.example.com", "")
+	server := NewServer(config, store)
+	payload := map[string]any{
+		"action":     "published",
+		"repository": map[string]any{"id": 42, "full_name": "alice/platform", "default_branch": "main"},
+	}
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, signedWebhookRequest(t, config.WebhookSecret, "release", payload))
+	assert.Equal(t, http.StatusAccepted, response.Code)
+	job, err := store.Get(42)
+	require.NoError(t, err)
+	require.NotNil(t, job)
+	assert.Empty(t, job.TargetSHA)
+}
+
 func TestServerRejectsInvalidSignature(t *testing.T) {
 	store := openTestStore(t)
 	server := NewServer(testConfig("https://gitw3.example.com", ""), store)

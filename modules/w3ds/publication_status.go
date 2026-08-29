@@ -28,6 +28,8 @@ type AccreditationDecision struct {
 type PublicationStatus struct {
 	Status            string                 `json:"status"`
 	EName             string                 `json:"ename"`
+	ReleaseTag        string                 `json:"releaseTag"`
+	ReleaseVersion    string                 `json:"releaseVersion"`
 	LastError         string                 `json:"lastError"`
 	Attempts          int                    `json:"attempts"`
 	Decision          *AccreditationDecision `json:"decision,omitempty"`

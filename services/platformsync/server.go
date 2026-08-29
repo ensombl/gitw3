@@ -88,6 +88,14 @@ func (s *Server) handleWebhook(response http.ResponseWriter, request *http.Reque
 			response.WriteHeader(http.StatusNoContent)
 			return
 		}
+	case "release":
+		switch payload.Action {
+		case "published", "updated", "deleted":
+			payload.After = ""
+		default:
+			response.WriteHeader(http.StatusNoContent)
+			return
+		}
 	default:
 		response.WriteHeader(http.StatusNoContent)
 		return
@@ -123,6 +131,8 @@ func (s *Server) handleStatus(response http.ResponseWriter, request *http.Reques
 		"repositoryId":      job.RepositoryID,
 		"status":            job.Status,
 		"ename":             job.EName,
+		"releaseTag":        job.ReleaseTag,
+		"releaseVersion":    job.ReleaseVersion,
 		"lastError":         job.LastError,
 		"attempts":          job.Attempts,
 		"decision":          job.Decision,

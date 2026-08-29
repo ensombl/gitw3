@@ -25,6 +25,12 @@ import (
 )
 
 var ErrManifestNotFound = errors.New("platform manifest not found")
+var ErrReleaseNotFound = errors.New("published release not found")
+
+type platformRelease struct {
+	TagName string
+	Version string
+}
 
 type forgejoClient struct {
 	baseURL string
@@ -79,7 +85,40 @@ func (c *forgejoClient) manifest(ctx context.Context, fullName, ref string) (*w3
 	return &manifest, content.SHA, nil
 }
 
-func (c *forgejoClient) updateManifest(ctx context.Context, fullName, branch, sha string, manifest *w3ds.PlatformManifest) error {
+func (c *forgejoClient) latestRelease(ctx context.Context, fullName string) (*platformRelease, error) {
+	owner, repo, ok := strings.Cut(fullName, "/")
+	if !ok || owner == "" || repo == "" {
+		return nil, errors.New("invalid repository full name")
+	}
+	endpoint := fmt.Sprintf("%s/api/v1/repos/%s/%s/releases/latest", c.baseURL, url.PathEscape(owner), url.PathEscape(repo))
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "token "+c.token)
+	response, err := c.http.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return nil, ErrReleaseNotFound
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, responseError("fetch latest platform release", response)
+	}
+	var release structs.Release
+	if err := json.NewDecoder(response.Body).Decode(&release); err != nil {
+		return nil, fmt.Errorf("decode latest platform release: %w", err)
+	}
+	version, valid := w3ds.NormalizeReleaseVersion(release.TagName)
+	if !valid {
+		return nil, fmt.Errorf("latest release tag %q is not a semantic version such as v1.2.3", release.TagName)
+	}
+	return &platformRelease{TagName: release.TagName, Version: version}, nil
+}
+
+func (c *forgejoClient) updateManifest(ctx context.Context, fullName, branch, sha, message string, manifest *w3ds.PlatformManifest) error {
 	owner, repo, ok := strings.Cut(fullName, "/")
 	if !ok || owner == "" || repo == "" {
 		return errors.New("invalid repository full name")
@@ -91,7 +130,7 @@ func (c *forgejoClient) updateManifest(ctx context.Context, fullName, branch, sh
 	payload := structs.UpdateFileOptions{
 		DeleteFileOptions: structs.DeleteFileOptions{
 			FileOptions: structs.FileOptions{
-				Message:    "chore: record platform ename",
+				Message:    message,
 				BranchName: branch,
 			},
 			SHA: sha,
