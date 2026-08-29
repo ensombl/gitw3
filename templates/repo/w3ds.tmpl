@@ -18,6 +18,7 @@
 			{{$publication := .PlatformPublication}}
 			{{$manifest := .PlatformManifest}}
 			{{$edit := .PlatformEditForm}}
+			{{$lastCommitID := .PlatformLastCommitID}}
 			<div class="w3ds-page-heading">
 				<div>
 					<h1>{{ctx.Locale.Tr "platform.repo.heading"}}</h1>
@@ -33,20 +34,8 @@
 			<section class="w3ds-section" aria-labelledby="w3ds-live-heading">
 				<h2 id="w3ds-live-heading">{{ctx.Locale.Tr "platform.repo.live_status"}}</h2>
 				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.repo.live_help"}}</p>
-				<div id="w3ds-publication-status" data-status="{{$publication.Status}}" class="ui {{if eq $publication.Status "published"}}positive{{else if or (eq $publication.Status "failed") (eq $publication.Status "archived")}}warning{{else}}info{{end}} message">
-					{{if eq $publication.Status "published"}}
-						<div class="header" data-w3ds-status-title>{{ctx.Locale.Tr "platform.status.published"}}</div><p data-w3ds-status-message>{{ctx.Locale.Tr "platform.status.published_help" .PlatformEName}}</p>
-					{{else if eq $publication.Status "failed"}}
-						<div class="header" data-w3ds-status-title>{{ctx.Locale.Tr "platform.status.failed"}}</div><p data-w3ds-status-message>{{ctx.Locale.Tr "platform.status.failed_help"}}</p>
-					{{else if eq $publication.Status "archived"}}
-						<div class="header" data-w3ds-status-title>{{ctx.Locale.Tr "platform.status.archived"}}</div><p data-w3ds-status-message></p>
-					{{else if eq $publication.Status "publishing"}}
-						<div class="header" data-w3ds-status-title>{{ctx.Locale.Tr "platform.status.publishing"}}</div><p data-w3ds-status-message>{{ctx.Locale.Tr "platform.status.pending_help"}}</p>
-					{{else if eq $publication.Status "unavailable"}}
-						<div class="header" data-w3ds-status-title>{{ctx.Locale.Tr "platform.status.unavailable"}}</div><p data-w3ds-status-message>{{ctx.Locale.Tr "platform.status.unavailable_help"}}</p>
-					{{else}}
-						<div class="header" data-w3ds-status-title>{{ctx.Locale.Tr "platform.status.identity_pending"}}</div><p data-w3ds-status-message>{{ctx.Locale.Tr "platform.status.pending_help"}}</p>
-					{{end}}
+				<div id="w3ds-publication-status" data-status="{{$publication.Status}}" class="ui {{$publication.Tone}} message">
+					<div class="header" data-w3ds-status-title>{{$publication.Title}}</div><p data-w3ds-status-message>{{$publication.Message}}</p>
 					{{if $.Permission.IsAdmin}}<p data-w3ds-status-error class="{{if not $publication.LastError}}tw-hidden{{end}}"><code>{{$publication.LastError}}</code></p>{{end}}
 				</div>
 				<p class="w3ds-status-checked" data-w3ds-status-checked aria-live="polite">{{ctx.Locale.Tr "platform.status.checking"}}</p>
@@ -61,6 +50,25 @@
 					<li class="{{if .PlatformPublished}}complete{{end}}" data-w3ds-marketplace-step><span class="w3ds-guide-number">3</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_marketplace"}} <span class="ui {{if .PlatformPublished}}green{{else}}blue{{end}} label" data-w3ds-step-label>{{if .PlatformPublished}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></div><p data-w3ds-step-message>{{if .PlatformPublished}}{{ctx.Locale.Tr "platform.repo.step_marketplace_ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.step_marketplace_pending"}}{{end}}</p></div></li>
 					<li class="{{if $manifest.URL}}complete{{end}}" data-w3ds-application-step><span class="w3ds-guide-number">4</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_application"}} <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label" data-w3ds-step-label>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></div><p data-w3ds-step-message>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.step_application_ready" $manifest.URL}}{{else}}{{ctx.Locale.Tr "platform.repo.step_application_missing"}}{{end}}</p></div></li>
 				</ol>
+			</section>
+
+			<section class="w3ds-section w3ds-visibility" aria-labelledby="w3ds-visibility-heading">
+				<div>
+					<div class="tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
+						<h2 id="w3ds-visibility-heading">{{ctx.Locale.Tr "platform.visibility.title"}}</h2>
+						<span class="ui {{if $manifest.IsDraft}}grey{{else}}green{{end}} label">{{if $manifest.IsDraft}}{{ctx.Locale.Tr "platform.visibility.draft"}}{{else}}{{ctx.Locale.Tr "platform.visibility.published"}}{{end}}</span>
+					</div>
+					<p class="w3ds-section-help">{{if $manifest.IsDraft}}{{ctx.Locale.Tr "platform.visibility.draft_help"}}{{else}}{{ctx.Locale.Tr "platform.visibility.published_help"}}{{end}}</p>
+				</div>
+				{{if .CanEditW3DS}}
+					<form action="{{.RepoLink}}/w3ds/visibility" method="post">
+						<input type="hidden" name="last_commit_id" value="{{$lastCommitID}}">
+						<button type="submit" class="w3ds-visibility-switch {{if not $manifest.IsDraft}}active{{end}}" role="switch" aria-checked="{{if $manifest.IsDraft}}false{{else}}true{{end}}" aria-label="{{if $manifest.IsDraft}}{{ctx.Locale.Tr "platform.visibility.publish"}}{{else}}{{ctx.Locale.Tr "platform.visibility.make_draft"}}{{end}}">
+							<span class="w3ds-visibility-track" aria-hidden="true"><span></span></span>
+							<span>{{if $manifest.IsDraft}}{{ctx.Locale.Tr "platform.visibility.publish"}}{{else}}{{ctx.Locale.Tr "platform.visibility.make_draft"}}{{end}}</span>
+						</button>
+					</form>
+				{{end}}
 			</section>
 
 			<section id="w3ds-platform-edit" class="w3ds-section" aria-labelledby="w3ds-details-heading">

@@ -203,6 +203,7 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	page.AssertElement(t, "#w3ds-platform-page[data-w3ds-status-url='/"+user.Name+"/"+repoName+"/w3ds/status']", true)
 	page.AssertElement(t, "button[data-w3ds-ppa-apply][disabled]", true)
 	page.AssertElement(t, "form[action='/"+user.Name+"/"+repoName+"/w3ds']", true)
+	page.AssertElement(t, "form[action='/"+user.Name+"/"+repoName+"/w3ds/visibility'] button[role='switch'][aria-checked='false']", true)
 	assert.Equal(t, "Guided Platform", page.GetInputValueByName("platform_display_name"))
 	statusResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds/status", user.Name, repoName), http.StatusOK)
 	var status map[string]any
@@ -220,6 +221,8 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	assert.Empty(t, manifest.URL)
 	assert.Equal(t, "z0123456789", manifest.PublicKey)
 	assert.Nil(t, manifest.EName)
+	assert.True(t, manifest.IsDraft)
+	assert.False(t, manifest.InSubmission)
 }
 
 func TestW3DSEditPlatform(t *testing.T) {
@@ -280,6 +283,20 @@ func TestW3DSEditPlatform(t *testing.T) {
 		assert.Equal(t, "https://guided.example", updated.URL)
 		assert.Equal(t, "https://guided.example/logo.png", updated.LogoURL)
 		assert.Equal(t, "z0123456789", updated.PublicKey)
+		assert.True(t, updated.IsDraft)
+
+		pageResp = session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds", user.Name, repo.Name), http.StatusOK)
+		page = NewHTMLParser(t, pageResp.Body)
+		visibility := NewRequestWithValues(t, "POST", "/"+user.Name+"/"+repo.Name+"/w3ds/visibility", map[string]string{
+			"last_commit_id": page.GetInputValueByName("last_commit_id"),
+		})
+		visibilityResp := session.MakeRequest(t, visibility, http.StatusSeeOther)
+		assert.Equal(t, "/"+user.Name+"/"+repo.Name+"/w3ds", test.RedirectURL(visibilityResp))
+
+		rawResp = session.MakeRequest(t, raw, http.StatusOK)
+		require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &updated))
+		assert.False(t, updated.IsDraft)
+		assert.Equal(t, "Fixture Platform Updated", updated.DisplayName)
 	})
 }
 

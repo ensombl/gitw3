@@ -22,6 +22,8 @@ test('renders a published W3DS status and guide', () => {
     title: 'Platform published',
     message: 'Marketplace is synchronized.',
     ename: '@platform',
+    isDraft: false,
+    inSubmission: false,
     identity: {ready: true, tone: 'green', label: 'Ready', message: 'Identity is @platform.'},
     marketplace: {ready: true, tone: 'green', label: 'Ready', message: 'Listing is synchronized.'},
     application: {ready: true, tone: 'green', label: 'Ready', message: 'Application is deployed.'},

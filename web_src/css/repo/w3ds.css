@@ -123,6 +123,61 @@
   font-size: 0.9rem;
 }
 
+.w3ds-visibility {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.w3ds-visibility-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--color-secondary-dark-1);
+  border-radius: var(--border-radius);
+  background: var(--color-button);
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+}
+
+.w3ds-visibility-switch:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.w3ds-visibility-switch:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.w3ds-visibility-track {
+  display: inline-flex;
+  width: 2.5rem;
+  padding: 0.2rem;
+  border-radius: 9999px;
+  background: var(--color-secondary-dark-2);
+  transition: background 0.2s ease;
+}
+
+.w3ds-visibility-track span {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  background: var(--color-box-body);
+  transition: transform 0.2s ease;
+}
+
+.w3ds-visibility-switch.active .w3ds-visibility-track {
+  background: var(--color-green);
+}
+
+.w3ds-visibility-switch.active .w3ds-visibility-track span {
+  transform: translateX(1.1rem);
+}
+
 .w3ds-ppa {
   display: flex;
   align-items: flex-start;
@@ -193,6 +248,11 @@
   }
 
   .w3ds-edit-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .w3ds-visibility {
     align-items: flex-start;
     flex-direction: column;
   }

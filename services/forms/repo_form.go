@@ -85,6 +85,17 @@ func (f *UpdatePlatformForm) Validate(req *http.Request, errs binding.Errors) bi
 	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
 }
 
+// PlatformManifestActionForm protects a one-click manifest update from stale writes.
+type PlatformManifestActionForm struct {
+	LastCommitID string `binding:"Required;MaxSize(64)"`
+}
+
+// Validate validates a platform manifest action.
+func (f *PlatformManifestActionForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
+	ctx := context.GetValidateContext(req)
+	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
+}
+
 // MigrateRepoForm form for migrating repository
 // this is used to interact with web ui
 type MigrateRepoForm struct {

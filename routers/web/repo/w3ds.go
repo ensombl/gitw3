@@ -32,15 +32,17 @@ type w3dsGuideStep struct {
 }
 
 type w3dsPublicationView struct {
-	Status      string        `json:"status"`
-	Tone        string        `json:"tone"`
-	Title       string        `json:"title"`
-	Message     string        `json:"message"`
-	EName       string        `json:"ename"`
-	LastError   string        `json:"lastError,omitempty"`
-	Identity    w3dsGuideStep `json:"identity"`
-	Marketplace w3dsGuideStep `json:"marketplace"`
-	Application w3dsGuideStep `json:"application"`
+	Status       string        `json:"status"`
+	Tone         string        `json:"tone"`
+	Title        string        `json:"title"`
+	Message      string        `json:"message"`
+	EName        string        `json:"ename"`
+	LastError    string        `json:"lastError,omitempty"`
+	IsDraft      bool          `json:"isDraft"`
+	InSubmission bool          `json:"inSubmission"`
+	Identity     w3dsGuideStep `json:"identity"`
+	Marketplace  w3dsGuideStep `json:"marketplace"`
+	Application  w3dsGuideStep `json:"application"`
 }
 
 // W3DS renders the repository's W3DS platform workspace.
@@ -95,23 +97,7 @@ func W3DSUpdate(ctx *context.Context) {
 		ctx.RenderWithErr(ctx.Tr("platform.create.invalid_manifest", err), tplRepoW3DS, form)
 		return
 	}
-	content, err := updated.Marshal()
-	if err != nil {
-		ctx.ServerError("marshalPlatformManifest", err)
-		return
-	}
-
-	_, err = files_service.ChangeRepoFiles(ctx, ctx.Repo.Repository, ctx.Doer, &files_service.ChangeRepoFilesOptions{
-		LastCommitID: form.LastCommitID,
-		OldBranch:    ctx.Repo.Repository.DefaultBranch,
-		NewBranch:    ctx.Repo.Repository.DefaultBranch,
-		Message:      "chore: update platform profile",
-		Files: []*files_service.ChangeRepoFile{{
-			Operation:     "update",
-			TreePath:      w3ds.PlatformManifestPath,
-			ContentReader: strings.NewReader(string(content)),
-		}},
-	})
+	err = commitPlatformManifest(ctx, &updated, form.LastCommitID, "chore: update platform profile")
 	if err != nil {
 		switch {
 		case models.IsErrCommitIDDoesNotMatch(err), git.IsErrPushOutOfDate(err):
@@ -129,6 +115,73 @@ func W3DSUpdate(ctx *context.Context) {
 	ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
 }
 
+// W3DSToggleVisibility publishes or hides a platform by toggling isDraft in its manifest.
+func W3DSToggleVisibility(ctx *context.Context) {
+	form := web.GetForm(ctx).(*forms.PlatformManifestActionForm)
+	if ctx.HasError() {
+		ctx.Flash.Error(ctx.Tr("platform.action.invalid"))
+		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		return
+	}
+	manifest, err := loadPlatformManifest(ctx)
+	if err != nil {
+		ctx.ServerError("loadPlatformManifest", err)
+		return
+	}
+	if manifest == nil {
+		ctx.NotFound("W3DS platform manifest", nil)
+		return
+	}
+
+	updated := *manifest
+	updated.IsDraft = !manifest.IsDraft
+	if err := commitPlatformManifest(ctx, &updated, form.LastCommitID, "chore: update platform visibility"); err != nil {
+		redirectPlatformActionError(ctx, err)
+		return
+	}
+	if updated.IsDraft {
+		ctx.Flash.Success(ctx.Tr("platform.visibility.saved_draft"))
+	} else {
+		ctx.Flash.Success(ctx.Tr("platform.visibility.saved_published"))
+	}
+	ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+}
+
+func commitPlatformManifest(ctx *context.Context, manifest *w3ds.PlatformManifest, lastCommitID, message string) error {
+	if err := manifest.Validate(!setting.IsProd); err != nil {
+		return err
+	}
+	content, err := manifest.Marshal()
+	if err != nil {
+		return err
+	}
+	_, err = files_service.ChangeRepoFiles(ctx, ctx.Repo.Repository, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+		LastCommitID: lastCommitID,
+		OldBranch:    ctx.Repo.Repository.DefaultBranch,
+		NewBranch:    ctx.Repo.Repository.DefaultBranch,
+		Message:      message,
+		Files: []*files_service.ChangeRepoFile{{
+			Operation:     "update",
+			TreePath:      w3ds.PlatformManifestPath,
+			ContentReader: strings.NewReader(string(content)),
+		}},
+	})
+	return err
+}
+
+func redirectPlatformActionError(ctx *context.Context, err error) {
+	switch {
+	case models.IsErrCommitIDDoesNotMatch(err), git.IsErrPushOutOfDate(err):
+		ctx.Flash.Error(ctx.Tr("platform.edit.conflict"))
+	case models.IsErrUserCannotCommit(err), models.IsErrFilePathProtected(err), git.IsErrPushRejected(err):
+		ctx.Flash.Error(ctx.Tr("platform.edit.protected"))
+	default:
+		log.Error("Update W3DS platform manifest for repository %d: %v", ctx.Repo.Repository.ID, err)
+		ctx.Flash.Error(ctx.Tr("platform.edit.failed"))
+	}
+	ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+}
+
 func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form *forms.UpdatePlatformForm) {
 	ctx.Data["Title"] = ctx.Tr("platform.repo.title")
 	ctx.Data["PageIsW3DS"] = true
@@ -138,6 +191,7 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 	ctx.Data["PlatformCategories"] = w3ds.PlatformCategories()
 	ctx.Data["PlatformEditForm"] = form
 	ctx.Data["CanEditW3DS"] = ctx.Repo.CanWrite(unit.TypeCode) && !ctx.Repo.Repository.IsArchived
+	ctx.Data["PlatformLastCommitID"] = ctx.Repo.CommitID
 	if manifest == nil {
 		return
 	}
@@ -147,11 +201,12 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 		eName = strings.TrimSpace(*manifest.EName)
 	}
 	ctx.Data["IsW3DSPlatform"] = true
+	publication := newW3DSPublicationView(ctx, status, eName, manifest.URL, manifest.IsDraft, manifest.InSubmission)
 	ctx.Data["PlatformManifest"] = manifest
-	ctx.Data["PlatformPublication"] = status
+	ctx.Data["PlatformPublication"] = publication
 	ctx.Data["PlatformEName"] = eName
 	ctx.Data["PlatformIdentityReady"] = eName != ""
-	ctx.Data["PlatformPublished"] = status.Status == "published"
+	ctx.Data["PlatformPublished"] = publication.Marketplace.Ready
 }
 
 // W3DSStatus returns the current publication state for the repository workspace.
@@ -170,20 +225,27 @@ func W3DSStatus(ctx *context.Context) {
 	if eName == "" && manifest.EName != nil {
 		eName = strings.TrimSpace(*manifest.EName)
 	}
-	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName, manifest.URL))
+	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName, manifest.URL, manifest.IsDraft, manifest.InSubmission))
 }
 
-func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName, applicationURL string) w3dsPublicationView {
+func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName, applicationURL string, isDraft, inSubmission bool) w3dsPublicationView {
 	view := w3dsPublicationView{
-		Status: status.Status,
-		Tone:   "info",
-		EName:  eName,
+		Status:       status.Status,
+		Tone:         "info",
+		EName:        eName,
+		IsDraft:      isDraft,
+		InSubmission: inSubmission,
 	}
 	switch status.Status {
 	case "published":
 		view.Tone = "positive"
-		view.Title = ctx.Locale.TrString("platform.status.published")
-		view.Message = ctx.Locale.TrString("platform.status.published_help", eName)
+		if isDraft {
+			view.Title = ctx.Locale.TrString("platform.visibility.draft_synced")
+			view.Message = ctx.Locale.TrString("platform.visibility.draft_synced_help")
+		} else {
+			view.Title = ctx.Locale.TrString("platform.status.published")
+			view.Message = ctx.Locale.TrString("platform.status.published_help", eName)
+		}
 	case "failed":
 		view.Tone = "warning"
 		view.Title = ctx.Locale.TrString("platform.status.failed")
@@ -216,15 +278,20 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 		view.Identity.Label = ctx.Locale.TrString("platform.repo.automatic")
 		view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_pending")
 	}
-	view.Marketplace.Ready = status.Status == "published"
+	view.Marketplace.Ready = status.Status == "published" && !isDraft
 	if view.Marketplace.Ready {
 		view.Marketplace.Tone = "green"
 		view.Marketplace.Label = ctx.Locale.TrString("platform.repo.ready")
 		view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_ready")
 	} else {
 		view.Marketplace.Tone = "blue"
-		view.Marketplace.Label = ctx.Locale.TrString("platform.repo.waiting")
-		view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_pending")
+		if status.Status == "published" && isDraft {
+			view.Marketplace.Label = ctx.Locale.TrString("platform.visibility.draft")
+			view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_draft")
+		} else {
+			view.Marketplace.Label = ctx.Locale.TrString("platform.repo.waiting")
+			view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_pending")
+		}
 	}
 	view.Application.Ready = applicationURL != ""
 	if view.Application.Ready {

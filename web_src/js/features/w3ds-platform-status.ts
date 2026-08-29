@@ -14,6 +14,8 @@ export type W3DSStatus = {
   message: string;
   ename: string;
   lastError?: string;
+  isDraft: boolean;
+  inSubmission: boolean;
   identity: W3DSGuideStep;
   marketplace: W3DSGuideStep;
   application: W3DSGuideStep;
