@@ -54,13 +54,30 @@ configure:
 | `PLATFORM_SYNC_FORGEJO_TOKEN` | Dedicated bot token with read/write repository access. |
 | `PLATFORM_SYNC_WEBHOOK_SECRET` | HMAC secret shared with the Forgejo system webhook. |
 | `PLATFORM_SYNC_INTERNAL_TOKEN` | Secret used by GitW3 to read publication status. |
-| `PLATFORM_SYNC_REGISTRY_URL` | W3DS Registry base URL. |
-| `PLATFORM_SYNC_PROVISIONER_URL` | W3DS Provisioner base URL. |
-| `PLATFORM_SYNC_VERIFICATION_ID` | Provisioning verification identifier. |
+| `PLATFORM_SYNC_REGISTRY_URL` | W3DS Registry base URL; defaults to the production Registry. |
+| `PLATFORM_SYNC_PROVISIONER_URL` | W3DS Provisioner base URL; defaults to the production Provisioner. |
+| `PLATFORM_SYNC_VERIFICATION_ID` | Approved production provisioning verification identifier. |
 | `PLATFORM_SYNC_PUBLISHER_URL` | Certified platform URL used to request eVault tokens. |
 
 The bot token must be able to read private platform repositories and update their manifest after
 provisioning. Do not reuse a human administrator token.
+
+The publisher uses `https://registry.w3ds.metastate.foundation` and
+`https://provisioner.w3ds.metastate.foundation` by default. A local GitW3 instance therefore writes
+real W3DS identity and profile data without running the W3DS core stack locally. Only set the Registry
+or Provisioner overrides when deliberately targeting another W3DS environment.
+
+For example, run GitW3 locally against production W3DS with:
+
+```sh
+PLATFORM_SYNC_FORGEJO_URL=http://localhost:3000 \
+PLATFORM_SYNC_FORGEJO_TOKEN='<service-token>' \
+PLATFORM_SYNC_WEBHOOK_SECRET='<webhook-secret>' \
+PLATFORM_SYNC_INTERNAL_TOKEN='<internal-token>' \
+PLATFORM_SYNC_VERIFICATION_ID='<approved-production-verification-id>' \
+PLATFORM_SYNC_PUBLISHER_URL=http://localhost:8090 \
+go run ./cmd/platform-manifest-sync
+```
 
 ## Register the system webhook
 

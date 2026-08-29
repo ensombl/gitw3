@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+const (
+	ProductionRegistryURL    = "https://registry.w3ds.metastate.foundation"
+	ProductionProvisionerURL = "https://provisioner.w3ds.metastate.foundation"
+)
+
 // Config contains all deployment-specific platform publisher settings.
 type Config struct {
 	ListenAddr      string
@@ -35,8 +40,8 @@ func ConfigFromEnv() (Config, error) {
 		ForgejoToken:    os.Getenv("PLATFORM_SYNC_FORGEJO_TOKEN"),
 		WebhookSecret:   os.Getenv("PLATFORM_SYNC_WEBHOOK_SECRET"),
 		InternalToken:   os.Getenv("PLATFORM_SYNC_INTERNAL_TOKEN"),
-		RegistryURL:     strings.TrimRight(os.Getenv("PLATFORM_SYNC_REGISTRY_URL"), "/"),
-		ProvisionerURL:  strings.TrimRight(os.Getenv("PLATFORM_SYNC_PROVISIONER_URL"), "/"),
+		RegistryURL:     strings.TrimRight(envOr("PLATFORM_SYNC_REGISTRY_URL", ProductionRegistryURL), "/"),
+		ProvisionerURL:  strings.TrimRight(envOr("PLATFORM_SYNC_PROVISIONER_URL", ProductionProvisionerURL), "/"),
 		VerificationID:  os.Getenv("PLATFORM_SYNC_VERIFICATION_ID"),
 		PublisherURL:    os.Getenv("PLATFORM_SYNC_PUBLISHER_URL"),
 		RequestTimeout:  20 * time.Second,
