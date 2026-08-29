@@ -208,7 +208,7 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 	}
 	graphql := map[string]any{
 		"query": `mutation UpdatePlatformProfile($id: String!, $input: MetaEnvelopeInput!) {
-  updateMetaEnvelopeById(id: $id, input: $input) { metaEnvelope { id } errors { message } }
+	updateMetaEnvelopeById(id: $id, input: $input) { metaEnvelope { id } }
 }`,
 		"variables": variables,
 	}
@@ -218,9 +218,6 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 				MetaEnvelope *struct {
 					ID string `json:"id"`
 				} `json:"metaEnvelope"`
-				Errors []struct {
-					Message string `json:"message"`
-				} `json:"errors"`
 			} `json:"updateMetaEnvelopeById"`
 		} `json:"data"`
 		Errors []struct {
@@ -233,9 +230,6 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 	}
 	if len(result.Errors) > 0 {
 		return errors.New(result.Errors[0].Message)
-	}
-	if len(result.Data.Update.Errors) > 0 {
-		return errors.New(result.Data.Update.Errors[0].Message)
 	}
 	if result.Data.Update.MetaEnvelope == nil {
 		return errors.New("eVault returned no PlatformProfile")

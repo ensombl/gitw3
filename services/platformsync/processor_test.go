@@ -92,6 +92,7 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		assert.Equal(t, "@guided.w3id", request.Header.Get("X-ENAME"))
 		var input map[string]any
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
+		assert.NotContains(t, input["query"], "errors { message }")
 		variables := input["variables"].(map[string]any)
 		profile := variables["input"].(map[string]any)["payload"].(map[string]any)
 		f.mu.Lock()
