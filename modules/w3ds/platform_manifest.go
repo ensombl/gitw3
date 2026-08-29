@@ -45,6 +45,8 @@ type PlatformManifest struct {
 	LogoURL       string  `json:"logoUrl"`
 	Category      string  `json:"category"`
 	PublicKey     string  `json:"publicKey"`
+	InSubmission  bool    `json:"inSubmission"`
+	IsDraft       bool    `json:"isDraft"`
 }
 
 // NewPlatformManifest creates a manifest whose eName will be filled by the publisher.
@@ -60,6 +62,8 @@ func NewPlatformManifest(platformName, displayName, description, version, appURL
 		LogoURL:       strings.TrimSpace(logoURL),
 		Category:      strings.TrimSpace(category),
 		PublicKey:     strings.TrimSpace(publicKey),
+		InSubmission:  false,
+		IsDraft:       true,
 	}
 }
 

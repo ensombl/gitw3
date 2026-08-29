@@ -197,6 +197,8 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 		"url":          manifest.URL,
 		"logoUrl":      manifest.LogoURL,
 		"category":     manifest.Category,
+		"inSubmission": manifest.InSubmission,
+		"isDraft":      manifest.IsDraft,
 	}
 	variables := map[string]any{
 		"id": envelopeID,

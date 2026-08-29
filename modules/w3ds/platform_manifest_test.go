@@ -4,6 +4,7 @@
 package w3ds
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,5 +58,30 @@ func TestPlatformManifestMarshal(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"schemaVersion": 1`)
 	assert.Contains(t, string(data), `"ename": null`)
+	assert.Contains(t, string(data), `"inSubmission": false`)
+	assert.Contains(t, string(data), `"isDraft": true`)
 	assert.Equal(t, byte('\n'), data[len(data)-1])
+}
+
+func TestPlatformManifestLifecycleDefaultsAreBackwardsCompatible(t *testing.T) {
+	manifest := validManifest()
+	assert.False(t, manifest.InSubmission)
+	assert.True(t, manifest.IsDraft)
+
+	var legacy PlatformManifest
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"schemaVersion": 1,
+		"platformName": "legacy",
+		"displayName": "Legacy",
+		"description": "An existing platform manifest",
+		"version": "1.0.0",
+		"ename": null,
+		"url": "",
+		"logoUrl": "",
+		"category": "Other",
+		"publicKey": "z0123456789"
+	}`), &legacy))
+	assert.False(t, legacy.InSubmission)
+	assert.False(t, legacy.IsDraft)
+	require.NoError(t, legacy.Validate(false))
 }
