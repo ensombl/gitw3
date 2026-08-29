@@ -40,6 +40,12 @@ type w3dsPublicationView struct {
 	LastError    string        `json:"lastError,omitempty"`
 	IsDraft      bool          `json:"isDraft"`
 	InSubmission bool          `json:"inSubmission"`
+	PPAStatus    string        `json:"ppaStatus"`
+	PPALabel     string        `json:"ppaLabel"`
+	PPAMessage   string        `json:"ppaMessage"`
+	PPAButton    string        `json:"ppaButton"`
+	PPAVersion   string        `json:"ppaVersion"`
+	PPALevel     string        `json:"ppaLevel,omitempty"`
 	Identity     w3dsGuideStep `json:"identity"`
 	Marketplace  w3dsGuideStep `json:"marketplace"`
 	Application  w3dsGuideStep `json:"application"`
@@ -90,6 +96,10 @@ func W3DSUpdate(ctx *context.Context) {
 	updated.DisplayName = form.PlatformDisplayName
 	updated.Description = form.PlatformDescription
 	updated.Version = form.PlatformVersion
+	if updated.Version != manifest.Version {
+		updated.InSubmission = false
+		updated.SubmissionVersion = ""
+	}
 	updated.URL = form.PlatformURL
 	updated.LogoURL = form.PlatformLogoURL
 	updated.Category = form.PlatformCategory
@@ -164,7 +174,13 @@ func W3DSApplyPPA(ctx *context.Context) {
 		ctx.NotFound("W3DS platform manifest", nil)
 		return
 	}
-	if manifest.InSubmission {
+	status := loadPlatformPublicationStatus(ctx)
+	if currentPPADecision(status, manifest.Version) != nil {
+		ctx.Flash.Success(ctx.Tr("platform.ppa.already_decided", manifest.Version))
+		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		return
+	}
+	if currentPPASubmission(manifest) {
 		ctx.Flash.Success(ctx.Tr("platform.ppa.already_submitted"))
 		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
 		return
@@ -174,7 +190,7 @@ func W3DSApplyPPA(ctx *context.Context) {
 		eName = strings.TrimSpace(*manifest.EName)
 	}
 	if eName == "" {
-		eName = strings.TrimSpace(loadPlatformPublicationStatus(ctx).EName)
+		eName = strings.TrimSpace(status.EName)
 	}
 	if eName == "" || strings.TrimSpace(manifest.URL) == "" {
 		ctx.Flash.Error(ctx.Tr("platform.ppa.requirements_missing"))
@@ -185,6 +201,7 @@ func W3DSApplyPPA(ctx *context.Context) {
 	updated := *manifest
 	updated.EName = &eName
 	updated.InSubmission = true
+	updated.SubmissionVersion = updated.Version
 	if err := commitPlatformManifest(ctx, &updated, form.LastCommitID, "chore: submit PPA application"); err != nil {
 		redirectPlatformActionError(ctx, err)
 		return
@@ -248,14 +265,16 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 		eName = strings.TrimSpace(*manifest.EName)
 	}
 	ctx.Data["IsW3DSPlatform"] = true
-	publication := newW3DSPublicationView(ctx, status, eName, manifest.URL, manifest.IsDraft, manifest.InSubmission)
+	pending := currentPPASubmission(manifest)
+	decision := currentPPADecision(status, manifest.Version)
+	publication := newW3DSPublicationView(ctx, status, eName, manifest.Version, manifest.URL, manifest.IsDraft, pending, decision)
 	ctx.Data["PlatformManifest"] = manifest
 	ctx.Data["PlatformPublication"] = publication
 	ctx.Data["PlatformEName"] = eName
 	ctx.Data["PlatformIdentityReady"] = eName != ""
 	ctx.Data["PlatformPublished"] = publication.Marketplace.Ready
 	ctx.Data["PPARequirementsReady"] = eName != "" && strings.TrimSpace(manifest.URL) != ""
-	ctx.Data["CanApplyPPA"] = canEdit && eName != "" && strings.TrimSpace(manifest.URL) != "" && !manifest.InSubmission
+	ctx.Data["CanApplyPPA"] = canEdit && publication.PPAStatus == "ready"
 }
 
 // W3DSStatus returns the current publication state for the repository workspace.
@@ -274,16 +293,19 @@ func W3DSStatus(ctx *context.Context) {
 	if eName == "" && manifest.EName != nil {
 		eName = strings.TrimSpace(*manifest.EName)
 	}
-	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName, manifest.URL, manifest.IsDraft, manifest.InSubmission))
+	pending := currentPPASubmission(manifest)
+	decision := currentPPADecision(status, manifest.Version)
+	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName, manifest.Version, manifest.URL, manifest.IsDraft, pending, decision))
 }
 
-func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName, applicationURL string, isDraft, inSubmission bool) w3dsPublicationView {
+func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName, version, applicationURL string, isDraft, inSubmission bool, decision *w3ds.AccreditationDecision) w3dsPublicationView {
 	view := w3dsPublicationView{
 		Status:       status.Status,
 		Tone:         "info",
 		EName:        eName,
 		IsDraft:      isDraft,
 		InSubmission: inSubmission,
+		PPAVersion:   version,
 	}
 	switch status.Status {
 	case "published":
@@ -352,7 +374,51 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 		view.Application.Label = ctx.Locale.TrString("platform.repo.waiting")
 		view.Application.Message = ctx.Locale.TrString("platform.repo.step_application_missing")
 	}
+
+	switch {
+	case decision != nil && decision.Decision == "granted":
+		view.PPAStatus = "granted"
+		view.PPALevel = decision.Level
+		view.PPALabel = ctx.Locale.TrString("platform.ppa.granted")
+		view.PPAButton = ctx.Locale.TrString("platform.ppa.granted")
+		view.PPAMessage = ctx.Locale.TrString("platform.ppa.granted_help", decision.Level, version)
+	case decision != nil && decision.Decision == "denied":
+		view.PPAStatus = "denied"
+		view.PPALabel = ctx.Locale.TrString("platform.ppa.denied")
+		view.PPAButton = ctx.Locale.TrString("platform.ppa.denied")
+		view.PPAMessage = ctx.Locale.TrString("platform.ppa.denied_help", version)
+	case inSubmission:
+		view.PPAStatus = "submitted"
+		view.PPALabel = ctx.Locale.TrString("platform.ppa.submitted")
+		view.PPAButton = ctx.Locale.TrString("platform.ppa.submitted")
+		view.PPAMessage = ctx.Locale.TrString("platform.ppa.submitted_version_help", version)
+	case view.Identity.Ready && view.Application.Ready:
+		view.PPAStatus = "ready"
+		view.PPALabel = ctx.Locale.TrString("platform.ppa.ready_to_apply")
+		view.PPAButton = ctx.Locale.TrString("platform.ppa.apply")
+		view.PPAMessage = ctx.Locale.TrString("platform.ppa.apply_version_help", version)
+	default:
+		view.PPAStatus = "incomplete"
+		view.PPAButton = ctx.Locale.TrString("platform.ppa.apply")
+		view.PPAMessage = ctx.Locale.TrString("platform.ppa.requirements_help")
+	}
 	return view
+}
+
+func currentPPASubmission(manifest *w3ds.PlatformManifest) bool {
+	if manifest == nil || !manifest.InSubmission {
+		return false
+	}
+	// Older manifests did not record submissionVersion; treat their flag as a
+	// submission for their current version until the version is edited in GitW3.
+	return manifest.SubmissionVersion == "" || manifest.SubmissionVersion == manifest.Version
+}
+
+func currentPPADecision(status *w3ds.PublicationStatus, version string) *w3ds.AccreditationDecision {
+	if status == nil || status.Decision == nil || status.Decision.PlatformVersion != version {
+		return nil
+	}
+	return status.Decision
 }
 
 func loadPlatformManifest(ctx *context.Context) (*w3ds.PlatformManifest, error) {

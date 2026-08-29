@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -26,6 +27,7 @@ type fakePlatformInfrastructure struct {
 	manifestExists bool
 	provisionCalls int
 	published      []map[string]any
+	accreditations []w3ds.AccreditationDecision
 	server         *httptest.Server
 }
 
@@ -108,6 +110,18 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		assert.Equal(t, "@guided.w3id", request.Header.Get("X-ENAME"))
 		var input map[string]any
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
+		if strings.Contains(input["query"].(string), "PlatformAccreditations") {
+			f.mu.Lock()
+			edges := make([]map[string]any, 0, len(f.accreditations))
+			for _, decision := range f.accreditations {
+				edges = append(edges, map[string]any{"node": map[string]any{"parsed": decision}})
+			}
+			f.mu.Unlock()
+			json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"metaEnvelopes": map[string]any{
+				"edges": edges, "pageInfo": map[string]any{"hasNextPage": false, "endCursor": nil},
+			}}})
+			return
+		}
 		assert.NotContains(t, input["query"], "errors { message }")
 		variables := input["variables"].(map[string]any)
 		profile := variables["input"].(map[string]any)["payload"].(map[string]any)
@@ -122,18 +136,19 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 
 func testConfig(baseURL, statePath string) Config {
 	return Config{
-		ListenAddr:      ":0",
-		StatePath:       statePath,
-		ForgejoURL:      baseURL,
-		ForgejoToken:    "forgejo-token",
-		WebhookSecret:   "webhook-secret",
-		InternalToken:   "internal-token",
-		RegistryURL:     baseURL,
-		ProvisionerURL:  baseURL,
-		VerificationID:  "verification",
-		PublisherURL:    "https://gitw3.example.com",
-		RequestTimeout:  time.Second,
-		ReconcilePeriod: time.Millisecond,
+		ListenAddr:          ":0",
+		StatePath:           statePath,
+		ForgejoURL:          baseURL,
+		ForgejoToken:        "forgejo-token",
+		WebhookSecret:       "webhook-secret",
+		InternalToken:       "internal-token",
+		RegistryURL:         baseURL,
+		ProvisionerURL:      baseURL,
+		VerificationID:      "verification",
+		PublisherURL:        "https://gitw3.example.com",
+		RequestTimeout:      time.Second,
+		ReconcilePeriod:     time.Millisecond,
+		AccreditationPeriod: time.Millisecond,
 	}
 }
 
@@ -170,6 +185,32 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	assert.Equal(t, false, fake.published[0]["inSubmission"])
 	assert.Equal(t, true, fake.published[0]["isDraft"])
 	assert.Equal(t, []any{"@alice.w3id", "@bob.w3id"}, fake.published[0]["authorEnames"])
+	assert.Equal(t, "", fake.published[0]["submissionVersion"])
+
+	fake.mu.Lock()
+	fake.accreditations = []w3ds.AccreditationDecision{
+		{PlatformEName: "@guided.w3id", PlatformVersion: "0.0.9", Decision: "granted", Level: "L1", CreatedAt: "2026-08-27T00:00:00Z"},
+		{PlatformEName: "@guided.w3id", PlatformVersion: "0.1.0", Decision: "denied", CreatedAt: "2026-08-28T00:00:00Z"},
+		{PlatformEName: "@guided.w3id", PlatformVersion: "0.1.0", Decision: "granted", Level: "L2", CreatedAt: "2026-08-29T00:00:00Z"},
+	}
+	fake.mu.Unlock()
+	require.NoError(t, processor.RefreshAccreditation(context.Background(), job))
+	job, err = store.Get(42)
+	require.NoError(t, err)
+	require.NotNil(t, job.Decision)
+	assert.Equal(t, "granted", job.Decision.Decision)
+	assert.Equal(t, "L2", job.Decision.Level)
+	assert.False(t, job.DecisionCheckedAt.IsZero())
+
+	fake.mu.Lock()
+	fake.accreditations = []w3ds.AccreditationDecision{
+		{PlatformEName: "@guided.w3id", PlatformVersion: "0.0.9", Decision: "granted", Level: "L1", CreatedAt: "2026-08-29T00:00:00Z"},
+	}
+	fake.mu.Unlock()
+	require.NoError(t, processor.RefreshAccreditation(context.Background(), job))
+	job, err = store.Get(42)
+	require.NoError(t, err)
+	assert.Nil(t, job.Decision, "an older version's decision must not accredit the current version")
 
 	fake.mu.Lock()
 	fake.manifest.Description = "Updated description"

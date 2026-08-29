@@ -120,12 +120,14 @@ func (s *Server) handleStatus(response http.ResponseWriter, request *http.Reques
 	}
 	response.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(response).Encode(map[string]any{
-		"repositoryId": job.RepositoryID,
-		"status":       job.Status,
-		"ename":        job.EName,
-		"lastError":    job.LastError,
-		"attempts":     job.Attempts,
-		"updatedAt":    job.UpdatedAt,
+		"repositoryId":      job.RepositoryID,
+		"status":            job.Status,
+		"ename":             job.EName,
+		"lastError":         job.LastError,
+		"attempts":          job.Attempts,
+		"decision":          job.Decision,
+		"decisionCheckedAt": job.DecisionCheckedAt,
+		"updatedAt":         job.UpdatedAt,
 	})
 }
 

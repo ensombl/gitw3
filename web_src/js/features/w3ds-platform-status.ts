@@ -16,6 +16,12 @@ export type W3DSStatus = {
   lastError?: string;
   isDraft: boolean;
   inSubmission: boolean;
+  ppaStatus: 'incomplete' | 'ready' | 'submitted' | 'granted' | 'denied';
+  ppaLabel: string;
+  ppaMessage: string;
+  ppaButton: string;
+  ppaVersion: string;
+  ppaLevel?: string;
   identity: W3DSGuideStep;
   marketplace: W3DSGuideStep;
   application: W3DSGuideStep;
@@ -66,10 +72,24 @@ export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
   renderGuideStep(root.querySelector('[data-w3ds-application-step]'), data.application);
   renderRequirement(root.querySelector('[data-w3ds-ppa-identity]'), data.identity);
   renderRequirement(root.querySelector('[data-w3ds-ppa-application]'), data.application);
-  const apply = root.querySelector<HTMLButtonElement>('[data-w3ds-ppa-apply]');
-  if (apply?.dataset.canEdit === 'true') {
-    apply.disabled = data.inSubmission || !data.identity.ready || !data.application.ready;
+
+  const ppaLabel = root.querySelector<HTMLElement>('[data-w3ds-ppa-label]');
+  if (ppaLabel) {
+    ppaLabel.textContent = data.ppaLabel;
+    ppaLabel.classList.toggle('tw-hidden', data.ppaStatus === 'incomplete');
+    ppaLabel.classList.remove('blue', 'green', 'red');
+    ppaLabel.classList.add(data.ppaStatus === 'denied' ? 'red' : data.ppaStatus === 'ready' ? 'blue' : 'green');
   }
+  const apply = root.querySelector<HTMLButtonElement>('[data-w3ds-ppa-apply]');
+  if (apply) {
+    apply.disabled = apply.dataset.canEdit !== 'true' || data.ppaStatus !== 'ready';
+    apply.classList.remove('primary', 'positive', 'negative');
+    apply.classList.add(data.ppaStatus === 'denied' ? 'negative' : ['submitted', 'granted'].includes(data.ppaStatus) ? 'positive' : 'primary');
+  }
+  const buttonLabel = root.querySelector<HTMLElement>('[data-w3ds-ppa-button-label]');
+  if (buttonLabel) buttonLabel.textContent = data.ppaButton;
+  const note = root.querySelector<HTMLElement>('[data-w3ds-ppa-note]');
+  if (note) note.textContent = data.ppaMessage;
 }
 
 export function initW3DSPlatformStatus() {

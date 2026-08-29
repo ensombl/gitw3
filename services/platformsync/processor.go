@@ -118,27 +118,47 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 	return p.store.Save(job)
 }
 
-// Worker drains durable jobs until the context is cancelled.
-type Worker struct {
-	store     *Store
-	processor *Processor
-	period    time.Duration
+// RefreshAccreditation reads the decision for the currently published version from the platform eVault.
+func (p *Processor) RefreshAccreditation(ctx context.Context, job *Job) error {
+	if job == nil || job.EName == "" || job.Manifest == nil || job.Status != StatusPublished {
+		return nil
+	}
+	decision, err := p.w3ds.accreditation(ctx, job.EName, job.Manifest.Version)
+	if err != nil {
+		return err
+	}
+	job.Decision = decision
+	job.DecisionCheckedAt = time.Now().UTC()
+	return p.store.Save(job)
 }
 
-func NewWorker(store *Store, processor *Processor, period time.Duration) *Worker {
-	return &Worker{store: store, processor: processor, period: period}
+// Worker drains durable jobs until the context is cancelled.
+type Worker struct {
+	store               *Store
+	processor           *Processor
+	period              time.Duration
+	accreditationPeriod time.Duration
+}
+
+func NewWorker(store *Store, processor *Processor, period, accreditationPeriod time.Duration) *Worker {
+	return &Worker{store: store, processor: processor, period: period, accreditationPeriod: accreditationPeriod}
 }
 
 func (w *Worker) Run(ctx context.Context) {
 	w.reconcileReady(ctx)
-	ticker := time.NewTicker(w.period)
-	defer ticker.Stop()
+	w.refreshAccreditations(ctx)
+	reconcileTicker := time.NewTicker(w.period)
+	defer reconcileTicker.Stop()
+	accreditationTicker := time.NewTicker(w.accreditationPeriod)
+	defer accreditationTicker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-reconcileTicker.C:
 			w.reconcileReady(ctx)
+		case <-accreditationTicker.C:
+			w.refreshAccreditations(ctx)
 		}
 	}
 }
@@ -160,6 +180,19 @@ func (w *Worker) reconcileReady(ctx context.Context) {
 				slog.Error("save failed platform publication", "repository_id", job.RepositoryID, "error", saveErr)
 			}
 			slog.Warn("platform publication will retry", "repository_id", job.RepositoryID, "attempt", job.Attempts, "error", err)
+		}
+	}
+}
+
+func (w *Worker) refreshAccreditations(ctx context.Context) {
+	jobs, err := w.store.Published(100)
+	if err != nil {
+		slog.Error("load published platforms for PPA refresh", "error", err)
+		return
+	}
+	for _, job := range jobs {
+		if err := w.processor.RefreshAccreditation(ctx, job); err != nil {
+			slog.Warn("refresh platform PPA decision", "repository_id", job.RepositoryID, "version", job.Manifest.Version, "error", err)
 		}
 	}
 }

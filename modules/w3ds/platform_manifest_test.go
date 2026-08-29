@@ -27,6 +27,7 @@ func TestPlatformManifestValidate(t *testing.T) {
 	}{
 		{"slug", func(m *PlatformManifest) { m.PlatformName = "Not A Slug" }},
 		{"version", func(m *PlatformManifest) { m.Version = "first" }},
+		{"submission version", func(m *PlatformManifest) { m.SubmissionVersion = "first" }},
 		{"url", func(m *PlatformManifest) { m.URL = "http://example.com" }},
 		{"category", func(m *PlatformManifest) { m.Category = "Unknown" }},
 		{"public key", func(m *PlatformManifest) { m.PublicKey = "plain-key" }},
@@ -59,6 +60,7 @@ func TestPlatformManifestMarshal(t *testing.T) {
 	assert.Contains(t, string(data), `"schemaVersion": 1`)
 	assert.Contains(t, string(data), `"ename": null`)
 	assert.Contains(t, string(data), `"inSubmission": false`)
+	assert.NotContains(t, string(data), `"submissionVersion"`)
 	assert.Contains(t, string(data), `"isDraft": true`)
 	assert.Equal(t, byte('\n'), data[len(data)-1])
 }
@@ -82,6 +84,7 @@ func TestPlatformManifestLifecycleDefaultsAreBackwardsCompatible(t *testing.T) {
 		"publicKey": "z0123456789"
 	}`), &legacy))
 	assert.False(t, legacy.InSubmission)
+	assert.Empty(t, legacy.SubmissionVersion)
 	assert.False(t, legacy.IsDraft)
 	require.NoError(t, legacy.Validate(false))
 }

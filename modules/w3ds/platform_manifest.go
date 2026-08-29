@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	PlatformManifestPath    = ".w3ds/platform.json"
-	PlatformManifestVersion = 1
-	UserProfileOntology     = "550e8400-e29b-41d4-a716-446655440000"
+	PlatformManifestPath          = ".w3ds/platform.json"
+	PlatformManifestVersion       = 1
+	UserProfileOntology           = "550e8400-e29b-41d4-a716-446655440000"
+	PlatformAccreditationOntology = "e1749947-5a10-4973-b9fa-230d8714c36a"
 )
 
 var (
@@ -35,35 +36,37 @@ func PlatformCategories() []string {
 
 // PlatformManifest is the repository-owned source of truth for a W3DS platform.
 type PlatformManifest struct {
-	SchemaVersion int     `json:"schemaVersion"`
-	PlatformName  string  `json:"platformName"`
-	DisplayName   string  `json:"displayName"`
-	Description   string  `json:"description"`
-	Version       string  `json:"version"`
-	EName         *string `json:"ename"`
-	URL           string  `json:"url"`
-	LogoURL       string  `json:"logoUrl"`
-	Category      string  `json:"category"`
-	PublicKey     string  `json:"publicKey"`
-	InSubmission  bool    `json:"inSubmission"`
-	IsDraft       bool    `json:"isDraft"`
+	SchemaVersion     int     `json:"schemaVersion"`
+	PlatformName      string  `json:"platformName"`
+	DisplayName       string  `json:"displayName"`
+	Description       string  `json:"description"`
+	Version           string  `json:"version"`
+	EName             *string `json:"ename"`
+	URL               string  `json:"url"`
+	LogoURL           string  `json:"logoUrl"`
+	Category          string  `json:"category"`
+	PublicKey         string  `json:"publicKey"`
+	InSubmission      bool    `json:"inSubmission"`
+	SubmissionVersion string  `json:"submissionVersion,omitempty"`
+	IsDraft           bool    `json:"isDraft"`
 }
 
 // NewPlatformManifest creates a manifest whose eName will be filled by the publisher.
 func NewPlatformManifest(platformName, displayName, description, version, appURL, logoURL, category, publicKey string) *PlatformManifest {
 	return &PlatformManifest{
-		SchemaVersion: PlatformManifestVersion,
-		PlatformName:  strings.TrimSpace(platformName),
-		DisplayName:   strings.TrimSpace(displayName),
-		Description:   strings.TrimSpace(description),
-		Version:       strings.TrimSpace(version),
-		EName:         nil,
-		URL:           strings.TrimSpace(appURL),
-		LogoURL:       strings.TrimSpace(logoURL),
-		Category:      strings.TrimSpace(category),
-		PublicKey:     strings.TrimSpace(publicKey),
-		InSubmission:  false,
-		IsDraft:       true,
+		SchemaVersion:     PlatformManifestVersion,
+		PlatformName:      strings.TrimSpace(platformName),
+		DisplayName:       strings.TrimSpace(displayName),
+		Description:       strings.TrimSpace(description),
+		Version:           strings.TrimSpace(version),
+		EName:             nil,
+		URL:               strings.TrimSpace(appURL),
+		LogoURL:           strings.TrimSpace(logoURL),
+		Category:          strings.TrimSpace(category),
+		PublicKey:         strings.TrimSpace(publicKey),
+		InSubmission:      false,
+		SubmissionVersion: "",
+		IsDraft:           true,
 	}
 }
 
@@ -86,6 +89,9 @@ func (m *PlatformManifest) Validate(allowLocalHTTP bool) error {
 	}
 	if !semverPattern.MatchString(m.Version) {
 		return errors.New("version must be a semantic version such as 0.1.0")
+	}
+	if m.SubmissionVersion != "" && !semverPattern.MatchString(m.SubmissionVersion) {
+		return errors.New("submissionVersion must be a semantic version")
 	}
 	if _, ok := knownCategories[m.Category]; !ok {
 		return errors.New("category is not supported")

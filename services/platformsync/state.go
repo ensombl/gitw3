@@ -32,23 +32,25 @@ const (
 
 // Job is the durable, repository-scoped reconciliation record.
 type Job struct {
-	RepositoryID  int64                  `json:"repositoryId"`
-	FullName      string                 `json:"fullName"`
-	DefaultBranch string                 `json:"defaultBranch"`
-	TargetSHA     string                 `json:"targetSha"`
-	LastSHA       string                 `json:"lastSha,omitempty"`
-	EName         string                 `json:"ename,omitempty"`
-	EnvelopeID    string                 `json:"envelopeId,omitempty"`
-	PlatformName  string                 `json:"platformName,omitempty"`
-	AuthorENames  []string               `json:"authorEnames,omitempty"`
-	Manifest      *w3ds.PlatformManifest `json:"manifest,omitempty"`
-	Archive       bool                   `json:"archive"`
-	Status        Status                 `json:"status"`
-	Attempts      int                    `json:"attempts"`
-	LastError     string                 `json:"lastError,omitempty"`
-	NextAttempt   time.Time              `json:"nextAttempt"`
-	CreatedAt     time.Time              `json:"createdAt"`
-	UpdatedAt     time.Time              `json:"updatedAt"`
+	RepositoryID      int64                       `json:"repositoryId"`
+	FullName          string                      `json:"fullName"`
+	DefaultBranch     string                      `json:"defaultBranch"`
+	TargetSHA         string                      `json:"targetSha"`
+	LastSHA           string                      `json:"lastSha,omitempty"`
+	EName             string                      `json:"ename,omitempty"`
+	EnvelopeID        string                      `json:"envelopeId,omitempty"`
+	PlatformName      string                      `json:"platformName,omitempty"`
+	AuthorENames      []string                    `json:"authorEnames,omitempty"`
+	Manifest          *w3ds.PlatformManifest      `json:"manifest,omitempty"`
+	Decision          *w3ds.AccreditationDecision `json:"decision,omitempty"`
+	DecisionCheckedAt time.Time                   `json:"decisionCheckedAt,omitempty"`
+	Archive           bool                        `json:"archive"`
+	Status            Status                      `json:"status"`
+	Attempts          int                         `json:"attempts"`
+	LastError         string                      `json:"lastError,omitempty"`
+	NextAttempt       time.Time                   `json:"nextAttempt"`
+	CreatedAt         time.Time                   `json:"createdAt"`
+	UpdatedAt         time.Time                   `json:"updatedAt"`
 }
 
 // Store persists jobs across restarts and process crashes.
@@ -134,6 +136,27 @@ func (s *Store) Ready(now time.Time, limit int) ([]*Job, error) {
 				return err
 			}
 			if (job.Status == StatusIdentityPending || job.Status == StatusPublishing || job.Status == StatusFailed) && !job.NextAttempt.After(now) {
+				jobs = append(jobs, &job)
+			}
+			return nil
+		})
+	})
+	return jobs, err
+}
+
+// Published returns active platform jobs whose version decisions should be refreshed.
+func (s *Store) Published(limit int) ([]*Job, error) {
+	jobs := make([]*Job, 0, limit)
+	err := s.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket([]byte(jobsBucket)).ForEach(func(_, data []byte) error {
+			if len(jobs) >= limit {
+				return nil
+			}
+			var job Job
+			if err := json.Unmarshal(data, &job); err != nil {
+				return err
+			}
+			if job.Status == StatusPublished && job.EName != "" && job.Manifest != nil {
 				jobs = append(jobs, &job)
 			}
 			return nil

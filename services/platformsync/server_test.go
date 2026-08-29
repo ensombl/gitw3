@@ -13,6 +13,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"forgejo.org/modules/w3ds"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,6 +67,10 @@ func TestServerProtectsPublicationStatus(t *testing.T) {
 	store := openTestStore(t)
 	config := testConfig("https://gitw3.example.com", "")
 	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit", false))
+	job, err := store.Get(42)
+	require.NoError(t, err)
+	job.Decision = &w3ds.AccreditationDecision{PlatformEName: "@platform", PlatformVersion: "1.2.3", Decision: "granted", Level: "L2"}
+	require.NoError(t, store.Save(job))
 	server := NewServer(config, store)
 
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/status/42", nil)
@@ -78,4 +84,5 @@ func TestServerProtectsPublicationStatus(t *testing.T) {
 	server.Handler().ServeHTTP(response, request)
 	assert.Equal(t, http.StatusOK, response.Code)
 	assert.Contains(t, response.Body.String(), string(StatusIdentityPending))
+	assert.Contains(t, response.Body.String(), `"platformVersion":"1.2.3"`)
 }

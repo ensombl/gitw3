@@ -261,6 +261,78 @@ func (c *w3dsClient) provision(ctx context.Context, publicKey string) (string, e
 	return strings.TrimSpace(provisioned.W3ID), nil
 }
 
+func (c *w3dsClient) accreditation(ctx context.Context, ename, version string) (*w3ds.AccreditationDecision, error) {
+	endpoint, err := c.resolve(ctx, ename)
+	if err != nil {
+		return nil, err
+	}
+	token, err := c.platformToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	const query = `query PlatformAccreditations($ontologyId: ID!, $first: Int!, $after: String) {
+	metaEnvelopes(filter: {ontologyId: $ontologyId}, first: $first, after: $after) {
+		edges { node { parsed } }
+		pageInfo { hasNextPage endCursor }
+	}
+}`
+	headers := map[string]string{"Authorization": "Bearer " + token, "X-ENAME": ename}
+	var newest *w3ds.AccreditationDecision
+	var after any
+	for {
+		graphql := map[string]any{
+			"query": query,
+			"variables": map[string]any{
+				"ontologyId": w3ds.PlatformAccreditationOntology,
+				"first":      100,
+				"after":      after,
+			},
+		}
+		var result struct {
+			Data struct {
+				MetaEnvelopes struct {
+					Edges []struct {
+						Node struct {
+							Parsed w3ds.AccreditationDecision `json:"parsed"`
+						} `json:"node"`
+					} `json:"edges"`
+					PageInfo struct {
+						HasNextPage bool   `json:"hasNextPage"`
+						EndCursor   string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"metaEnvelopes"`
+			} `json:"data"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+		if err := c.postJSON(ctx, endpoint, graphql, &result, headers); err != nil {
+			return nil, fmt.Errorf("read PPA decisions: %w", err)
+		}
+		if len(result.Errors) > 0 {
+			return nil, errors.New(result.Errors[0].Message)
+		}
+		for _, edge := range result.Data.MetaEnvelopes.Edges {
+			decision := edge.Node.Parsed
+			if strings.TrimSpace(decision.PlatformEName) != ename || strings.TrimSpace(decision.PlatformVersion) != version {
+				continue
+			}
+			if decision.Decision != "granted" && decision.Decision != "denied" {
+				continue
+			}
+			if newest == nil || decision.CreatedAt > newest.CreatedAt {
+				copy := decision
+				newest = &copy
+			}
+		}
+		pageInfo := result.Data.MetaEnvelopes.PageInfo
+		if !pageInfo.HasNextPage || pageInfo.EndCursor == "" {
+			return newest, nil
+		}
+		after = pageInfo.EndCursor
+	}
+}
+
 func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w3ds.PlatformManifest, createdAt time.Time, archived bool, authorENames []string) error {
 	if manifest == nil || manifest.EName == nil {
 		return errors.New("cannot publish a platform without an eName")
@@ -276,21 +348,22 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 	}
 	now := time.Now().UTC()
 	payload := map[string]any{
-		"platformName": manifest.PlatformName,
-		"displayName":  manifest.DisplayName,
-		"description":  manifest.Description,
-		"version":      manifest.Version,
-		"ename":        ename,
-		"isActive":     !archived && !manifest.IsDraft,
-		"isArchived":   archived,
-		"createdAt":    createdAt.Format(time.RFC3339),
-		"updatedAt":    now.Format(time.RFC3339),
-		"url":          manifest.URL,
-		"logoUrl":      manifest.LogoURL,
-		"category":     manifest.Category,
-		"inSubmission": manifest.InSubmission,
-		"isDraft":      manifest.IsDraft,
-		"authorEnames": authorENames,
+		"platformName":      manifest.PlatformName,
+		"displayName":       manifest.DisplayName,
+		"description":       manifest.Description,
+		"version":           manifest.Version,
+		"ename":             ename,
+		"isActive":          !archived && !manifest.IsDraft,
+		"isArchived":        archived,
+		"createdAt":         createdAt.Format(time.RFC3339),
+		"updatedAt":         now.Format(time.RFC3339),
+		"url":               manifest.URL,
+		"logoUrl":           manifest.LogoURL,
+		"category":          manifest.Category,
+		"inSubmission":      manifest.InSubmission,
+		"submissionVersion": manifest.SubmissionVersion,
+		"isDraft":           manifest.IsDraft,
+		"authorEnames":      authorENames,
 	}
 	variables := map[string]any{
 		"id": envelopeID,
