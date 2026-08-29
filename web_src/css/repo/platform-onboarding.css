@@ -79,6 +79,41 @@
   color: var(--color-text-light-1);
 }
 
+.platform-wizard-choices {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.ui.form .platform-wizard-choices > .platform-wizard-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  background: var(--color-box-body);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: var(--font-weight-medium);
+}
+
+.ui.form .platform-wizard-choices > .platform-wizard-choice:hover {
+  border-color: var(--color-primary);
+}
+
+.ui.form .platform-wizard-choices > .platform-wizard-choice:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-alpha-10);
+}
+
+.ui.form .platform-wizard-choice > input[type="radio"] {
+  flex: 0 0 auto;
+  margin: 0.15rem 0 0;
+}
+
 .platform-wizard-actions {
   min-height: 2.75rem;
   padding-top: 1rem;

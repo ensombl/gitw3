@@ -33,6 +33,8 @@ func assertPlatformCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.
 	form := htmlDoc.doc.Find("form#platform-onboarding-form[action='/repo/create/new']")
 	assert.Equal(t, 1, form.Length(), "Expected the guided platform creation form")
 	assert.Equal(t, 4, form.Find(".platform-wizard-step").Length(), "Expected four wizard steps")
+	assert.Equal(t, 4, form.Find(".platform-wizard-choice").Length(), "Expected four accessible wizard choices")
+	assert.Equal(t, 1, form.Find("[data-platform-ai-install].blue.message").Length(), "Expected a visible AI install message")
 	assert.Equal(t, 3, form.Find("[data-platform-step].tw-hidden").Length(), "Expected only the first wizard panel to be visible")
 	assert.Equal(t, 1, form.Find("#platform-step-back.tw-hidden").Length(), "Expected the back button to start hidden")
 	assert.Equal(t, 1, form.Find("#platform-create-submit.tw-hidden").Length(), "Expected the submit button to start hidden")

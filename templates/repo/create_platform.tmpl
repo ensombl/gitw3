@@ -54,9 +54,9 @@
 						<fieldset class="platform-wizard-panel tw-hidden" data-platform-step="3" hidden>
 							<legend>{{ctx.Locale.Tr "platform.create.identity_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.create.identity_help"}}</p>
-							<div class="grouped fields">
-								<label><input type="radio" name="platform_key_mode" value="generate" checked> {{ctx.Locale.Tr "platform.create.generate_key"}}</label>
-								<label><input type="radio" name="platform_key_mode" value="paste"> {{ctx.Locale.Tr "platform.create.paste_key"}}</label>
+							<div class="platform-wizard-choices">
+								<label class="platform-wizard-choice"><input type="radio" name="platform_key_mode" value="generate" checked><span>{{ctx.Locale.Tr "platform.create.generate_key"}}</span></label>
+								<label class="platform-wizard-choice"><input type="radio" name="platform_key_mode" value="paste"><span>{{ctx.Locale.Tr "platform.create.paste_key"}}</span></label>
 							</div>
 							<div data-platform-generated-key>
 								<button class="ui primary button" type="button" id="platform-generate-key">{{ctx.Locale.Tr "platform.create.generate_download"}}</button>
@@ -72,11 +72,11 @@
 						<fieldset class="platform-wizard-panel tw-hidden" data-platform-step="4" hidden>
 							<legend>{{ctx.Locale.Tr "platform.create.ai_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.create.ai_help"}}</p>
-							<div class="grouped fields">
-								<label><input type="radio" name="use_ai_tooling" value="true" checked> {{ctx.Locale.Tr "platform.create.ai_yes"}}</label>
-								<label><input type="radio" name="use_ai_tooling" value="false"> {{ctx.Locale.Tr "platform.create.ai_no"}}</label>
+							<div class="platform-wizard-choices">
+								<label class="platform-wizard-choice"><input type="radio" name="use_ai_tooling" value="true" checked><span>{{ctx.Locale.Tr "platform.create.ai_yes"}}</span></label>
+								<label class="platform-wizard-choice"><input type="radio" name="use_ai_tooling" value="false"><span>{{ctx.Locale.Tr "platform.create.ai_no"}}</span></label>
 							</div>
-							<div class="ui info message" data-platform-ai-install>
+							<div class="ui blue message" data-platform-ai-install>
 								<div class="header">{{ctx.Locale.Tr "platform.create.ai_install_title"}}</div>
 								<p>{{ctx.Locale.Tr "platform.create.ai_install_help"}}</p>
 								<div class="ui action input fluid"><input readonly value="npx skills add MetaState-Prototype-Project/prototype@w3ds"><button type="button" class="ui button" data-clipboard-text="npx skills add MetaState-Prototype-Project/prototype@w3ds">{{ctx.Locale.Tr "copy"}}</button></div>
