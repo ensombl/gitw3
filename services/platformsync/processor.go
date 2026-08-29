@@ -86,7 +86,14 @@ func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeployme
 }
 
 func (p *Processor) FinalizeDeployment(input FinalizeDeploymentRequest, job *DeploymentJob) error {
-	if job == nil || job.Status != DeploymentAwaitingSignature {
+	if job == nil {
+		return errors.New("deployment is not awaiting a signature")
+	}
+	if (job.Status == DeploymentPublishing || job.Status == DeploymentCompleted || job.Status == DeploymentFailed) &&
+		job.DeployerEName == input.SignerEName && job.WalletSignature == input.Signature {
+		return nil
+	}
+	if job.Status != DeploymentAwaitingSignature {
 		return errors.New("deployment is not awaiting a signature")
 	}
 	if input.SignerEName != job.DeployerEName || input.Signature == "" || input.KeyBindingCertificate == "" {
