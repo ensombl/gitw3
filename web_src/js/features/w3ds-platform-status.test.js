@@ -13,6 +13,7 @@ test('renders a published W3DS status and guide', () => {
       <li data-w3ds-application-step><span data-w3ds-step-label></span><p data-w3ds-step-message></p></li>
       <li data-w3ds-ppa-identity><svg></svg><svg></svg><span data-w3ds-requirement-label></span></li>
       <li data-w3ds-ppa-application><svg></svg><svg></svg><span data-w3ds-requirement-label></span></li>
+      <button data-w3ds-ppa-apply data-can-edit="true" data-submitted="false" disabled></button>
     </main>`;
   const root = document.getElementById('w3ds-platform-page');
 
@@ -35,4 +36,5 @@ test('renders a published W3DS status and guide', () => {
   expect(root.querySelector('[data-w3ds-marketplace-step]')?.classList.contains('complete')).toBe(true);
   expect(root.querySelector('[data-w3ds-application-step]')?.classList.contains('complete')).toBe(true);
   expect(root.querySelector('[data-w3ds-ppa-application] svg:last-of-type')?.classList.contains('tw-hidden')).toBe(true);
+  expect(root.querySelector('[data-w3ds-ppa-apply]')?.disabled).toBe(false);
 });

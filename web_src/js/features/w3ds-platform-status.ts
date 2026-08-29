@@ -66,6 +66,10 @@ export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
   renderGuideStep(root.querySelector('[data-w3ds-application-step]'), data.application);
   renderRequirement(root.querySelector('[data-w3ds-ppa-identity]'), data.identity);
   renderRequirement(root.querySelector('[data-w3ds-ppa-application]'), data.application);
+  const apply = root.querySelector<HTMLButtonElement>('[data-w3ds-ppa-apply]');
+  if (apply?.dataset.canEdit === 'true') {
+    apply.disabled = data.inSubmission || !data.identity.ready || !data.application.ready;
+  }
 }
 
 export function initW3DSPlatformStatus() {

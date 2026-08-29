@@ -209,6 +209,8 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	var status map[string]any
 	require.NoError(t, json.Unmarshal(statusResp.Body.Bytes(), &status))
 	assert.Equal(t, "unavailable", status["status"])
+	assert.Equal(t, true, status["isDraft"])
+	assert.Equal(t, false, status["inSubmission"])
 	assert.NotEmpty(t, status["title"])
 	assert.NotEmpty(t, status["identity"])
 
@@ -239,6 +241,8 @@ func TestW3DSEditPlatform(t *testing.T) {
 			"Productivity",
 			"z0123456789",
 		)
+		eName := "@fixture-platform.w3id"
+		manifest.EName = &eName
 		content, err := manifest.Marshal()
 		require.NoError(t, err)
 		_, err = files_service.ChangeRepoFiles(t.Context(), repo, user, &files_service.ChangeRepoFilesOptions{
@@ -297,6 +301,20 @@ func TestW3DSEditPlatform(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &updated))
 		assert.False(t, updated.IsDraft)
 		assert.Equal(t, "Fixture Platform Updated", updated.DisplayName)
+
+		pageResp = session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds", user.Name, repo.Name), http.StatusOK)
+		page = NewHTMLParser(t, pageResp.Body)
+		page.AssertElement(t, "form[action='/"+user.Name+"/"+repo.Name+"/w3ds/ppa'] button[data-w3ds-ppa-apply]:not([disabled])", true)
+		apply := NewRequestWithValues(t, "POST", "/"+user.Name+"/"+repo.Name+"/w3ds/ppa", map[string]string{
+			"last_commit_id": page.GetInputValueByName("last_commit_id"),
+		})
+		applyResp := session.MakeRequest(t, apply, http.StatusSeeOther)
+		assert.Equal(t, "/"+user.Name+"/"+repo.Name+"/w3ds", test.RedirectURL(applyResp))
+
+		rawResp = session.MakeRequest(t, raw, http.StatusOK)
+		require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &updated))
+		assert.True(t, updated.InSubmission)
+		assert.False(t, updated.IsDraft)
 	})
 }
 

@@ -147,6 +147,52 @@ func W3DSToggleVisibility(ctx *context.Context) {
 	ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
 }
 
+// W3DSApplyPPA submits the published PlatformProfile for PPA review.
+func W3DSApplyPPA(ctx *context.Context) {
+	form := web.GetForm(ctx).(*forms.PlatformManifestActionForm)
+	if ctx.HasError() {
+		ctx.Flash.Error(ctx.Tr("platform.action.invalid"))
+		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		return
+	}
+	manifest, err := loadPlatformManifest(ctx)
+	if err != nil {
+		ctx.ServerError("loadPlatformManifest", err)
+		return
+	}
+	if manifest == nil {
+		ctx.NotFound("W3DS platform manifest", nil)
+		return
+	}
+	if manifest.InSubmission {
+		ctx.Flash.Success(ctx.Tr("platform.ppa.already_submitted"))
+		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		return
+	}
+	eName := ""
+	if manifest.EName != nil {
+		eName = strings.TrimSpace(*manifest.EName)
+	}
+	if eName == "" {
+		eName = strings.TrimSpace(loadPlatformPublicationStatus(ctx).EName)
+	}
+	if eName == "" || strings.TrimSpace(manifest.URL) == "" {
+		ctx.Flash.Error(ctx.Tr("platform.ppa.requirements_missing"))
+		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		return
+	}
+
+	updated := *manifest
+	updated.EName = &eName
+	updated.InSubmission = true
+	if err := commitPlatformManifest(ctx, &updated, form.LastCommitID, "chore: submit PPA application"); err != nil {
+		redirectPlatformActionError(ctx, err)
+		return
+	}
+	ctx.Flash.Success(ctx.Tr("platform.ppa.submitted_help"))
+	ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+}
+
 func commitPlatformManifest(ctx *context.Context, manifest *w3ds.PlatformManifest, lastCommitID, message string) error {
 	if err := manifest.Validate(!setting.IsProd); err != nil {
 		return err
@@ -190,7 +236,8 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 	ctx.Data["PlatformManifestPath"] = w3ds.PlatformManifestPath
 	ctx.Data["PlatformCategories"] = w3ds.PlatformCategories()
 	ctx.Data["PlatformEditForm"] = form
-	ctx.Data["CanEditW3DS"] = ctx.Repo.CanWrite(unit.TypeCode) && !ctx.Repo.Repository.IsArchived
+	canEdit := ctx.Repo.CanWrite(unit.TypeCode) && !ctx.Repo.Repository.IsArchived
+	ctx.Data["CanEditW3DS"] = canEdit
 	ctx.Data["PlatformLastCommitID"] = ctx.Repo.CommitID
 	if manifest == nil {
 		return
@@ -207,6 +254,8 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 	ctx.Data["PlatformEName"] = eName
 	ctx.Data["PlatformIdentityReady"] = eName != ""
 	ctx.Data["PlatformPublished"] = publication.Marketplace.Ready
+	ctx.Data["PPARequirementsReady"] = eName != "" && strings.TrimSpace(manifest.URL) != ""
+	ctx.Data["CanApplyPPA"] = canEdit && eName != "" && strings.TrimSpace(manifest.URL) != "" && !manifest.InSubmission
 }
 
 // W3DSStatus returns the current publication state for the repository workspace.

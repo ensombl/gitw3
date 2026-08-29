@@ -132,15 +132,26 @@
 				<div class="w3ds-ppa-content">
 					<div class="tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
 						<h2 id="w3ds-ppa-heading">{{ctx.Locale.Tr "platform.ppa.title"}}</h2>
-						<span class="ui blue label">{{ctx.Locale.Tr "platform.ppa.coming_soon"}}</span>
+						{{if $manifest.InSubmission}}<span class="ui green label">{{ctx.Locale.Tr "platform.ppa.submitted"}}</span>{{else if .PPARequirementsReady}}<span class="ui blue label">{{ctx.Locale.Tr "platform.ppa.ready_to_apply"}}</span>{{end}}
 					</div>
 					<p>{{ctx.Locale.Tr "platform.ppa.help"}}</p>
 					<ul class="w3ds-ppa-checklist">
 						<li data-w3ds-ppa-identity>{{if .PlatformIdentityReady}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.identity"}}</span> <span class="ui {{if .PlatformIdentityReady}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
 						<li data-w3ds-ppa-application>{{if $manifest.URL}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.deployment"}}</span> <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
 					</ul>
-					<button type="button" class="ui primary button" data-w3ds-ppa-apply disabled>{{svg "octicon-verified"}} {{ctx.Locale.Tr "platform.ppa.apply"}}</button>
-					<span class="w3ds-ppa-note">{{ctx.Locale.Tr "platform.ppa.disabled_help"}}</span>
+					{{if $manifest.InSubmission}}
+						<button type="button" class="ui positive button" data-w3ds-ppa-apply data-can-edit="{{if .CanEditW3DS}}true{{else}}false{{end}}" data-submitted="true" disabled>{{svg "octicon-check-circle-fill"}} {{ctx.Locale.Tr "platform.ppa.submitted"}}</button>
+						<span class="w3ds-ppa-note">{{ctx.Locale.Tr "platform.ppa.submitted_help"}}</span>
+					{{else if .CanEditW3DS}}
+						<form class="w3ds-ppa-apply" action="{{.RepoLink}}/w3ds/ppa" method="post">
+							<input type="hidden" name="last_commit_id" value="{{$lastCommitID}}">
+							<button type="submit" class="ui primary button" data-w3ds-ppa-apply data-can-edit="true" data-submitted="false" {{if not .CanApplyPPA}}disabled{{end}}>{{svg "octicon-verified"}} {{ctx.Locale.Tr "platform.ppa.apply"}}</button>
+							<span class="w3ds-ppa-note">{{if .PPARequirementsReady}}{{ctx.Locale.Tr "platform.ppa.apply_help"}}{{else}}{{ctx.Locale.Tr "platform.ppa.requirements_help"}}{{end}}</span>
+						</form>
+					{{else}}
+						<button type="button" class="ui primary button" data-w3ds-ppa-apply data-can-edit="false" data-submitted="false" disabled>{{svg "octicon-verified"}} {{ctx.Locale.Tr "platform.ppa.apply"}}</button>
+						<span class="w3ds-ppa-note">{{ctx.Locale.Tr "platform.ppa.write_help"}}</span>
+					{{end}}
 				</div>
 			</section>
 		{{else}}

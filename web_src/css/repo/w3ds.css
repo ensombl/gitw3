@@ -223,6 +223,10 @@
   font-size: 0.9rem;
 }
 
+.w3ds-ppa-apply {
+  display: inline;
+}
+
 .w3ds-empty-state {
   max-width: 46rem;
   margin: 3rem auto;
