@@ -709,6 +709,7 @@ func registerRoutes(m *web.Route) {
 	}, reqSignOut)
 
 	m.Any("/user/events", routing.MarkLongPolling, events.Events)
+	m.Methods("POST, OPTIONS", "/w3ds/ppa/callback", ignoreCSRF, repo.W3DSPPACallback)
 
 	m.Group("/login/oauth", func() {
 		m.Group("", func() {
@@ -1687,7 +1688,8 @@ func registerRoutes(m *web.Route) {
 		m.Group("/w3ds", func() {
 			m.Combo("").Get(repo.W3DS).Post(context.RepoMustNotBeArchived(), reqSignIn, reqRepoCodeWriter, web.Bind(forms.UpdatePlatformForm{}), repo.W3DSUpdate)
 			m.Post("/visibility", context.RepoMustNotBeArchived(), reqSignIn, reqRepoCodeWriter, web.Bind(forms.PlatformManifestActionForm{}), repo.W3DSToggleVisibility)
-			m.Post("/ppa", context.RepoMustNotBeArchived(), reqSignIn, reqRepoCodeWriter, web.Bind(forms.PlatformManifestActionForm{}), repo.W3DSApplyPPA)
+			m.Post("/ppa", context.RepoMustNotBeArchived(), reqSignIn, reqRepoAdmin, repo.W3DSCreatePPASigningSession)
+			m.Get("/ppa/{session}", reqSignIn, reqRepoAdmin, repo.W3DSPPASigningStatus)
 			m.Get("/status", repo.W3DSStatus)
 		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
 

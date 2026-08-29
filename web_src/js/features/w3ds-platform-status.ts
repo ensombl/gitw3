@@ -1,4 +1,6 @@
-import {GET} from '../modules/fetch.js';
+import {toCanvas} from 'qrcode';
+import {GET, POST} from '../modules/fetch.js';
+import {showModal} from '../modules/modal.ts';
 
 type W3DSGuideStep = {
   ready: boolean;
@@ -29,6 +31,19 @@ export type W3DSStatus = {
   application: W3DSGuideStep;
   domains: W3DSGuideStep;
   release: W3DSGuideStep;
+};
+
+type PPASigningOffer = {
+  sessionId: string;
+  uri: string;
+  expiresAt: string;
+  statusUrl: string;
+};
+
+type PPASigningStatus = {
+  status: 'pending' | 'verifying' | 'completed' | 'rejected' | 'expired';
+  redirect?: string;
+  message?: string;
 };
 
 function renderGuideStep(element: HTMLElement | null, step: W3DSGuideStep) {
@@ -96,14 +111,101 @@ export function renderW3DSStatus(root: HTMLElement, data: W3DSStatus) {
   }
   const apply = root.querySelector<HTMLButtonElement>('[data-w3ds-ppa-apply]');
   if (apply) {
-    apply.disabled = apply.dataset.canEdit !== 'true' || data.ppaStatus !== 'ready';
+    apply.disabled = apply.dataset.canEdit !== 'true' || apply.dataset.signing === 'true' || data.ppaStatus !== 'ready';
     apply.classList.remove('primary', 'positive', 'negative');
     apply.classList.add(data.ppaStatus === 'denied' ? 'negative' : ['submitted', 'granted'].includes(data.ppaStatus) ? 'positive' : 'primary');
   }
   const buttonLabel = root.querySelector<HTMLElement>('[data-w3ds-ppa-button-label]');
   if (buttonLabel) buttonLabel.textContent = data.ppaButton;
   const note = root.querySelector<HTMLElement>('[data-w3ds-ppa-note]');
-  if (note) note.textContent = data.ppaMessage;
+  if (note && (data.ppaStatus !== 'ready' || apply?.dataset.canEdit === 'true')) note.textContent = data.ppaMessage;
+}
+
+async function responseMessage(response: Response, fallback: string) {
+  try {
+    const body = await response.json() as {message?: string};
+    return body.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function initPPASigning(root: HTMLElement) {
+  const form = root.querySelector<HTMLFormElement>('[data-w3ds-ppa-form]');
+  const apply = form?.querySelector<HTMLButtonElement>('[data-w3ds-ppa-apply]');
+  const dialog = document.getElementById('w3ds-ppa-signing-modal') as HTMLDialogElement | null;
+  const canvas = dialog?.querySelector<HTMLCanvasElement>('[data-w3ds-ppa-qr]');
+  const openWallet = dialog?.querySelector<HTMLAnchorElement>('[data-w3ds-ppa-open]');
+  const signingStatus = dialog?.querySelector<HTMLElement>('[data-w3ds-ppa-signing-status]');
+  if (!form || !apply || !dialog || !canvas || !openWallet || !signingStatus) return;
+
+  let signingStopped = true;
+  const setActive = (active: boolean) => {
+    apply.dataset.signing = String(active);
+    apply.classList.toggle('loading', active);
+    apply.disabled = active || apply.dataset.canEdit !== 'true';
+  };
+  const setSigningStatus = (message: string) => {
+    signingStatus.textContent = message;
+  };
+
+  const pollSigningStatus = async (statusUrl: string) => {
+    if (signingStopped) return;
+    try {
+      const response = await GET(statusUrl, {cache: 'no-store', headers: {accept: 'application/json'}});
+      if (!response.ok) throw new Error(await responseMessage(response, signingStatus.dataset.failed ?? ''));
+      const result = await response.json() as PPASigningStatus;
+      if (result.status === 'completed') {
+        signingStopped = true;
+        setSigningStatus(signingStatus.dataset.complete ?? '');
+        window.setTimeout(() => window.location.assign(result.redirect || window.location.href), 700);
+        return;
+      }
+      if (result.status === 'rejected' || result.status === 'expired') {
+        signingStopped = true;
+        setActive(false);
+        setSigningStatus(result.message || signingStatus.dataset.failed || '');
+        return;
+      }
+    } catch (error) {
+      signingStopped = true;
+      setActive(false);
+      setSigningStatus(error instanceof Error ? error.message : signingStatus.dataset.failed || '');
+      return;
+    }
+    window.setTimeout(() => pollSigningStatus(statusUrl), 2000);
+  };
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (apply.disabled) return;
+
+    signingStopped = false;
+    setActive(true);
+    setSigningStatus(signingStatus.dataset.starting ?? '');
+    canvas.width = 0;
+    canvas.height = 0;
+    openWallet.href = '#';
+    showModal(dialog, () => {});
+    dialog.addEventListener('close', () => {
+      signingStopped = true;
+      setActive(false);
+    }, {once: true});
+
+    try {
+      const response = await POST(form.action, {headers: {accept: 'application/json'}});
+      if (!response.ok) throw new Error(await responseMessage(response, signingStatus.dataset.failed ?? ''));
+      const offer = await response.json() as PPASigningOffer;
+      await toCanvas(canvas, offer.uri, {width: 260, margin: 1, errorCorrectionLevel: 'M'});
+      openWallet.href = offer.uri;
+      setSigningStatus(signingStatus.dataset.waiting ?? '');
+      pollSigningStatus(offer.statusUrl);
+    } catch (error) {
+      signingStopped = true;
+      setActive(false);
+      setSigningStatus(error instanceof Error ? error.message : signingStatus.dataset.failed || '');
+    }
+  });
 }
 
 export function initW3DSPlatformStatus() {
@@ -114,6 +216,8 @@ export function initW3DSPlatformStatus() {
   const interval = Number(root.dataset.w3dsPollInterval) || 5000;
   const checked = root.querySelector<HTMLElement>('[data-w3ds-status-checked]');
   let stopped = false;
+
+  initPPASigning(root);
 
   const refresh = async () => {
     try {

@@ -4,18 +4,31 @@
 package repo
 
 import (
+	gocontext "context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
+	"slices"
 	"strings"
+	"time"
 
 	"forgejo.org/models"
+	auth_model "forgejo.org/models/auth"
+	"forgejo.org/models/db"
+	access_model "forgejo.org/models/perm/access"
 	repo_model "forgejo.org/models/repo"
 	"forgejo.org/models/unit"
+	user_model "forgejo.org/models/user"
+	w3ds_model "forgejo.org/models/w3ds"
 	"forgejo.org/modules/base"
 	"forgejo.org/modules/git"
+	"forgejo.org/modules/gitrepo"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/setting"
+	"forgejo.org/modules/timeutil"
 	"forgejo.org/modules/w3ds"
 	"forgejo.org/modules/web"
 	"forgejo.org/services/context"
@@ -117,6 +130,11 @@ func W3DSUpdate(ctx *context.Context) {
 	updated.LogoURL = form.PlatformLogoURL
 	updated.Domains = append([]string(nil), form.PlatformDomains...)
 	updated.Category = ""
+	if manifest.DisplayName != updated.DisplayName || manifest.Description != updated.Description || manifest.URL != updated.URL || manifest.LogoURL != updated.LogoURL || !slices.Equal(manifest.Domains, updated.Domains) {
+		updated.InSubmission = false
+		updated.SubmissionVersion = ""
+		updated.SubmissionProof = nil
+	}
 	if err := updated.Validate(!setting.IsProd); err != nil {
 		ctx.RenderWithErr(ctx.Tr("platform.create.invalid_manifest", err), tplRepoW3DS, form)
 		return
@@ -171,47 +189,40 @@ func W3DSToggleVisibility(ctx *context.Context) {
 	ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
 }
 
-// W3DSApplyPPA submits the published PlatformProfile for PPA review.
-func W3DSApplyPPA(ctx *context.Context) {
-	form := web.GetForm(ctx).(*forms.PlatformManifestActionForm)
-	if ctx.HasError() {
-		ctx.Flash.Error(ctx.Tr("platform.action.invalid"))
-		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
-		return
-	}
+const ppaSigningLifetime = 15 * time.Minute
+
+// W3DSCreatePPASigningSession starts the documented w3ds://sign flow. The
+// repository is not submitted until the wallet callback is verified.
+func W3DSCreatePPASigningSession(ctx *context.Context) {
 	manifest, err := loadPlatformManifest(ctx)
 	if err != nil {
-		ctx.ServerError("loadPlatformManifest", err)
+		ppaJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.ppa.signing_failed"))
 		return
 	}
 	if manifest == nil {
-		ctx.NotFound("W3DS platform manifest", nil)
+		ppaJSONError(ctx, http.StatusNotFound, ctx.Locale.TrString("platform.repo.setup_help"))
 		return
 	}
 	release, err := loadLatestPlatformRelease(ctx)
 	if err != nil {
-		ctx.ServerError("loadLatestPlatformRelease", err)
+		ppaJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.ppa.signing_failed"))
 		return
 	}
 	if release == nil || release.Version == "" {
-		ctx.Flash.Error(ctx.Tr("platform.ppa.release_missing"))
-		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		ppaJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.ppa.release_missing"))
 		return
 	}
 	if manifest.Version != release.Version {
-		ctx.Flash.Error(ctx.Tr("platform.ppa.release_syncing", release.Tag))
-		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		ppaJSONError(ctx, http.StatusConflict, ctx.Locale.TrString("platform.ppa.release_syncing", release.Tag))
 		return
 	}
 	status := loadPlatformPublicationStatus(ctx)
 	if currentPPADecision(status, release.Version) != nil {
-		ctx.Flash.Success(ctx.Tr("platform.ppa.already_decided", release.Version))
-		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		ppaJSONError(ctx, http.StatusConflict, ctx.Locale.TrString("platform.ppa.already_decided", release.Version))
 		return
 	}
 	if currentPPASubmission(manifest) {
-		ctx.Flash.Success(ctx.Tr("platform.ppa.already_submitted"))
-		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		ppaJSONError(ctx, http.StatusConflict, ctx.Locale.TrString("platform.ppa.already_submitted"))
 		return
 	}
 	eName := ""
@@ -222,36 +233,354 @@ func W3DSApplyPPA(ctx *context.Context) {
 		eName = strings.TrimSpace(status.EName)
 	}
 	if eName == "" || strings.TrimSpace(manifest.URL) == "" {
-		ctx.Flash.Error(ctx.Tr("platform.ppa.requirements_missing"))
-		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		ppaJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.ppa.requirements_missing"))
 		return
 	}
 	catalog, err := preparePlatformDomains(ctx, manifest.Domains)
 	if err != nil {
 		log.Warn("Load W3DS domain ontology for PPA submission from repository %d: %v", ctx.Repo.Repository.ID, err)
-		ctx.Flash.Error(ctx.Tr("platform.domains.unavailable"))
-		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		ppaJSONError(ctx, http.StatusServiceUnavailable, ctx.Locale.TrString("platform.domains.unavailable"))
 		return
 	}
 	if err := w3ds.ValidateSelectedDomains(manifest.Domains, catalog); err != nil {
-		ctx.Flash.Error(ctx.Tr("platform.domains.invalid", err))
-		ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+		ppaJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.domains.invalid", err))
 		return
+	}
+	signerEName, err := w3dsENameForUser(ctx, ctx.Doer)
+	if err != nil {
+		log.Error("Resolve W3DS signer for user %d: %v", ctx.Doer.ID, err)
+		ppaJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.ppa.signing_failed"))
+		return
+	}
+	if signerEName == "" {
+		ppaJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.ppa.wallet_required"))
+		return
+	}
+
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		ppaJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.ppa.signing_failed"))
+		return
+	}
+	now := time.Now().UTC()
+	statement := w3ds.PPASubmissionStatement{
+		Type:             w3ds.PPASubmissionStatementType,
+		SchemaVersion:    1,
+		RepositoryID:     ctx.Repo.Repository.ID,
+		Repository:       ctx.Repo.Repository.FullName(),
+		PlatformEName:    eName,
+		PlatformName:     manifest.PlatformName,
+		ReleaseTag:       release.Tag,
+		Version:          release.Version,
+		ManifestCommitID: ctx.Repo.CommitID,
+		Domains:          append([]string(nil), manifest.Domains...),
+		SignerEName:      signerEName,
+		IssuedAt:         now.Format(time.RFC3339),
+		Nonce:            base64.RawURLEncoding.EncodeToString(nonce),
+	}
+	payload, err := statement.SigningPayload()
+	if err != nil {
+		ppaJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.ppa.signing_failed"))
+		return
+	}
+	statementJSON, err := json.Marshal(statement)
+	if err != nil {
+		ppaJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.ppa.signing_failed"))
+		return
+	}
+	expiresAt := now.Add(ppaSigningLifetime)
+	if err := w3ds_model.CreatePPASigningSession(ctx, &w3ds_model.PPASigningSession{
+		ID:               payload,
+		RepositoryID:     ctx.Repo.Repository.ID,
+		UserID:           ctx.Doer.ID,
+		Version:          release.Version,
+		ReleaseTag:       release.Tag,
+		ManifestCommitID: ctx.Repo.CommitID,
+		Statement:        string(statementJSON),
+		Status:           w3ds_model.PPASigningPending,
+		ExpiresUnix:      timeutil.TimeStamp(expiresAt.Unix()),
+	}); err != nil {
+		log.Error("Create PPA signing session for repository %d: %v", ctx.Repo.Repository.ID, err)
+		ppaJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.ppa.signing_failed"))
+		return
+	}
+
+	callbackURL := strings.TrimRight(setting.AppURL, "/") + "/w3ds/ppa/callback"
+	query := url.Values{}
+	query.Set("session", payload)
+	query.Set("data", base64.StdEncoding.EncodeToString(statementJSON))
+	query.Set("redirect_uri", callbackURL)
+	query.Set("platform_url", setting.AppURL)
+	ctx.JSON(http.StatusCreated, map[string]any{
+		"sessionId": payload,
+		"uri":       "w3ds://sign?" + query.Encode(),
+		"expiresAt": expiresAt.Format(time.RFC3339),
+		"statusUrl": ctx.Repo.Repository.Link() + "/w3ds/ppa/" + url.PathEscape(payload),
+	})
+}
+
+type w3dsWalletCallback struct {
+	SessionID string `json:"sessionId"`
+	Signature string `json:"signature"`
+	W3ID      string `json:"w3id"`
+	EName     string `json:"ename"`
+	Message   string `json:"message"`
+}
+
+// W3DSPPACallback receives the cross-device eID wallet response. It carries no
+// ambient authority: the one-time session, expected signer, repository admin
+// permission, Registry certificate, and wallet signature are all rechecked.
+func W3DSPPACallback(ctx *context.Context) {
+	setW3DSWalletCORS(ctx)
+	if ctx.Req.Method == http.MethodOptions {
+		ctx.Status(http.StatusNoContent)
+		return
+	}
+	ctx.Req.Body = http.MaxBytesReader(ctx.Resp, ctx.Req.Body, 64*1024)
+	var callback w3dsWalletCallback
+	if err := json.NewDecoder(ctx.Req.Body).Decode(&callback); err != nil {
+		ppaJSONError(ctx, http.StatusBadRequest, "Invalid wallet response.")
+		return
+	}
+	callback.SessionID = strings.TrimSpace(callback.SessionID)
+	callback.Signature = strings.TrimSpace(callback.Signature)
+	callback.W3ID = strings.TrimSpace(callback.W3ID)
+	if callback.W3ID == "" {
+		callback.W3ID = strings.TrimSpace(callback.EName)
+	}
+	if callback.SessionID == "" || callback.Signature == "" || callback.W3ID == "" || callback.Message != callback.SessionID {
+		ppaJSONError(ctx, http.StatusBadRequest, "The wallet response is incomplete.")
+		return
+	}
+
+	session, err := w3ds_model.GetPPASigningSession(ctx, callback.SessionID)
+	if err != nil {
+		log.Error("Load PPA signing session: %v", err)
+		ppaJSONError(ctx, http.StatusInternalServerError, "Could not load the signing request.")
+		return
+	}
+	if session == nil || session.Status != w3ds_model.PPASigningPending {
+		ppaJSONError(ctx, http.StatusConflict, "This signing request is unknown, expired, or already used.")
+		return
+	}
+	var statement w3ds.PPASubmissionStatement
+	if err := json.Unmarshal([]byte(session.Statement), &statement); err != nil {
+		finishPPASigningSession(ctx, session.ID, w3ds_model.PPASigningRejected, "invalid_statement")
+		ppaJSONError(ctx, http.StatusInternalServerError, "The stored release statement is invalid.")
+		return
+	}
+	if callback.W3ID != statement.SignerEName {
+		ppaJSONError(ctx, http.StatusForbidden, "Use the eID wallet connected to the GitW3 owner or administrator who started this request.")
+		return
+	}
+
+	httpClient := &http.Client{Timeout: setting.PlatformManifestSync.SignatureTimeout}
+	verification, err := w3ds.VerifyWalletSignature(ctx, httpClient, setting.PlatformManifestSync.RegistryURL, callback.W3ID, callback.Signature, callback.SessionID)
+	if err != nil {
+		claimed, claimErr := w3ds_model.ClaimPPASigningSession(ctx, session.ID)
+		if claimErr != nil {
+			log.Error("Claim failed PPA signing session: %v", claimErr)
+		}
+		if claimed {
+			finishPPASigningSession(ctx, session.ID, w3ds_model.PPASigningRejected, "verification_unavailable")
+		}
+		log.Warn("Verify PPA wallet signature for repository %d: %v", session.RepositoryID, err)
+		ppaJSONError(ctx, http.StatusBadGateway, "GitW3 could not verify this wallet signature. Start a new signing request and try again.")
+		return
+	}
+	if !verification.Valid {
+		claimed, _ := w3ds_model.ClaimPPASigningSession(ctx, session.ID)
+		if claimed {
+			finishPPASigningSession(ctx, session.ID, w3ds_model.PPASigningRejected, "invalid_signature")
+		}
+		ppaJSONError(ctx, http.StatusUnauthorized, "The wallet signature is not valid.")
+		return
+	}
+	claimed, err := w3ds_model.ClaimPPASigningSession(ctx, session.ID)
+	if err != nil {
+		ppaJSONError(ctx, http.StatusInternalServerError, "Could not claim the signing request.")
+		return
+	}
+	if !claimed {
+		ppaJSONError(ctx, http.StatusConflict, "This signing request is expired or already used.")
+		return
+	}
+	if err := completePPASubmission(ctx, session, &statement, callback.Signature, verification); err != nil {
+		log.Warn("Complete signed PPA submission for repository %d: %v", session.RepositoryID, err)
+		finishPPASigningSession(ctx, session.ID, w3ds_model.PPASigningRejected, "repository_changed")
+		ppaJSONError(ctx, http.StatusConflict, "The repository or release changed while you were signing. Start a new request so you can review the current statement.")
+		return
+	}
+	if err := w3ds_model.FinishPPASigningSession(ctx, session.ID, w3ds_model.PPASigningCompleted, ""); err != nil {
+		log.Error("Finish PPA signing session %q: %v", session.ID, err)
+	}
+	ctx.JSON(http.StatusOK, map[string]bool{"ok": true})
+}
+
+// W3DSPPASigningStatus lets the originating repository page follow a
+// cross-device wallet callback without granting access to other users.
+func W3DSPPASigningStatus(ctx *context.Context) {
+	session, err := w3ds_model.GetPPASigningSession(ctx, ctx.Params("session"))
+	if err != nil {
+		ppaJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.ppa.signing_failed"))
+		return
+	}
+	if session == nil || session.RepositoryID != ctx.Repo.Repository.ID || session.UserID != ctx.Doer.ID {
+		ppaJSONError(ctx, http.StatusNotFound, ctx.Locale.TrString("platform.ppa.signing_unknown"))
+		return
+	}
+	response := map[string]any{"status": session.Status}
+	if session.Status == w3ds_model.PPASigningCompleted {
+		response["redirect"] = ctx.Repo.Repository.Link() + "/w3ds"
+	}
+	if session.Status == w3ds_model.PPASigningRejected || session.Status == w3ds_model.PPASigningExpired {
+		response["message"] = ctx.Locale.TrString("platform.ppa.signing_restart")
+	}
+	ctx.JSON(http.StatusOK, response)
+}
+
+func completePPASubmission(ctx gocontext.Context, session *w3ds_model.PPASigningSession, statement *w3ds.PPASubmissionStatement, signature string, verification *w3ds.SignatureVerification) error {
+	repository, err := repo_model.GetRepositoryByID(ctx, session.RepositoryID)
+	if err != nil {
+		return err
+	}
+	user, err := user_model.GetUserByID(ctx, session.UserID)
+	if err != nil {
+		return err
+	}
+	permission, err := access_model.GetUserRepoPermission(ctx, repository, user)
+	if err != nil {
+		return err
+	}
+	if !permission.IsAdmin() || repository.IsArchived {
+		return errors.New("signer is no longer a repository administrator")
+	}
+	expectedEName, err := w3dsENameForUser(ctx, user)
+	if err != nil || expectedEName == "" || expectedEName != statement.SignerEName {
+		return errors.New("signer is no longer connected to the expected W3DS identity")
+	}
+
+	manifest, commitID, err := loadPlatformManifestForRepository(ctx, repository)
+	if err != nil {
+		return err
+	}
+	if manifest == nil || commitID != session.ManifestCommitID {
+		return errors.New("platform manifest changed during signing")
+	}
+	release, err := repo_model.GetLatestReleaseByRepoID(ctx, repository.ID)
+	if err != nil {
+		return err
+	}
+	version, valid := w3ds.NormalizeReleaseVersion(release.TagName)
+	if !valid || release.TagName != session.ReleaseTag || version != session.Version || manifest.Version != version {
+		return errors.New("platform release changed during signing")
+	}
+	if currentPPASubmission(manifest) {
+		return errors.New("platform release is already submitted")
+	}
+	if manifest.EName == nil || *manifest.EName != statement.PlatformEName || manifest.PlatformName != statement.PlatformName || !slices.Equal(manifest.Domains, statement.Domains) {
+		return errors.New("signed statement no longer matches the platform manifest")
+	}
+	payload, err := statement.SigningPayload()
+	if err != nil || payload != session.ID {
+		return errors.New("signed statement payload does not match the session")
 	}
 
 	updated := *manifest
-	updated.EName = &eName
 	updated.InSubmission = true
-	updated.SubmissionVersion = release.Version
-	if err := commitPlatformManifest(ctx, &updated, form.LastCommitID, "chore: submit PPA application"); err != nil {
-		redirectPlatformActionError(ctx, err)
-		return
+	updated.SubmissionVersion = version
+	updated.SubmissionProof = &w3ds.PPASubmissionProof{
+		Statement:             *statement,
+		Payload:               session.ID,
+		Signature:             signature,
+		PublicKey:             verification.PublicKey,
+		KeyBindingCertificate: verification.KeyBindingCertificate,
+		VerifiedAt:            time.Now().UTC().Format(time.RFC3339),
 	}
-	ctx.Flash.Success(ctx.Tr("platform.ppa.submitted_help"))
-	ctx.Redirect(ctx.Repo.Repository.Link() + "/w3ds")
+	return commitPlatformManifestForUser(ctx, repository, user, &updated, commitID, "chore: submit signed PPA application")
+}
+
+func loadPlatformManifestForRepository(ctx gocontext.Context, repository *repo_model.Repository) (*w3ds.PlatformManifest, string, error) {
+	gitRepository, err := gitrepo.OpenRepository(ctx, repository)
+	if err != nil {
+		return nil, "", err
+	}
+	defer gitRepository.Close()
+	commit, err := gitRepository.GetBranchCommit(repository.DefaultBranch)
+	if err != nil {
+		return nil, "", err
+	}
+	content, err := commit.GetFileContent(w3ds.PlatformManifestPath, 64*1024)
+	if git.IsErrNotExist(err) {
+		return nil, commit.ID.String(), nil
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	var manifest w3ds.PlatformManifest
+	if err := json.Unmarshal([]byte(content), &manifest); err != nil {
+		return nil, "", err
+	}
+	return &manifest, commit.ID.String(), nil
+}
+
+func w3dsENameForUser(ctx gocontext.Context, user *user_model.User) (string, error) {
+	if user == nil {
+		return "", nil
+	}
+	source, err := auth_model.GetActiveOAuth2SourceByName(ctx, "W3DS")
+	if err != nil {
+		return "", nil
+	}
+	links, err := db.Find[user_model.ExternalLoginUser](ctx, user_model.FindExternalUserOptions{UserID: user.ID})
+	if err != nil {
+		return "", err
+	}
+	for _, link := range links {
+		if link.LoginSourceID == source.ID && strings.TrimSpace(link.ExternalID) != "" {
+			return normalizeW3DSEName(link.ExternalID), nil
+		}
+	}
+	if user.LoginSource == source.ID {
+		return normalizeW3DSEName(user.Name), nil
+	}
+	return "", nil
+}
+
+func normalizeW3DSEName(value string) string {
+	value = strings.TrimSpace(value)
+	if value != "" && !strings.HasPrefix(value, "@") {
+		return "@" + value
+	}
+	return value
+}
+
+func finishPPASigningSession(ctx gocontext.Context, id, status, failure string) {
+	if err := w3ds_model.FinishPPASigningSession(ctx, id, status, failure); err != nil {
+		log.Error("Finish PPA signing session %q: %v", id, err)
+	}
+}
+
+func ppaJSONError(ctx *context.Context, status int, message string) {
+	ctx.JSON(status, map[string]string{"message": message})
+}
+
+func setW3DSWalletCORS(ctx *context.Context) {
+	origin := ctx.Req.Header.Get("Origin")
+	if origin != "" {
+		ctx.Resp.Header().Set("Access-Control-Allow-Origin", origin)
+		ctx.Resp.Header().Set("Vary", "Origin")
+	}
+	ctx.Resp.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	ctx.Resp.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	ctx.Resp.Header().Set("Access-Control-Max-Age", "600")
 }
 
 func commitPlatformManifest(ctx *context.Context, manifest *w3ds.PlatformManifest, lastCommitID, message string) error {
+	return commitPlatformManifestForUser(ctx, ctx.Repo.Repository, ctx.Doer, manifest, lastCommitID, message)
+}
+
+func commitPlatformManifestForUser(ctx gocontext.Context, repository *repo_model.Repository, user *user_model.User, manifest *w3ds.PlatformManifest, lastCommitID, message string) error {
 	if err := manifest.Validate(!setting.IsProd); err != nil {
 		return err
 	}
@@ -259,10 +588,10 @@ func commitPlatformManifest(ctx *context.Context, manifest *w3ds.PlatformManifes
 	if err != nil {
 		return err
 	}
-	_, err = files_service.ChangeRepoFiles(ctx, ctx.Repo.Repository, ctx.Doer, &files_service.ChangeRepoFilesOptions{
+	_, err = files_service.ChangeRepoFiles(ctx, repository, user, &files_service.ChangeRepoFilesOptions{
 		LastCommitID: lastCommitID,
-		OldBranch:    ctx.Repo.Repository.DefaultBranch,
-		NewBranch:    ctx.Repo.Repository.DefaultBranch,
+		OldBranch:    repository.DefaultBranch,
+		NewBranch:    repository.DefaultBranch,
 		Message:      message,
 		Files: []*files_service.ChangeRepoFile{{
 			Operation:     "update",
@@ -303,6 +632,14 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 	}
 	canEdit := ctx.Repo.CanWrite(unit.TypeCode) && !ctx.Repo.Repository.IsArchived
 	ctx.Data["CanEditW3DS"] = canEdit
+	canAdmin := ctx.Repo.IsAdmin() && !ctx.Repo.Repository.IsArchived
+	walletEName, walletErr := w3dsENameForUser(ctx, ctx.Doer)
+	if walletErr != nil {
+		log.Warn("Resolve W3DS wallet identity for user on repository %d: %v", ctx.Repo.Repository.ID, walletErr)
+	}
+	ctx.Data["CanAdminW3DS"] = canAdmin
+	ctx.Data["PPAWalletEName"] = walletEName
+	ctx.Data["PPAWalletReady"] = canAdmin && walletEName != ""
 	ctx.Data["PlatformLastCommitID"] = ctx.Repo.CommitID
 	if manifest == nil {
 		return catalog
@@ -332,7 +669,7 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 	ctx.Data["PlatformEName"] = eName
 	ctx.Data["PlatformIdentityReady"] = eName != ""
 	ctx.Data["PPARequirementsReady"] = eName != "" && strings.TrimSpace(manifest.URL) != "" && domainsReady && releaseSynced
-	ctx.Data["CanApplyPPA"] = canEdit && publication.PPAStatus == "ready"
+	ctx.Data["CanApplyPPA"] = canAdmin && walletEName != "" && publication.PPAStatus == "ready"
 	return catalog
 }
 

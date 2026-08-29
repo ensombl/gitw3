@@ -147,19 +147,35 @@
 						<li data-w3ds-ppa-domains>{{if $publication.Domains.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.domains"}}</span> <span class="ui {{if $publication.Domains.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Domains.Label}}</span></li>
 						<li data-w3ds-ppa-identity>{{if .PlatformIdentityReady}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.identity"}}</span> <span class="ui {{if .PlatformIdentityReady}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
 						<li data-w3ds-ppa-application>{{if $manifest.URL}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.deployment"}}</span> <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
+						<li>{{if .PPAWalletReady}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.wallet"}}</span> <span class="ui {{if .PPAWalletReady}}green{{else}}grey{{end}} label">{{if .PPAWalletReady}}{{.PPAWalletEName}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
 					</ul>
-					{{if .CanEditW3DS}}
-						<form class="w3ds-ppa-apply" action="{{.RepoLink}}/w3ds/ppa" method="post">
+					{{if .CanAdminW3DS}}
+						<form class="w3ds-ppa-apply" data-w3ds-ppa-form action="{{.RepoLink}}/w3ds/ppa" method="post">
 							<input type="hidden" name="last_commit_id" value="{{$lastCommitID}}">
-							<button type="submit" class="ui {{if eq $publication.PPAStatus "denied"}}negative{{else if or (eq $publication.PPAStatus "submitted") (eq $publication.PPAStatus "granted")}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="true" {{if not .CanApplyPPA}}disabled{{end}}>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
-							<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{$publication.PPAMessage}}</span>
+							<button type="submit" class="ui {{if eq $publication.PPAStatus "denied"}}negative{{else if or (eq $publication.PPAStatus "submitted") (eq $publication.PPAStatus "granted")}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="{{if .PPAWalletReady}}true{{else}}false{{end}}" {{if not .CanApplyPPA}}disabled{{end}}>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
+							<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if and (eq $publication.PPAStatus "ready") (not .PPAWalletReady)}}{{ctx.Locale.Tr "platform.ppa.wallet_required"}}{{else}}{{$publication.PPAMessage}}{{end}}</span>
 						</form>
 					{{else}}
 						<button type="button" class="ui {{if eq $publication.PPAStatus "denied"}}negative{{else if or (eq $publication.PPAStatus "submitted") (eq $publication.PPAStatus "granted")}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="false" disabled>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
-						<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if eq $publication.PPAStatus "ready"}}{{ctx.Locale.Tr "platform.ppa.write_help"}}{{else}}{{$publication.PPAMessage}}{{end}}</span>
+						<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if eq $publication.PPAStatus "ready"}}{{ctx.Locale.Tr "platform.ppa.admin_required"}}{{else}}{{$publication.PPAMessage}}{{end}}</span>
 					{{end}}
 				</div>
 			</section>
+
+			{{if .CanAdminW3DS}}
+				<dialog id="w3ds-ppa-signing-modal">
+					<article>
+						<header>{{ctx.Locale.Tr "platform.ppa.signing_title"}}</header>
+						<div class="content w3ds-ppa-signing-content">
+							<p>{{ctx.Locale.Tr "platform.ppa.signing_help" .PPAWalletEName}}</p>
+							<div class="w3ds-ppa-signing-qr"><canvas data-w3ds-ppa-qr aria-label="{{ctx.Locale.Tr "platform.ppa.signing_qr"}}"></canvas></div>
+							<a class="ui primary button" data-w3ds-ppa-open href="#">{{svg "octicon-device-mobile"}} {{ctx.Locale.Tr "platform.ppa.signing_open"}}</a>
+							<p class="w3ds-ppa-signing-status" data-w3ds-ppa-signing-status data-starting="{{ctx.Locale.Tr "platform.ppa.signing_starting"}}" data-waiting="{{ctx.Locale.Tr "platform.ppa.signing_waiting"}}" data-complete="{{ctx.Locale.Tr "platform.ppa.signing_complete"}}" data-failed="{{ctx.Locale.Tr "platform.ppa.signing_failed"}}" aria-live="polite"></p>
+						</div>
+						<footer><button type="button" class="ui cancel button">{{ctx.Locale.Tr "cancel"}}</button></footer>
+					</article>
+				</dialog>
+			{{end}}
 		{{else}}
 			<div class="w3ds-empty-state">
 				{{svg "octicon-shield-check" 48}}

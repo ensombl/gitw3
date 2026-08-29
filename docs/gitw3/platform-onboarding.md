@@ -48,6 +48,14 @@ readable, but must select ontology domains before applying for PPA.
 Tags such as `v1.2.3` are normalized to `1.2.3`. PPA state is scoped by `submissionVersion`; every newer
 release clears the previous submission so the new version must be reviewed and submitted explicitly.
 
+Each PPA application must be approved by a repository or organization owner/admin using the eID wallet
+connected to their GitW3 W3DS login. GitW3 creates a 15-minute, single-use `w3ds://sign` request, resolves
+the signer's eVault through the production Registry, validates the Registry key-binding certificate, and
+verifies the P-256 wallet signature. Only then does it commit `inSubmission: true`. The same manifest
+contains `submissionProof`: the exact release statement, domains, repository commit, signer eName,
+signature, public key, Registry certificate, and verification time. The publisher stores that proof with
+the PlatformProfile in the platform's own eVault, so the review record is bound to the submitted release.
+
 The generated-key option creates an ECDSA P-256 key in the browser. Only the public SPKI key reaches
 GitW3. The PKCS#8 private key is delivered in a one-time JSON download and is never stored by GitW3 or
 the publisher.
@@ -117,11 +125,13 @@ ENABLED = true
 URL = http://platform-manifest-sync:8090
 INTERNAL_TOKEN = <same value as PLATFORM_SYNC_INTERNAL_TOKEN>
 ONTOLOGY_URL = https://ontology.w3ds.metastate.foundation
+REGISTRY_URL = https://registry.w3ds.metastate.foundation
 TIMEOUT = 2s
+SIGNATURE_TIMEOUT = 10s
 ```
 
 The equivalent container variables are `GITEA__platform_manifest_sync__ENABLED`, `URL`,
-`INTERNAL_TOKEN`, `ONTOLOGY_URL`, and `TIMEOUT`.
+`INTERNAL_TOKEN`, `ONTOLOGY_URL`, `REGISTRY_URL`, `TIMEOUT`, and `SIGNATURE_TIMEOUT`.
 
 ## Failure behavior
 
