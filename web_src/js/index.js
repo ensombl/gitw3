@@ -92,6 +92,7 @@ import {initRepoMilestoneEditor} from './features/repo-milestone.js';
 import {initModalClose} from './modules/modal.ts';
 import {initAuthorizedIntegrationClaimRuleEditor} from './features/authorized-integration.js';
 import {initPlatformOnboarding} from './features/platform-onboarding.ts';
+import {initW3DSPlatformStatus} from './features/w3ds-platform-status.ts';
 
 // Init Gitea's Fomantic settings
 initGiteaFomantic();
@@ -199,6 +200,7 @@ onDomReady(() => {
   initModalClose();
   initAuthorizedIntegrationClaimRuleEditor();
   initPlatformOnboarding();
+  initW3DSPlatformStatus();
 
   // Deactivate CSS-only noJS usability supplements
   document.body.classList.remove('no-js');

@@ -31,6 +31,12 @@
   background: var(--color-box-body);
 }
 
+.w3ds-status-checked {
+  margin: 0.5rem 0 0;
+  color: var(--color-text-light-2);
+  font-size: 0.85rem;
+}
+
 .w3ds-guide {
   display: grid;
   gap: 1rem;

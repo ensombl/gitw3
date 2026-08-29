@@ -19,6 +19,23 @@ import (
 
 const tplRepoW3DS base.TplName = "repo/w3ds"
 
+type w3dsGuideStep struct {
+	Ready   bool   `json:"ready"`
+	Label   string `json:"label"`
+	Message string `json:"message"`
+}
+
+type w3dsPublicationView struct {
+	Status      string        `json:"status"`
+	Tone        string        `json:"tone"`
+	Title       string        `json:"title"`
+	Message     string        `json:"message"`
+	EName       string        `json:"ename"`
+	LastError   string        `json:"lastError,omitempty"`
+	Identity    w3dsGuideStep `json:"identity"`
+	Marketplace w3dsGuideStep `json:"marketplace"`
+}
+
 // W3DS renders the repository's W3DS platform workspace.
 func W3DS(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("platform.repo.title")
@@ -47,6 +64,77 @@ func W3DS(ctx *context.Context) {
 	}
 
 	ctx.HTML(http.StatusOK, tplRepoW3DS)
+}
+
+// W3DSStatus returns the current publication state for the repository workspace.
+func W3DSStatus(ctx *context.Context) {
+	manifest, err := loadPlatformManifest(ctx)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, map[string]string{"message": ctx.Locale.TrString("platform.status.refresh_failed")})
+		return
+	}
+	if manifest == nil {
+		ctx.JSON(http.StatusNotFound, map[string]string{"message": ctx.Locale.TrString("platform.repo.setup_help")})
+		return
+	}
+	status := loadPlatformPublicationStatus(ctx)
+	eName := strings.TrimSpace(status.EName)
+	if eName == "" && manifest.EName != nil {
+		eName = strings.TrimSpace(*manifest.EName)
+	}
+	ctx.JSON(http.StatusOK, newW3DSPublicationView(ctx, status, eName))
+}
+
+func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus, eName string) w3dsPublicationView {
+	view := w3dsPublicationView{
+		Status: status.Status,
+		Tone:   "info",
+		EName:  eName,
+	}
+	switch status.Status {
+	case "published":
+		view.Tone = "positive"
+		view.Title = ctx.Locale.TrString("platform.status.published")
+		view.Message = ctx.Locale.TrString("platform.status.published_help", eName)
+	case "failed":
+		view.Tone = "warning"
+		view.Title = ctx.Locale.TrString("platform.status.failed")
+		view.Message = ctx.Locale.TrString("platform.status.failed_help")
+		if ctx.Repo.IsAdmin() {
+			view.LastError = status.LastError
+		}
+	case "archived":
+		view.Tone = "warning"
+		view.Title = ctx.Locale.TrString("platform.status.archived")
+	case "publishing":
+		view.Title = ctx.Locale.TrString("platform.status.publishing")
+		view.Message = ctx.Locale.TrString("platform.status.pending_help")
+	case "unavailable":
+		view.Title = ctx.Locale.TrString("platform.status.unavailable")
+		view.Message = ctx.Locale.TrString("platform.status.unavailable_help")
+	default:
+		view.Status = "identity_pending"
+		view.Title = ctx.Locale.TrString("platform.status.identity_pending")
+		view.Message = ctx.Locale.TrString("platform.status.pending_help")
+	}
+
+	view.Identity.Ready = eName != ""
+	if view.Identity.Ready {
+		view.Identity.Label = ctx.Locale.TrString("platform.repo.ready")
+		view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_ready", eName)
+	} else {
+		view.Identity.Label = ctx.Locale.TrString("platform.repo.automatic")
+		view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_pending")
+	}
+	view.Marketplace.Ready = status.Status == "published"
+	if view.Marketplace.Ready {
+		view.Marketplace.Label = ctx.Locale.TrString("platform.repo.ready")
+		view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_ready")
+	} else {
+		view.Marketplace.Label = ctx.Locale.TrString("platform.repo.waiting")
+		view.Marketplace.Message = ctx.Locale.TrString("platform.repo.step_marketplace_pending")
+	}
+	return view
 }
 
 func loadPlatformManifest(ctx *context.Context) (*w3ds.PlatformManifest, error) {

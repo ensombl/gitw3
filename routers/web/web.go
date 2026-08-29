@@ -1686,6 +1686,7 @@ func registerRoutes(m *web.Route) {
 
 		m.Group("/w3ds", func() {
 			m.Get("", repo.W3DS)
+			m.Get("/status", repo.W3DSStatus)
 		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
 
 		m.Group("/activity_author_data", func() {
