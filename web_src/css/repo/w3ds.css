@@ -4,6 +4,7 @@
 }
 
 .w3ds-tab-status {
+  display: inline-block;
   width: 0.65rem;
   height: 0.65rem;
   flex: 0 0 auto;
