@@ -13,24 +13,24 @@
 								<p>{{ctx.Locale.TrN .MaxCreationLimit "repo.form.reach_limit_of_creation_1" "repo.form.reach_limit_of_creation_n" .MaxCreationLimit}}</p>
 							</div>
 						{{end}}
-						<div class="ui ordered fluid steps tw-mb-4">
-							<div class="active step" data-platform-step-indicator="1"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.create.repo_step"}}</div></div></div>
-							<div class="step" data-platform-step-indicator="2"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.create.profile_step"}}</div></div></div>
-							<div class="step" data-platform-step-indicator="3"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.create.identity_step"}}</div></div></div>
-							<div class="step" data-platform-step-indicator="4"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.create.ai_step"}}</div></div></div>
-						</div>
+						<ol class="platform-wizard-steps" aria-label="{{ctx.Locale.Tr "platform.create.title"}}">
+							<li class="platform-wizard-step active" data-platform-step-indicator="1"><span class="platform-wizard-step-number">1</span><span>{{ctx.Locale.Tr "platform.create.repo_step"}}</span></li>
+							<li class="platform-wizard-step" data-platform-step-indicator="2"><span class="platform-wizard-step-number">2</span><span>{{ctx.Locale.Tr "platform.create.profile_step"}}</span></li>
+							<li class="platform-wizard-step" data-platform-step-indicator="3"><span class="platform-wizard-step-number">3</span><span>{{ctx.Locale.Tr "platform.create.identity_step"}}</span></li>
+							<li class="platform-wizard-step" data-platform-step-indicator="4"><span class="platform-wizard-step-number">4</span><span>{{ctx.Locale.Tr "platform.create.ai_step"}}</span></li>
+						</ol>
 
-						<section data-platform-step="1">
-							<h3>{{ctx.Locale.Tr "platform.create.repo_heading"}}</h3>
+						<fieldset class="platform-wizard-panel" data-platform-step="1">
+							<legend>{{ctx.Locale.Tr "platform.create.repo_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.create.repo_help"}}</p>
 							{{template "repo/create_platform_basic" .}}
 							<label>{{ctx.Locale.Tr "repo.default_branch"}}<input name="default_branch" value="{{.default_branch}}" required></label>
 							<input type="hidden" name="readme" value="Default">
 							<input type="hidden" name="object_format_name" value="{{.DefaultObjectFormat.Name}}">
-						</section>
+						</fieldset>
 
-						<section data-platform-step="2">
-							<h3>{{ctx.Locale.Tr "platform.create.profile_heading"}}</h3>
+						<fieldset class="platform-wizard-panel tw-hidden" data-platform-step="2" hidden>
+							<legend>{{ctx.Locale.Tr "platform.create.profile_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.create.profile_help"}}</p>
 							<div class="two fields">
 								<label class="field">{{ctx.Locale.Tr "platform.create.display_name"}}<input name="platform_display_name" value="{{.platform_display_name}}" required maxlength="100"></label>
@@ -49,10 +49,10 @@
 							</div>
 							<label>{{ctx.Locale.Tr "platform.create.url"}}<input name="platform_url" value="{{.platform_url}}" type="url" required placeholder="https://my-platform.example"></label>
 							<label>{{ctx.Locale.Tr "platform.create.logo_url"}}<input name="platform_logo_url" value="{{.platform_logo_url}}" type="url" placeholder="https://my-platform.example/logo.png"></label>
-						</section>
+						</fieldset>
 
-						<section data-platform-step="3">
-							<h3>{{ctx.Locale.Tr "platform.create.identity_heading"}}</h3>
+						<fieldset class="platform-wizard-panel tw-hidden" data-platform-step="3" hidden>
+							<legend>{{ctx.Locale.Tr "platform.create.identity_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.create.identity_help"}}</p>
 							<div class="grouped fields">
 								<label><input type="radio" name="platform_key_mode" value="generate" checked> {{ctx.Locale.Tr "platform.create.generate_key"}}</label>
@@ -63,14 +63,14 @@
 								<div class="ui warning message tw-mt-3">{{ctx.Locale.Tr "platform.create.key_warning"}}</div>
 								<label><input id="platform-key-saved" type="checkbox"> {{ctx.Locale.Tr "platform.create.key_saved"}}</label>
 							</div>
-							<div data-platform-pasted-key hidden>
+							<div class="tw-hidden" data-platform-pasted-key hidden>
 								<label>{{ctx.Locale.Tr "platform.create.public_key"}}<textarea id="platform-public-key-paste" rows="3" placeholder="z..." maxlength="8192"></textarea></label>
 							</div>
 							<input id="platform-public-key" type="hidden" name="platform_public_key" value="{{.platform_public_key}}">
-						</section>
+						</fieldset>
 
-						<section data-platform-step="4">
-							<h3>{{ctx.Locale.Tr "platform.create.ai_heading"}}</h3>
+						<fieldset class="platform-wizard-panel tw-hidden" data-platform-step="4" hidden>
+							<legend>{{ctx.Locale.Tr "platform.create.ai_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.create.ai_help"}}</p>
 							<div class="grouped fields">
 								<label><input type="radio" name="use_ai_tooling" value="true" checked> {{ctx.Locale.Tr "platform.create.ai_yes"}}</label>
@@ -82,12 +82,12 @@
 								<div class="ui action input fluid"><input readonly value="npx skills add MetaState-Prototype-Project/prototype@w3ds"><button type="button" class="ui button" data-clipboard-text="npx skills add MetaState-Prototype-Project/prototype@w3ds">{{ctx.Locale.Tr "copy"}}</button></div>
 							</div>
 							<div class="ui positive message"><div class="header">{{ctx.Locale.Tr "platform.create.ready_title"}}</div><p>{{ctx.Locale.Tr "platform.create.ready_help"}}</p></div>
-						</section>
+						</fieldset>
 
-						<div class="tw-flex tw-justify-between tw-mt-4">
-							<button id="platform-step-back" class="ui button" type="button" hidden>{{ctx.Locale.Tr "platform.create.back"}}</button>
-							<button id="platform-step-next" class="ui primary button" type="button">{{ctx.Locale.Tr "platform.create.next"}}</button>
-							<button id="platform-create-submit" class="ui primary button" type="submit" hidden>{{ctx.Locale.Tr "platform.create.submit"}}</button>
+						<div class="platform-wizard-actions tw-flex tw-items-center tw-mt-4">
+							<button id="platform-step-back" class="ui button tw-hidden" type="button" hidden>{{ctx.Locale.Tr "platform.create.back"}}</button>
+							<button id="platform-step-next" class="ui primary button tw-ml-auto" type="button">{{ctx.Locale.Tr "platform.create.next"}}</button>
+							<button id="platform-create-submit" class="ui primary button tw-ml-auto tw-hidden" type="submit" hidden>{{ctx.Locale.Tr "platform.create.submit"}}</button>
 						</div>
 					{{else}}
 						<div class="ui negative message">{{ctx.Locale.Tr "repo.form.cannot_create"}}</div>

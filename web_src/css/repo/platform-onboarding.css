@@ -1,0 +1,96 @@
+.platform-wizard-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.platform-wizard-step {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-light-2);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+}
+
+.platform-wizard-step:not(:last-child)::after {
+  position: absolute;
+  z-index: 0;
+  top: 1rem;
+  inset-inline: calc(50% + 1.5rem) calc(-50% + 1.5rem);
+  height: 2px;
+  background: var(--color-secondary);
+  content: "";
+}
+
+.platform-wizard-step-number {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 2px solid var(--color-secondary-dark-2);
+  border-radius: 9999px;
+  background: var(--color-box-body);
+}
+
+.platform-wizard-step.active,
+.platform-wizard-step.completed {
+  color: var(--color-text);
+}
+
+.platform-wizard-step.active .platform-wizard-step-number,
+.platform-wizard-step.completed .platform-wizard-step-number {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.platform-wizard-step.completed:not(:last-child)::after {
+  background: var(--color-primary);
+}
+
+.platform-wizard-panel {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.platform-wizard-panel + .platform-wizard-panel > legend,
+.platform-wizard-panel > legend {
+  width: 100%;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  border: 0;
+  color: var(--color-text);
+  font-size: 1.35rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.platform-wizard-panel > p {
+  margin: 0 0 1.5rem;
+  color: var(--color-text-light-1);
+}
+
+.platform-wizard-actions {
+  min-height: 2.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-secondary);
+}
+
+@media (max-width: 600px) {
+  .platform-wizard-step {
+    font-size: 0.85rem;
+  }
+
+  .platform-wizard-step:not(:last-child)::after {
+    inset-inline: calc(50% + 1.25rem) calc(-50% + 1.25rem);
+  }
+}

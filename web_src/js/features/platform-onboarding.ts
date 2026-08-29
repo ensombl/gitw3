@@ -40,15 +40,20 @@ export function initPlatformOnboarding() {
   const submit = form.querySelector<HTMLButtonElement>('#platform-create-submit')!;
   let current = 0;
 
+  const setHidden = (element: HTMLElement, hidden: boolean) => {
+    element.hidden = hidden;
+    element.classList.toggle('tw-hidden', hidden);
+  };
+
   const showStep = () => {
-    for (const [index, step] of steps.entries()) step.hidden = index !== current;
+    for (const [index, step] of steps.entries()) setHidden(step, index !== current);
     for (const [index, indicator] of indicators.entries()) {
       indicator.classList.toggle('active', index === current);
       indicator.classList.toggle('completed', index < current);
     }
-    back.hidden = current === 0;
-    next.hidden = current === steps.length - 1;
-    submit.hidden = current !== steps.length - 1;
+    setHidden(back, current === 0);
+    setHidden(next, current === steps.length - 1);
+    setHidden(submit, current !== steps.length - 1);
   };
 
   const currentStepIsValid = () => {
@@ -106,8 +111,8 @@ export function initPlatformOnboarding() {
   for (const radio of form.querySelectorAll<HTMLInputElement>('input[name="platform_key_mode"]')) {
     radio.addEventListener('change', () => {
       const generate = radio.checked && radio.value === 'generate';
-      generated.hidden = !generate;
-      pasted.hidden = generate;
+      setHidden(generated, !generate);
+      setHidden(pasted, generate);
     });
   }
 
@@ -130,7 +135,7 @@ export function initPlatformOnboarding() {
 
   const aiInstall = form.querySelector<HTMLElement>('[data-platform-ai-install]')!;
   for (const radio of form.querySelectorAll<HTMLInputElement>('input[name="use_ai_tooling"]')) {
-    radio.addEventListener('change', () => aiInstall.hidden = radio.checked && radio.value === 'false');
+    radio.addEventListener('change', () => setHidden(aiInstall, radio.checked && radio.value === 'false'));
   }
 
   showStep();

@@ -32,6 +32,10 @@ import (
 func assertPlatformCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.User) {
 	form := htmlDoc.doc.Find("form#platform-onboarding-form[action='/repo/create/new']")
 	assert.Equal(t, 1, form.Length(), "Expected the guided platform creation form")
+	assert.Equal(t, 4, form.Find(".platform-wizard-step").Length(), "Expected four wizard steps")
+	assert.Equal(t, 3, form.Find("[data-platform-step].tw-hidden").Length(), "Expected only the first wizard panel to be visible")
+	assert.Equal(t, 1, form.Find("#platform-step-back.tw-hidden").Length(), "Expected the back button to start hidden")
+	assert.Equal(t, 1, form.Find("#platform-create-submit.tw-hidden").Length(), "Expected the submit button to start hidden")
 	htmlDoc.AssertDropdownHasSelectedOption(t, "uid", strconv.FormatInt(owner.ID, 10))
 	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_url", "platform_public_key"} {
 		assert.Equal(t, 1, form.Find(fmt.Sprintf("[name='%s']", name)).Length(), "missing %s", name)
