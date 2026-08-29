@@ -1,4 +1,4 @@
-{{if or .OAuth2Providers .EnableOpenIDSignIn}}
+{{if or .ShowW3DSLogin .OAuth2Providers .EnableOpenIDSignIn}}
 {{if or (and .PageIsSignUp (not .DisableRegistration)) (and .PageIsSignIn .EnableInternalSignIn)}}
 	<div class="divider divider-text">
 		{{ctx.Locale.Tr "sign_in_or"}}
@@ -7,11 +7,26 @@
 <div id="oauth2-login-navigator" class="tw-py-1">
 	<div class="tw-flex tw-flex-col tw-justify-center">
 		<div id="oauth2-login-navigator-inner" class="tw-flex tw-flex-col tw-flex-wrap tw-items-center tw-gap-2">
+			{{if .ShowW3DSLogin}}
+				<a id="w3ds-login-button" class="w3ds-login-button ui button tw-flex tw-items-center tw-justify-center tw-py-2 tw-w-full" href="{{AppSubUrl}}/user/login/w3ds">
+					<svg class="tw-mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 162 162" width="28" height="28" fill="none" aria-hidden="true">
+						<rect width="162" height="162" rx="32" fill="#8968ff"/>
+						<g stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M81 34 116 51v34c0 23-15 39-35 45-20-6-35-22-35-45V51Z"/>
+							<circle cx="81" cy="72" r="13"/>
+							<path d="M81 85v22M81 99h12"/>
+						</g>
+					</svg>
+					{{ctx.Locale.Tr "continue_with_w3ds"}}
+				</a>
+			{{end}}
 			{{range $provider := .OAuth2Providers}}
+				{{if ne $provider.DisplayName "W3DS"}}
 				<a class="{{$provider.Name}} ui button tw-flex tw-items-center tw-justify-center tw-py-2 tw-w-full oauth-login-link" href="{{AppSubUrl}}/user/oauth2/{{$provider.DisplayName | PathEscape}}">
 					{{$provider.IconHTML 28}}
 					{{ctx.Locale.Tr "sign_in_with_provider" $provider.DisplayName}}
 				</a>
+				{{end}}
 			{{end}}
 			{{if .EnableOpenIDSignIn}}
 				<a class="openid ui button tw-flex tw-items-center tw-justify-center tw-py-2 tw-w-full" href="{{AppSubUrl}}/user/login/openid">

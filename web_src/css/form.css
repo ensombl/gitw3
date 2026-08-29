@@ -335,6 +335,17 @@ input:-webkit-autofill:active,
   text-align: center;
 }
 
+.w3ds-login-button {
+  border-color: var(--color-primary) !important;
+  color: var(--color-text) !important;
+}
+
+.w3ds-login-button:hover,
+.w3ds-login-button:focus-visible {
+  background: var(--color-hover) !important;
+  border-color: var(--color-primary) !important;
+}
+
 @media (min-width: 768px) {
   .user.activate form,
   .user.forgot.password form,

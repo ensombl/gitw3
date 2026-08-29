@@ -4,6 +4,10 @@ GitW3's **New** action creates W3DS platforms. The guided path commits
 `.w3ds/platform.json`; the separately deployed `platform-manifest-sync` process treats that file on
 the default branch as the source of truth for the platform's eName and Marketplace profile.
 
+User authentication is a separate concern. GitW3 renders its own **Continue with W3DS** login button
+and stable `/user/login/w3ds` route. That entry point delegates to the active authentication source
+named `W3DS`, backed by the MetaState `w3ds-oidc-bridge`; it is not supplied by the manifest publisher.
+
 Normal API-created repositories, migrations, forks, templates, and push-created repositories retain
 their upstream Forgejo behavior. Repositories without the manifest are ignored by the publisher.
 

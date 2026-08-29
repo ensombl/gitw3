@@ -85,8 +85,14 @@ First run serves the install wizard at `http://localhost:3000`. If that port is 
 
 ### Testing W3DS login locally
 
-W3DS login isn't part of this codebase (see above) — it's a separate OIDC bridge wired in as a
-Forgejo OAuth2 authentication source. To exercise it locally:
+GitW3 owns an always-visible **Continue with W3DS** button and the stable `/user/login/w3ds` entry
+point. The cryptographic wallet flow remains in the separate `w3ds-oidc-bridge` implemented by the
+MetaState team in
+[MetaState-Prototype-Project/prototype#1102](https://github.com/MetaState-Prototype-Project/prototype/pull/1102).
+The bridge is wired into Forgejo as an OAuth2 authentication source named exactly `W3DS`; GitW3
+keeps the native button visible and reports a clear configuration error when that source is absent.
+
+To exercise the complete flow locally:
 
 1. Run the OIDC bridge service (out of scope for this repo) and note its client ID, client secret,
    and `.well-known/openid-configuration` discovery URL.

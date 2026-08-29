@@ -674,6 +674,7 @@ func registerRoutes(m *web.Route) {
 	m.Get("/user/login", auth.SignIn)
 	m.Group("/user", func() {
 		m.Post("/login", web.Bind(forms.SignInForm{}), auth.SignInPost)
+		m.Get("/login/w3ds", auth.SignInW3DS)
 		m.Group("", func() {
 			m.Combo("/login/openid").
 				Get(auth.SignInOpenID).
