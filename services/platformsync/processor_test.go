@@ -470,6 +470,7 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 func TestProcessorReservesIdentityUntilFirstDeployment(t *testing.T) {
 	fake := newFakePlatformInfrastructure(t)
 	fake.manifest.PublicKey = ""
+	fake.release = &platformRelease{TagName: "v0.1.1", Version: "0.1.1"}
 	store := openTestStore(t)
 	processor := NewProcessor(testConfig(fake.server.URL, ""), store, &http.Client{Timeout: time.Second})
 
@@ -485,10 +486,21 @@ func TestProcessorReservesIdentityUntilFirstDeployment(t *testing.T) {
 	assert.NotEmpty(t, job.RegistryEntropy)
 	assert.NotEmpty(t, job.Namespace)
 	assert.False(t, job.IdentityProvisioned)
+	assert.Equal(t, "v0.1.1", job.ReleaseTag)
+	assert.Equal(t, "0.1.1", job.ReleaseVersion)
 	require.NotNil(t, fake.manifest.EName)
 	assert.Equal(t, job.EName, *fake.manifest.EName)
+	assert.Equal(t, "0.1.1", fake.manifest.Version)
 	assert.Zero(t, fake.provisionCalls)
 	reservedEName := job.EName
+	deployment, err := processor.PrepareDeployment(context.Background(), PrepareDeploymentRequest{
+		ID: "first-deployment", RepositoryID: 42, PlatformEName: reservedEName,
+		DeploymentName: "Production", Environment: "production", DeployerEName: "@deployer",
+		Version: "0.1.1", ReleaseTag: "v0.1.1", CommitSHA: strings.Repeat("a", 40), PublicKey: "z0123456789",
+	})
+	require.NoError(t, err)
+	assert.True(t, deployment.ActivatesPlatform)
+	assert.Zero(t, fake.provisionCalls, "reserving the signed deployment must not activate the platform eVault")
 
 	job, err = processor.BootstrapPlatformIdentity(context.Background(), BootstrapPlatformRequest{
 		RepositoryID:  42,

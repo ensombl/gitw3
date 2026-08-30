@@ -76,6 +76,7 @@
 @import "./repo/platform-onboarding.css";
 @import "./repo/w3ds.css";
 @import "./repo/w3ds-deploy.css";
+@import "./repo/w3ds-welcome.css";
 
 @import "./editor/fileeditor.css";
 @import "./editor/combomarkdowneditor.css";
