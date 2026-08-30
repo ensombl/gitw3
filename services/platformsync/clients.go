@@ -619,7 +619,7 @@ func (c *w3dsClient) accreditations(ctx context.Context, ename, version string) 
 		}
 		for _, edge := range result.Data.MetaEnvelopes.Edges {
 			decision := edge.Node.Parsed
-			if strings.TrimSpace(decision.PlatformEName) != ename || strings.TrimSpace(decision.PlatformVersion) != version {
+			if strings.TrimSpace(decision.PlatformEName) != ename || (version != "" && strings.TrimSpace(decision.PlatformVersion) != version) {
 				continue
 			}
 			if decision.Decision != "granted" && decision.Decision != "denied" {

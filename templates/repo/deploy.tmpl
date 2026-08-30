@@ -38,8 +38,12 @@
 					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.wallet_help"}}</div>
 				{{else if not .DeploymentReleases}}
 					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.release_missing"}}</div>
-				{{else if not .CanCreateDeployment}}
+				{{else if not .DeploymentPublisherAvailable}}
 					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.publisher_missing"}}</div>
+				{{else if and .PlatformEName (not .DeploymentCertificationsAvailable)}}
+					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.certification_unavailable"}}</div>
+				{{else if and .PlatformEName (not .HasCertifiedDeploymentRelease)}}
+					<div class="ui warning message"><div class="header">{{ctx.Locale.Tr "platform.deploy.certification_heading"}}</div><p>{{ctx.Locale.Tr "platform.deploy.certification_help"}}</p><a class="ui button" href="{{.RepoLink}}/w3ds">{{ctx.Locale.Tr "platform.deploy.certification_action"}}</a></div>
 				{{else if .PlatformNeedsDeploymentIdentity}}
 					<div class="ui info message"><div class="header">{{ctx.Locale.Tr "platform.deploy.identity_first_title"}}</div><p>{{ctx.Locale.Tr "platform.deploy.identity_first_help"}}</p></div>
 				{{end}}
@@ -60,7 +64,7 @@
 							<label for="deployment_release">{{ctx.Locale.Tr "platform.deploy.release"}}</label>
 							<select id="deployment_release" name="release_id" required {{if not .CanCreateDeployment}}disabled{{end}}>
 								<option value="">{{ctx.Locale.Tr "platform.deploy.release_choose"}}</option>
-								{{range .DeploymentReleases}}<option value="{{.ID}}" data-version="{{.Version}}" data-tag="{{.Tag}}">{{.Tag}} · {{ShortSha .SHA}}</option>{{end}}
+								{{range .DeploymentReleases}}<option value="{{.ID}}" data-version="{{.Version}}" data-tag="{{.Tag}}" {{if and $.PlatformEName (not .PPACertified)}}disabled{{end}}>{{.Tag}} · {{ShortSha .SHA}}{{if .PPACertified}} · {{if .PPALevel}}{{ctx.Locale.Tr "platform.deploy.release_certified_level" .PPALevel}}{{else}}{{ctx.Locale.Tr "platform.deploy.release_certified"}}{{end}}{{else if $.PlatformEName}} · {{ctx.Locale.Tr "platform.deploy.release_uncertified"}}{{end}}</option>{{end}}
 							</select>
 							<p class="help">{{ctx.Locale.Tr "platform.deploy.release_help"}}</p>
 						</div>

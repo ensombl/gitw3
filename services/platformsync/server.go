@@ -45,6 +45,7 @@ func NewServer(config Config, store *Store, processors ...*Processor) *Server {
 	server.mux.HandleFunc("POST /webhooks/forgejo", server.handleWebhook)
 	server.mux.HandleFunc("GET /api/v1/status/{repositoryID}", server.handleStatus)
 	server.mux.HandleFunc("POST /api/v1/platforms/bootstrap", server.handleBootstrapPlatform)
+	server.mux.HandleFunc("POST /api/v1/platforms/deployment-certifications", server.handleDeploymentCertifications)
 	server.mux.HandleFunc("POST /api/v1/deployments/prepare", server.handlePrepareDeployment)
 	server.mux.HandleFunc("POST /api/v1/deployments/{deploymentID}/finalize", server.handleFinalizeDeployment)
 	server.mux.HandleFunc("GET /api/v1/deployments/{deploymentID}", server.handleDeploymentStatus)
@@ -52,6 +53,30 @@ func NewServer(config Config, store *Store, processors ...*Processor) *Server {
 		response.WriteHeader(http.StatusNoContent)
 	})
 	return server
+}
+
+func (s *Server) handleDeploymentCertifications(response http.ResponseWriter, request *http.Request) {
+	if !s.authorized(request) {
+		http.Error(response, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.processor == nil {
+		http.Error(response, "platform publisher unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	request.Body = http.MaxBytesReader(response, request.Body, maxWebhookBody)
+	var input CheckDeploymentCertificationsRequest
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		http.Error(response, "invalid certification request", http.StatusBadRequest)
+		return
+	}
+	certifications, err := s.processor.CheckDeploymentCertifications(request.Context(), input)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusBadGateway)
+		return
+	}
+	response.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(response).Encode(map[string]any{"certifications": certifications})
 }
 
 func (s *Server) handleBootstrapPlatform(response http.ResponseWriter, request *http.Request) {

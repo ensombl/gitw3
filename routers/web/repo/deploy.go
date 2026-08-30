@@ -40,11 +40,13 @@ const tplRepoDeploy base.TplName = "repo/deploy"
 const deploymentWaitingForW3DSMessage = "Signed and queued. Production W3DS is still rolling out deployment records; GitW3 will finish automatically when they are available."
 
 type deploymentReleaseView struct {
-	ID      int64
-	Tag     string
-	Version string
-	SHA     string
-	URL     string
+	ID           int64
+	Tag          string
+	Version      string
+	SHA          string
+	URL          string
+	PPACertified bool
+	PPALevel     string
 }
 
 type publisherDeployment struct {
@@ -60,6 +62,15 @@ type publisherDeployment struct {
 	LastError                 string    `json:"lastError"`
 	Attempts                  int       `json:"attempts"`
 	UpdatedAt                 time.Time `json:"updatedAt"`
+}
+
+type publisherDeploymentCertification struct {
+	Certified bool                        `json:"certified"`
+	Decision  *w3ds.AccreditationDecision `json:"decision,omitempty"`
+}
+
+type publisherDeploymentCertifications struct {
+	Certifications map[string]publisherDeploymentCertification `json:"certifications"`
 }
 
 // Deploy renders the native per-user deployment workspace.
@@ -88,6 +99,24 @@ func Deploy(ctx *context.Context) {
 		ctx.ServerError("deploymentReleases", err)
 		return
 	}
+	certificationsAvailable := true
+	hasCertifiedRelease := false
+	if platformEName != "" && len(releases) > 0 {
+		certifications, certificationErr := loadDeploymentCertifications(ctx, ctx.Repo.Repository.ID, platformEName, releases)
+		if certificationErr != nil {
+			certificationsAvailable = false
+			log.Warn("Load deployment PPA certifications for repository %d: %v", ctx.Repo.Repository.ID, certificationErr)
+		} else {
+			for i := range releases {
+				certification := certifications[releases[i].Version]
+				releases[i].PPACertified = certification.Certified
+				if certification.Decision != nil {
+					releases[i].PPALevel = certification.Decision.Level
+				}
+				hasCertifiedRelease = hasCertifiedRelease || certification.Certified
+			}
+		}
+	}
 	deployments, err := w3ds_model.ListDeploymentsForUser(ctx, ctx.Repo.Repository.ID, ctx.Doer.ID)
 	if err != nil {
 		ctx.ServerError("ListDeploymentsForUser", err)
@@ -100,9 +129,13 @@ func Deploy(ctx *context.Context) {
 	ctx.Data["PlatformEName"] = platformEName
 	ctx.Data["DeploymentWalletEName"] = walletEName
 	ctx.Data["DeploymentReleases"] = releases
+	ctx.Data["DeploymentPublisherAvailable"] = setting.PlatformManifestSync.Enabled
+	ctx.Data["DeploymentCertificationsAvailable"] = certificationsAvailable
+	ctx.Data["HasCertifiedDeploymentRelease"] = hasCertifiedRelease
 	ctx.Data["Deployments"] = deployments
 	ctx.Data["PlatformNeedsDeploymentIdentity"] = platformEName == ""
-	ctx.Data["CanCreateDeployment"] = walletEName != "" && len(releases) > 0 && setting.PlatformManifestSync.Enabled
+	ctx.Data["CanCreateDeployment"] = walletEName != "" && len(releases) > 0 && setting.PlatformManifestSync.Enabled &&
+		(platformEName == "" || (certificationsAvailable && hasCertifiedRelease))
 	ctx.HTML(http.StatusOK, tplRepoDeploy)
 }
 
@@ -155,6 +188,17 @@ func CreateDeployment(ctx *context.Context) {
 	if !valid {
 		deploymentJSONError(ctx, http.StatusBadRequest, "The release tag must be a semantic version such as v1.2.3.")
 		return
+	}
+	if platformEName != "" {
+		certifications, certificationErr := loadDeploymentCertifications(ctx, ctx.Repo.Repository.ID, platformEName, []deploymentReleaseView{{Version: version}})
+		if certificationErr != nil {
+			deploymentJSONError(ctx, http.StatusServiceUnavailable, ctx.Locale.TrString("platform.deploy.certification_unavailable"))
+			return
+		}
+		if !certifications[version].Certified {
+			deploymentJSONError(ctx, http.StatusForbidden, ctx.Locale.TrString("platform.deploy.certification_required", version))
+			return
+		}
 	}
 	environment := strings.TrimSpace(form.Environment)
 	switch environment {
@@ -404,21 +448,51 @@ func platformENameForManifest(ctx *context.Context, manifest *w3ds.PlatformManif
 	return strings.TrimSpace(loadPlatformPublicationStatus(ctx).EName)
 }
 
+func loadDeploymentCertifications(ctx gocontext.Context, repositoryID int64, platformEName string, releases []deploymentReleaseView) (map[string]publisherDeploymentCertification, error) {
+	versions := make([]string, 0, len(releases))
+	for _, release := range releases {
+		if release.Version != "" {
+			versions = append(versions, release.Version)
+		}
+	}
+	result := new(publisherDeploymentCertifications)
+	err := callPlatformPublisher(ctx, http.MethodPost, "/api/v1/platforms/deployment-certifications", map[string]any{
+		"repositoryId":  repositoryID,
+		"platformEName": platformEName,
+		"versions":      versions,
+	}, result)
+	if err != nil {
+		return nil, err
+	}
+	if result.Certifications == nil {
+		result.Certifications = make(map[string]publisherDeploymentCertification)
+	}
+	return result.Certifications, nil
+}
+
 func callDeploymentPublisher(ctx gocontext.Context, method, path string, input any) (*publisherDeployment, error) {
+	result := new(publisherDeployment)
+	if err := callPlatformPublisher(ctx, method, path, input, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func callPlatformPublisher(ctx gocontext.Context, method, path string, input, output any) error {
 	if !setting.PlatformManifestSync.Enabled || setting.PlatformManifestSync.URL == "" || setting.PlatformManifestSync.InternalToken == "" {
-		return nil, errors.New("deployment publisher is not configured")
+		return errors.New("deployment publisher is not configured")
 	}
 	var body io.Reader
 	if input != nil {
 		payload, err := json.Marshal(input)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		body = bytes.NewReader(payload)
 	}
 	request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(setting.PlatformManifestSync.URL, "/")+path, body)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	request.Header.Set("Authorization", "Bearer "+setting.PlatformManifestSync.InternalToken)
 	request.Header.Set("Accept", "application/json")
@@ -427,18 +501,17 @@ func callDeploymentPublisher(ctx gocontext.Context, method, path string, input a
 	}
 	response, err := (&http.Client{Timeout: setting.PlatformManifestSync.SignatureTimeout}).Do(request)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		message, _ := io.ReadAll(io.LimitReader(response.Body, 2048))
-		return nil, fmt.Errorf("publisher returned %d: %s", response.StatusCode, strings.TrimSpace(string(message)))
+		return fmt.Errorf("publisher returned %d: %s", response.StatusCode, strings.TrimSpace(string(message)))
 	}
-	var result publisherDeployment
-	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		return nil, err
+	if err := json.NewDecoder(response.Body).Decode(output); err != nil {
+		return err
 	}
-	return &result, nil
+	return nil
 }
 
 func deploymentJSONError(ctx *context.Context, status int, message string) {

@@ -52,6 +52,19 @@ type BootstrapPlatformRequest struct {
 	PublicKey     string `json:"publicKey"`
 }
 
+type CheckDeploymentCertificationsRequest struct {
+	RepositoryID  int64    `json:"repositoryId"`
+	PlatformEName string   `json:"platformEName"`
+	Versions      []string `json:"versions"`
+}
+
+type DeploymentCertification struct {
+	Certified bool                        `json:"certified"`
+	Decision  *w3ds.AccreditationDecision `json:"decision,omitempty"`
+}
+
+var ErrDeploymentCertificationRequired = errors.New("PPA certification is required")
+
 func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeploymentRequest) (*DeploymentJob, error) {
 	if input.ID == "" || input.RepositoryID <= 0 || input.PlatformEName == "" || input.DeploymentName == "" ||
 		input.Environment == "" || input.DeployerEName == "" || input.Version == "" || input.ReleaseTag == "" ||
@@ -60,6 +73,9 @@ func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeployme
 	}
 	if existing, err := p.store.GetDeployment(input.ID); err != nil || existing != nil {
 		return existing, err
+	}
+	if err := p.requireDeploymentCertification(ctx, input.RepositoryID, input.PlatformEName, input.Version); err != nil {
+		return nil, err
 	}
 	platformID, err := uuid.Parse(strings.TrimPrefix(input.PlatformEName, "@"))
 	if err != nil {
@@ -125,6 +141,9 @@ func (p *Processor) ReconcileDeployment(ctx context.Context, job *DeploymentJob)
 	if job == nil || job.WalletSignature == "" {
 		return errors.New("signed deployment job is required")
 	}
+	if err := p.requireDeploymentCertification(ctx, job.RepositoryID, job.PlatformEName, job.Version); err != nil {
+		return err
+	}
 	job.Status = DeploymentPublishing
 	job.LastError = ""
 	if err := p.store.SaveDeployment(job); err != nil {
@@ -139,6 +158,54 @@ func (p *Processor) ReconcileDeployment(ctx context.Context, job *DeploymentJob)
 	job.RegistryEntropy = ""
 	job.NextAttempt = time.Time{}
 	return p.store.SaveDeployment(job)
+}
+
+func (p *Processor) CheckDeploymentCertifications(ctx context.Context, input CheckDeploymentCertificationsRequest) (map[string]DeploymentCertification, error) {
+	if input.RepositoryID <= 0 || strings.TrimSpace(input.PlatformEName) == "" || len(input.Versions) == 0 {
+		return nil, errors.New("repository, platform eName and versions are required")
+	}
+	platform, err := p.store.Get(input.RepositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if platform == nil || platform.EName == "" || platform.EName != input.PlatformEName {
+		return nil, errors.New("platform identity does not match this repository")
+	}
+	decisions, err := p.w3ds.accreditations(ctx, platform.EName, "")
+	if err != nil {
+		return nil, err
+	}
+	latest := make(map[string]*w3ds.AccreditationDecision)
+	for i := range decisions {
+		decision := &decisions[i]
+		latest[decision.PlatformVersion] = decision
+	}
+	result := make(map[string]DeploymentCertification, len(input.Versions))
+	for _, version := range input.Versions {
+		version = strings.TrimSpace(version)
+		if version == "" {
+			continue
+		}
+		decision := latest[version]
+		result[version] = DeploymentCertification{
+			Certified: decision != nil && decision.Decision == "granted",
+			Decision:  decision,
+		}
+	}
+	return result, nil
+}
+
+func (p *Processor) requireDeploymentCertification(ctx context.Context, repositoryID int64, platformEName, version string) error {
+	certifications, err := p.CheckDeploymentCertifications(ctx, CheckDeploymentCertificationsRequest{
+		RepositoryID: repositoryID, PlatformEName: platformEName, Versions: []string{version},
+	})
+	if err != nil {
+		return err
+	}
+	if !certifications[version].Certified {
+		return fmt.Errorf("%w for software version %s", ErrDeploymentCertificationRequired, version)
+	}
+	return nil
 }
 
 func NewProcessor(config Config, store *Store, client *http.Client) *Processor {

@@ -214,6 +214,10 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	provisioned := false
 	createdDocuments := 0
 	profilePublished := false
+	certificationDecision := w3ds.AccreditationDecision{
+		PlatformEName:   "@0699e093-2dd9-59cc-a416-7dc69623ebfd",
+		PlatformVersion: "1.2.3", Decision: "granted", Level: "L2", CreatedAt: "2026-08-30T00:00:00Z",
+	}
 	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/entropy":
@@ -227,6 +231,10 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 			assert.Equal(t, "Bearer platform-token", request.Header.Get("Authorization"))
 			_ = json.NewEncoder(response).Encode(map[string]string{"ename": "@c4cc7cd1-8670-5a37-8a7b-8ebc0b6022d8"})
 		case "/resolve":
+			if request.URL.Query().Get("w3id") == certificationDecision.PlatformEName {
+				_ = json.NewEncoder(response).Encode(map[string]string{"uri": server.URL})
+				return
+			}
 			if !provisioned {
 				http.NotFound(response, request)
 				return
@@ -244,6 +252,11 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 			require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
 			query := input["query"].(string)
 			switch {
+			case strings.Contains(query, "PlatformAccreditations"):
+				_ = json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"metaEnvelopes": map[string]any{
+					"edges":    []any{map[string]any{"node": map[string]any{"parsed": certificationDecision}}},
+					"pageInfo": map[string]any{"hasNextPage": false, "endCursor": nil},
+				}}})
 			case strings.Contains(query, "ExistingDeploymentBindings"):
 				_ = json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"bindingDocuments": map[string]any{"edges": []any{}}}})
 			case strings.Contains(query, "CreateDeploymentBinding"):
@@ -260,6 +273,9 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	t.Cleanup(server.Close)
 	store := openTestStore(t)
 	processor := NewProcessor(testConfig(server.URL, ""), store, server.Client())
+	require.NoError(t, store.Save(&Job{
+		RepositoryID: 42, EName: certificationDecision.PlatformEName, Status: StatusPublished,
+	}))
 	job, err := processor.PrepareDeployment(context.Background(), PrepareDeploymentRequest{
 		ID: "deployment-1", RepositoryID: 42,
 		PlatformEName:  "@0699e093-2dd9-59cc-a416-7dc69623ebfd",
@@ -296,6 +312,11 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	assert.Empty(t, stored.LastError)
 	assert.False(t, stored.NextAttempt.After(time.Now()))
 
+	certificationDecision.Decision = "denied"
+	err = processor.ReconcileDeployment(context.Background(), stored)
+	require.ErrorIs(t, err, ErrDeploymentCertificationRequired)
+	assert.False(t, provisioned, "a revoked certificate must stop publication before W3DS resources are created")
+	certificationDecision.Decision = "granted"
 	require.NoError(t, processor.ReconcileDeployment(context.Background(), stored))
 	stored, err = store.GetDeployment(job.ID)
 	require.NoError(t, err)
@@ -304,6 +325,30 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	assert.Equal(t, "document-2", stored.SoftwareVersionDocumentID)
 	assert.True(t, provisioned)
 	assert.Empty(t, stored.RegistryEntropy)
+}
+
+func TestProcessorRejectsUncertifiedDeploymentVersion(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, fake.server.Client())
+	require.NoError(t, store.Save(&Job{RepositoryID: 42, EName: "@guided.w3id", Status: StatusPublished}))
+
+	input := PrepareDeploymentRequest{
+		ID: "uncertified", RepositoryID: 42, PlatformEName: "@guided.w3id",
+		DeploymentName: "Production", Environment: "production", DeployerEName: "@deployer",
+		Version: "1.2.3", ReleaseTag: "v1.2.3", CommitSHA: strings.Repeat("a", 40), PublicKey: "zKey",
+	}
+	_, err := processor.PrepareDeployment(context.Background(), input)
+	require.ErrorIs(t, err, ErrDeploymentCertificationRequired)
+
+	fake.mu.Lock()
+	fake.accreditations = []w3ds.AccreditationDecision{
+		{PlatformEName: "@guided.w3id", PlatformVersion: "1.2.3", Decision: "granted", CreatedAt: "2026-08-29T00:00:00Z"},
+		{PlatformEName: "@guided.w3id", PlatformVersion: "1.2.3", Decision: "denied", CreatedAt: "2026-08-30T00:00:00Z"},
+	}
+	fake.mu.Unlock()
+	_, err = processor.PrepareDeployment(context.Background(), input)
+	require.ErrorIs(t, err, ErrDeploymentCertificationRequired, "the latest decision must override an older grant")
 }
 
 func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
