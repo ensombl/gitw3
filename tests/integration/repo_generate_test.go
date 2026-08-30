@@ -34,14 +34,14 @@ import (
 func assertPlatformCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.User) {
 	form := htmlDoc.doc.Find("form#platform-onboarding-form[action='/repo/create/new']")
 	assert.Equal(t, 1, form.Length(), "Expected the guided platform creation form")
-	assert.Equal(t, 4, form.Find(".platform-wizard-step").Length(), "Expected four wizard steps")
-	assert.Equal(t, 4, form.Find(".platform-wizard-choice").Length(), "Expected four accessible wizard choices")
+	assert.Equal(t, 3, form.Find(".platform-wizard-step").Length(), "Expected three wizard steps")
+	assert.Equal(t, 2, form.Find(".platform-wizard-choice").Length(), "Expected two accessible wizard choices")
 	assert.Equal(t, 1, form.Find("[data-platform-ai-install].blue.message").Length(), "Expected a visible AI install message")
-	assert.Equal(t, 3, form.Find("[data-platform-step].tw-hidden").Length(), "Expected only the first wizard panel to be visible")
+	assert.Equal(t, 2, form.Find("[data-platform-step].tw-hidden").Length(), "Expected only the first wizard panel to be visible")
 	assert.Equal(t, 1, form.Find("#platform-step-back.tw-hidden").Length(), "Expected the back button to start hidden")
 	assert.Equal(t, 1, form.Find("#platform-create-submit.tw-hidden").Length(), "Expected the submit button to start hidden")
 	htmlDoc.AssertDropdownHasSelectedOption(t, "uid", strconv.FormatInt(owner.ID, 10))
-	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_url", "platform_public_key"} {
+	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_url"} {
 		assert.Equal(t, 1, form.Find(fmt.Sprintf("[name='%s']", name)).Length(), "missing %s", name)
 	}
 	assert.Greater(t, form.Find(".w3ds-domain-option input[name='platform_domains']").Length(), 0, "published domains should be visible choices")
@@ -217,7 +217,6 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 		"platform_display_name": "Guided Platform",
 		"platform_description":  "A platform created through the guided flow",
 		"platform_domains":      "productivity",
-		"platform_public_key":   "z0123456789",
 	})
 	resp := session.MakeRequest(t, req, http.StatusSeeOther)
 	redirect := test.RedirectURL(resp)
@@ -250,7 +249,7 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	assert.Equal(t, []string{"productivity"}, manifest.Domains)
 	assert.Empty(t, manifest.Category)
 	assert.Empty(t, manifest.URL)
-	assert.Equal(t, "z0123456789", manifest.PublicKey)
+	assert.Empty(t, manifest.PublicKey)
 	assert.Nil(t, manifest.EName)
 	assert.True(t, manifest.IsDraft)
 	assert.False(t, manifest.InSubmission)
@@ -269,8 +268,8 @@ func TestW3DSEditPlatform(t *testing.T) {
 			"",
 			"",
 			[]string{"productivity"},
-			"z0123456789",
 		)
+		manifest.PublicKey = "z0123456789"
 		eName := "@fixture-platform.w3id"
 		manifest.EName = &eName
 		content, err := manifest.Marshal()

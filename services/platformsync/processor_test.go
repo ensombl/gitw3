@@ -35,11 +35,13 @@ type fakePlatformInfrastructure struct {
 
 func newFakePlatformInfrastructure(t *testing.T) *fakePlatformInfrastructure {
 	t.Helper()
+	manifest := w3ds.NewPlatformManifest(
+		"guided-platform", "Guided Platform", "Initial description", "0.1.0",
+		"https://guided.example.com", "", []string{"productivity", "work"},
+	)
+	manifest.PublicKey = "z0123456789"
 	fake := &fakePlatformInfrastructure{
-		manifest: w3ds.NewPlatformManifest(
-			"guided-platform", "Guided Platform", "Initial description", "0.1.0",
-			"https://guided.example.com", "", []string{"productivity", "work"}, "z0123456789",
-		),
+		manifest:       manifest,
 		manifestExists: true,
 		release:        &platformRelease{TagName: "v0.1.0", Version: "0.1.0"},
 	}
@@ -371,6 +373,37 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	require.Len(t, fake.published, 3)
 	assert.Equal(t, true, fake.published[2]["isArchived"])
 	assert.Equal(t, false, fake.published[2]["isActive"])
+}
+
+func TestProcessorDefersIdentityUntilFirstDeployment(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	fake.manifest.PublicKey = ""
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, &http.Client{Timeout: time.Second})
+
+	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-1", false))
+	job, err := store.Get(42)
+	require.NoError(t, err)
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+
+	job, err = store.Get(42)
+	require.NoError(t, err)
+	assert.Equal(t, StatusAwaitingDeploy, job.Status)
+	assert.Empty(t, job.EName)
+	assert.Zero(t, fake.provisionCalls)
+
+	job, err = processor.BootstrapPlatformIdentity(context.Background(), BootstrapPlatformRequest{
+		RepositoryID:  42,
+		FullName:      "alice/platform",
+		DefaultBranch: "main",
+		PublicKey:     "z0123456789",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, StatusPublished, job.Status)
+	assert.Equal(t, "@guided.w3id", job.EName)
+	assert.Equal(t, "z0123456789", fake.manifest.PublicKey)
+	assert.Equal(t, 1, fake.provisionCalls)
+	assert.Empty(t, job.ProvisioningKey)
 }
 
 func TestProcessorIgnoresRepositoriesWithoutManifest(t *testing.T) {

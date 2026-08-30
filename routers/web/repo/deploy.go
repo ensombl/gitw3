@@ -46,6 +46,7 @@ type deploymentReleaseView struct {
 
 type publisherDeployment struct {
 	ID                        string    `json:"id"`
+	EName                     string    `json:"ename"`
 	Status                    string    `json:"status"`
 	DeploymentEName           string    `json:"deploymentEName"`
 	VersionEName              string    `json:"versionEName"`
@@ -94,7 +95,8 @@ func Deploy(ctx *context.Context) {
 	ctx.Data["DeploymentWalletEName"] = walletEName
 	ctx.Data["DeploymentReleases"] = releases
 	ctx.Data["Deployments"] = deployments
-	ctx.Data["CanCreateDeployment"] = platformEName != "" && walletEName != "" && len(releases) > 0 && setting.PlatformManifestSync.Enabled
+	ctx.Data["PlatformNeedsDeploymentIdentity"] = platformEName == ""
+	ctx.Data["CanCreateDeployment"] = walletEName != "" && len(releases) > 0 && setting.PlatformManifestSync.Enabled
 	ctx.HTML(http.StatusOK, tplRepoDeploy)
 }
 
@@ -156,9 +158,26 @@ func CreateDeployment(ctx *context.Context) {
 	default:
 		environment = ""
 	}
-	if environment == "" || !strings.HasPrefix(form.PublicKey, "z") || platformEName == "" {
-		deploymentJSONError(ctx, http.StatusBadRequest, "A platform identity, environment, and z-prefixed W3DS public key are required.")
+	if environment == "" || !strings.HasPrefix(form.PublicKey, "z") {
+		deploymentJSONError(ctx, http.StatusBadRequest, "An environment and z-prefixed W3DS public key are required.")
 		return
+	}
+	if platformEName == "" {
+		bootstrapped, err := callDeploymentPublisher(ctx, http.MethodPost, "/api/v1/platforms/bootstrap", map[string]any{
+			"repositoryId":  ctx.Repo.Repository.ID,
+			"fullName":      ctx.Repo.Repository.FullName(),
+			"defaultBranch": ctx.Repo.Repository.DefaultBranch,
+			"publicKey":     form.PublicKey,
+		})
+		if err != nil {
+			deploymentJSONError(ctx, http.StatusBadGateway, "GitW3 could not activate the platform identity: "+err.Error())
+			return
+		}
+		platformEName = strings.TrimSpace(bootstrapped.EName)
+		if platformEName == "" {
+			deploymentJSONError(ctx, http.StatusBadGateway, "The platform publisher did not return an identity.")
+			return
+		}
 	}
 	id := uuid.NewString()
 	prepared, err := callDeploymentPublisher(ctx, http.MethodPost, "/api/v1/deployments/prepare", map[string]any{

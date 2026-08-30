@@ -15,7 +15,7 @@ import (
 func validManifest() *PlatformManifest {
 	return NewPlatformManifest(
 		"my-platform", "My Platform", "A helpful W3DS platform", "0.1.0",
-		"https://platform.example.com", "https://platform.example.com/logo.png", []string{"productivity", "work"}, "z0123456789",
+		"https://platform.example.com", "https://platform.example.com/logo.png", []string{"productivity", "work"},
 	)
 }
 
@@ -55,6 +55,7 @@ func submitManifest(t *testing.T, manifest *PlatformManifest) {
 
 func TestPlatformManifestValidate(t *testing.T) {
 	require.NoError(t, validManifest().Validate(false))
+	assert.Empty(t, validManifest().PublicKey)
 
 	tests := []struct {
 		name   string
@@ -160,6 +161,7 @@ func TestPlatformManifestMarshal(t *testing.T) {
 	assert.Contains(t, string(data), `"ename": null`)
 	assert.Contains(t, string(data), `"domains": [`)
 	assert.NotContains(t, string(data), `"category"`)
+	assert.NotContains(t, string(data), `"publicKey"`)
 	assert.Contains(t, string(data), `"inSubmission": false`)
 	assert.NotContains(t, string(data), `"submissionVersion"`)
 	assert.Contains(t, string(data), `"isDraft": true`)

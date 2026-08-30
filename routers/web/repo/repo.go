@@ -279,7 +279,6 @@ func CreatePlatformPost(ctx *context.Context) {
 		form.PlatformURL,
 		form.PlatformLogoURL,
 		form.PlatformDomains,
-		form.PlatformPublicKey,
 	)
 	if err := manifest.Validate(!setting.IsProd); err != nil {
 		ctx.RenderWithErr(ctx.Tr("platform.create.invalid_manifest", err), tplCreatePlatform, form)

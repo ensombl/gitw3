@@ -16,8 +16,7 @@
 						<ol class="platform-wizard-steps" aria-label="{{ctx.Locale.Tr "platform.create.title"}}">
 							<li class="platform-wizard-step active" data-platform-step-indicator="1"><span class="platform-wizard-step-number">1</span><span>{{ctx.Locale.Tr "platform.create.repo_step"}}</span></li>
 							<li class="platform-wizard-step" data-platform-step-indicator="2"><span class="platform-wizard-step-number">2</span><span>{{ctx.Locale.Tr "platform.create.profile_step"}}</span></li>
-							<li class="platform-wizard-step" data-platform-step-indicator="3"><span class="platform-wizard-step-number">3</span><span>{{ctx.Locale.Tr "platform.create.identity_step"}}</span></li>
-							<li class="platform-wizard-step" data-platform-step-indicator="4"><span class="platform-wizard-step-number">4</span><span>{{ctx.Locale.Tr "platform.create.ai_step"}}</span></li>
+							<li class="platform-wizard-step" data-platform-step-indicator="3"><span class="platform-wizard-step-number">3</span><span>{{ctx.Locale.Tr "platform.create.ai_step"}}</span></li>
 						</ol>
 
 						<fieldset class="platform-wizard-panel" data-platform-step="1">
@@ -58,24 +57,6 @@
 						</fieldset>
 
 						<fieldset class="platform-wizard-panel tw-hidden" data-platform-step="3" hidden>
-							<legend>{{ctx.Locale.Tr "platform.create.identity_heading"}}</legend>
-							<p>{{ctx.Locale.Tr "platform.create.identity_help"}}</p>
-							<div class="platform-wizard-choices">
-								<label class="platform-wizard-choice"><input type="radio" name="platform_key_mode" value="generate" checked><span>{{ctx.Locale.Tr "platform.create.generate_key"}}</span></label>
-								<label class="platform-wizard-choice"><input type="radio" name="platform_key_mode" value="paste"><span>{{ctx.Locale.Tr "platform.create.paste_key"}}</span></label>
-							</div>
-							<div data-platform-generated-key>
-								<button class="ui primary button" type="button" id="platform-generate-key">{{ctx.Locale.Tr "platform.create.generate_download"}}</button>
-								<div class="ui warning message tw-mt-3">{{ctx.Locale.Tr "platform.create.key_warning"}}</div>
-								<label><input id="platform-key-saved" type="checkbox"> {{ctx.Locale.Tr "platform.create.key_saved"}}</label>
-							</div>
-							<div class="tw-hidden" data-platform-pasted-key hidden>
-								<label>{{ctx.Locale.Tr "platform.create.public_key"}}<textarea id="platform-public-key-paste" rows="3" placeholder="z..." maxlength="8192"></textarea></label>
-							</div>
-							<input id="platform-public-key" type="hidden" name="platform_public_key" value="{{.platform_public_key}}">
-						</fieldset>
-
-						<fieldset class="platform-wizard-panel tw-hidden" data-platform-step="4" hidden>
 							<legend>{{ctx.Locale.Tr "platform.create.ai_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.create.ai_help"}}</p>
 							<div class="platform-wizard-choices">

@@ -830,6 +830,10 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 	case "publishing":
 		view.Title = ctx.Locale.TrString("platform.status.publishing")
 		view.Message = ctx.Locale.TrString("platform.status.pending_help")
+	case "awaiting_deployment":
+		view.Tone = "info"
+		view.Title = ctx.Locale.TrString("platform.status.awaiting_deployment")
+		view.Message = ctx.Locale.TrString("platform.status.awaiting_deployment_help")
 	case "unavailable":
 		view.Title = ctx.Locale.TrString("platform.status.unavailable")
 		view.Message = ctx.Locale.TrString("platform.status.unavailable_help")
@@ -846,8 +850,13 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 		view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_ready", eName)
 	} else {
 		view.Identity.Tone = "blue"
-		view.Identity.Label = ctx.Locale.TrString("platform.repo.automatic")
-		view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_pending")
+		if status.Status == "awaiting_deployment" {
+			view.Identity.Label = ctx.Locale.TrString("platform.repo.waiting")
+			view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_deployment")
+		} else {
+			view.Identity.Label = ctx.Locale.TrString("platform.repo.automatic")
+			view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_pending")
+		}
 	}
 	view.Application.Ready = applicationURL != ""
 	if view.Application.Ready {

@@ -134,27 +134,6 @@ export function initPlatformOnboarding() {
         return false;
       }
     }
-    if (current === 2) {
-      const mode = form.querySelector<HTMLInputElement>('input[name="platform_key_mode"]:checked')?.value;
-      const publicKey = form.querySelector<HTMLInputElement>('#platform-public-key')!;
-      const saved = form.querySelector<HTMLInputElement>('#platform-key-saved')!;
-      if (mode === 'generate' && (!publicKey.value || !saved.checked)) {
-        saved.setCustomValidity('Generate, download, and save the platform key before continuing.');
-        saved.reportValidity();
-        saved.setCustomValidity('');
-        return false;
-      }
-      if (mode === 'paste') {
-        const pasted = form.querySelector<HTMLTextAreaElement>('#platform-public-key-paste')!;
-        if (!pasted.value.trim().startsWith('z')) {
-          pasted.setCustomValidity('Enter a z-prefixed multibase public key.');
-          pasted.reportValidity();
-          pasted.setCustomValidity('');
-          return false;
-        }
-        publicKey.value = pasted.value.trim();
-      }
-    }
     return true;
   };
 
@@ -175,29 +154,6 @@ export function initPlatformOnboarding() {
     platformName.value = repoName.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   });
   platformName.addEventListener('input', () => platformName.dataset.edited = 'true');
-
-  const generated = form.querySelector<HTMLElement>('[data-platform-generated-key]')!;
-  const pasted = form.querySelector<HTMLElement>('[data-platform-pasted-key]')!;
-  for (const radio of form.querySelectorAll<HTMLInputElement>('input[name="platform_key_mode"]')) {
-    radio.addEventListener('change', () => {
-      const generate = radio.checked && radio.value === 'generate';
-      setHidden(generated, !generate);
-      setHidden(pasted, generate);
-    });
-  }
-
-  form.querySelector<HTMLButtonElement>('#platform-generate-key')!.addEventListener('click', async (event) => {
-    const button = event.currentTarget as HTMLButtonElement;
-    button.disabled = true;
-    try {
-      const {publicKeySpki, privateKeyPkcs8} = await generatePlatformKeyPair();
-      const publicKey = `z${bytesToBase58(publicKeySpki)}`;
-      form.querySelector<HTMLInputElement>('#platform-public-key')!.value = publicKey;
-      downloadKeyBackup(publicKey, privateKeyPkcs8);
-    } finally {
-      button.disabled = false;
-    }
-  });
 
   const aiInstall = form.querySelector<HTMLElement>('[data-platform-ai-install]')!;
   for (const radio of form.querySelectorAll<HTMLInputElement>('input[name="use_ai_tooling"]')) {

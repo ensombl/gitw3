@@ -27,6 +27,7 @@ type Status string
 
 const (
 	StatusIdentityPending Status = "identity_pending"
+	StatusAwaitingDeploy  Status = "awaiting_deployment"
 	StatusPublishing      Status = "publishing"
 	StatusPublished       Status = "published"
 	StatusFailed          Status = "failed"
@@ -41,6 +42,7 @@ type Job struct {
 	TargetSHA         string                       `json:"targetSha"`
 	LastSHA           string                       `json:"lastSha,omitempty"`
 	EName             string                       `json:"ename,omitempty"`
+	ProvisioningKey   string                       `json:"provisioningPublicKey,omitempty"`
 	EnvelopeID        string                       `json:"envelopeId,omitempty"`
 	PlatformName      string                       `json:"platformName,omitempty"`
 	ReleaseTag        string                       `json:"releaseTag,omitempty"`

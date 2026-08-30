@@ -45,6 +45,13 @@ type FinalizeDeploymentRequest struct {
 	KeyBindingCertificate string `json:"keyBindingCertificate"`
 }
 
+type BootstrapPlatformRequest struct {
+	RepositoryID  int64  `json:"repositoryId"`
+	FullName      string `json:"fullName"`
+	DefaultBranch string `json:"defaultBranch"`
+	PublicKey     string `json:"publicKey"`
+}
+
 func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeploymentRequest) (*DeploymentJob, error) {
 	if input.ID == "" || input.RepositoryID <= 0 || input.PlatformEName == "" || input.DeploymentName == "" ||
 		input.Environment == "" || input.DeployerEName == "" || input.Version == "" || input.ReleaseTag == "" ||
@@ -137,6 +144,50 @@ func NewProcessor(config Config, store *Store, client *http.Client) *Processor {
 	}
 }
 
+// BootstrapPlatformIdentity activates a new platform with the key selected for its first deployment.
+func (p *Processor) BootstrapPlatformIdentity(ctx context.Context, input BootstrapPlatformRequest) (*Job, error) {
+	if input.RepositoryID <= 0 || strings.TrimSpace(input.FullName) == "" || strings.TrimSpace(input.DefaultBranch) == "" ||
+		!strings.HasPrefix(input.PublicKey, "z") || len(input.PublicKey) > 8192 {
+		return nil, errors.New("complete platform identity details are required")
+	}
+	job, err := p.store.Get(input.RepositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if job == nil {
+		if err := p.store.Schedule(input.RepositoryID, input.FullName, input.DefaultBranch, "", false); err != nil {
+			return nil, err
+		}
+		job, err = p.store.Get(input.RepositoryID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if job == nil {
+		return nil, errors.New("platform publication job was not created")
+	}
+	if job.ProvisioningKey != "" && job.ProvisioningKey != input.PublicKey {
+		return nil, errors.New("platform identity is already being activated with another key")
+	}
+	if job.EName != "" && job.Status == StatusPublished {
+		return job, nil
+	}
+	job.FullName = input.FullName
+	job.DefaultBranch = input.DefaultBranch
+	job.ProvisioningKey = input.PublicKey
+	job.Status = StatusIdentityPending
+	job.LastError = ""
+	job.Attempts = 0
+	job.NextAttempt = time.Now().UTC()
+	if err := p.store.Save(job); err != nil {
+		return nil, err
+	}
+	if err := p.Reconcile(ctx, job); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
 // Reconcile processes the latest default-branch state and is safe to repeat.
 func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 	job.Status = StatusPublishing
@@ -169,8 +220,23 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		return errors.New("ename is immutable after provisioning")
 	}
 
+	manifestChanged := false
+	manifestMessage := "chore: sync platform metadata"
+	provisioningKey := manifest.PublicKey
+	if provisioningKey == "" {
+		provisioningKey = job.ProvisioningKey
+	}
+	if job.EName == "" && provisioningKey == "" {
+		job.Manifest = manifest
+		job.PlatformName = manifest.PlatformName
+		job.Status = StatusAwaitingDeploy
+		job.Attempts = 0
+		job.LastError = ""
+		job.NextAttempt = time.Time{}
+		return p.store.Save(job)
+	}
 	if job.EName == "" {
-		ename, err := p.w3ds.provision(ctx, manifest.PublicKey)
+		ename, err := p.w3ds.provision(ctx, provisioningKey)
 		if err != nil {
 			return err
 		}
@@ -181,9 +247,10 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 			return err
 		}
 	}
-
-	manifestChanged := false
-	manifestMessage := "chore: sync platform metadata"
+	if manifest.PublicKey == "" {
+		manifest.PublicKey = provisioningKey
+		manifestChanged = true
+	}
 	if manifest.EName == nil {
 		manifest.EName = &job.EName
 		manifestChanged = true
@@ -260,6 +327,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 	job.LastSHA = job.TargetSHA
 	job.Attempts = 0
 	job.LastError = ""
+	job.ProvisioningKey = ""
 	job.NextAttempt = time.Time{}
 	if job.Archive {
 		job.Status = StatusArchived

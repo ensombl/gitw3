@@ -57,7 +57,6 @@ type CreateRepoForm struct {
 	PlatformURL         string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
 	PlatformLogoURL     string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
 	PlatformDomains     []string `binding:"platform_domains;Required;"`
-	PlatformPublicKey   string   `binding:"MaxSize(8192)" preprocess:"TrimSpace"`
 	UseAITooling        bool
 }
 

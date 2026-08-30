@@ -108,7 +108,7 @@ type PlatformManifest struct {
 	LogoURL           string               `json:"logoUrl"`
 	Domains           []string             `json:"domains,omitempty"`
 	Category          string               `json:"category,omitempty"`
-	PublicKey         string               `json:"publicKey"`
+	PublicKey         string               `json:"publicKey,omitempty"`
 	InSubmission      bool                 `json:"inSubmission"`
 	SubmissionVersion string               `json:"submissionVersion,omitempty"`
 	SubmissionProof   *PPASubmissionProof  `json:"submissionProof,omitempty"`
@@ -117,7 +117,7 @@ type PlatformManifest struct {
 }
 
 // NewPlatformManifest creates a manifest whose eName will be filled by the publisher.
-func NewPlatformManifest(platformName, displayName, description, version, appURL, logoURL string, domains []string, publicKey string) *PlatformManifest {
+func NewPlatformManifest(platformName, displayName, description, version, appURL, logoURL string, domains []string) *PlatformManifest {
 	return &PlatformManifest{
 		SchemaVersion:     PlatformManifestVersion,
 		PlatformName:      strings.TrimSpace(platformName),
@@ -128,7 +128,6 @@ func NewPlatformManifest(platformName, displayName, description, version, appURL
 		URL:               strings.TrimSpace(appURL),
 		LogoURL:           strings.TrimSpace(logoURL),
 		Domains:           normalizeDomains(domains),
-		PublicKey:         strings.TrimSpace(publicKey),
 		InSubmission:      false,
 		SubmissionVersion: "",
 		SubmissionProof:   nil,
@@ -168,7 +167,7 @@ func (m *PlatformManifest) Validate(allowLocalHTTP bool) error {
 	if err := validateManifestDomains(m.Domains, m.Category); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(m.PublicKey, "z") || len(m.PublicKey) < 2 || len(m.PublicKey) > 8192 {
+	if m.PublicKey != "" && (!strings.HasPrefix(m.PublicKey, "z") || len(m.PublicKey) < 2 || len(m.PublicKey) > 8192) {
 		return errors.New("publicKey must be a z-prefixed multibase key")
 	}
 	if err := validateWebURL(m.URL, true, allowLocalHTTP); err != nil {
