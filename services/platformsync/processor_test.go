@@ -104,23 +104,46 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		}
 		json.NewEncoder(response).Encode(map[string]any{"tag_name": f.release.TagName})
 	case request.Method == http.MethodGet && request.URL.Path == "/entropy":
-		json.NewEncoder(response).Encode(map[string]string{"token": "entropy"})
+		entropyPayload, err := json.Marshal(map[string]string{"entropy": "platform-test-entropy"})
+		require.NoError(t, err)
+		json.NewEncoder(response).Encode(map[string]string{
+			"token": "eyJhbGciOiJFUzI1NiJ9." + base64.RawURLEncoding.EncodeToString(entropyPayload) + ".signature",
+		})
 	case request.Method == http.MethodPost && request.URL.Path == "/provision":
 		var input map[string]string
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
 		assert.Equal(t, "z0123456789", input["publicKey"])
 		f.mu.Lock()
 		f.provisionCalls++
+		reserved := f.manifest.PublicKey == ""
 		f.mu.Unlock()
-		json.NewEncoder(response).Encode(map[string]any{"success": true, "w3id": "@guided.w3id", "uri": f.server.URL})
+		w3id := "@guided.w3id"
+		if reserved {
+			var deriveErr error
+			w3id, deriveErr = deploymentEName(input["registryEntropy"], input["namespace"])
+			require.NoError(t, deriveErr)
+		}
+		json.NewEncoder(response).Encode(map[string]any{"success": true, "w3id": w3id, "uri": f.server.URL})
 	case request.Method == http.MethodGet && request.URL.Path == "/resolve":
-		assert.Equal(t, "@guided.w3id", request.URL.Query().Get("w3id"))
+		f.mu.Lock()
+		expectedEName := "@guided.w3id"
+		if f.manifest.EName != nil {
+			expectedEName = *f.manifest.EName
+		}
+		f.mu.Unlock()
+		assert.Equal(t, expectedEName, request.URL.Query().Get("w3id"))
 		json.NewEncoder(response).Encode(map[string]string{"uri": f.server.URL})
 	case request.Method == http.MethodPost && request.URL.Path == "/platforms/certification":
 		json.NewEncoder(response).Encode(map[string]any{"token": "platform-token", "expiresAt": time.Now().Add(time.Hour).UnixMilli()})
 	case request.Method == http.MethodPost && request.URL.Path == "/graphql":
 		assert.Equal(t, "Bearer platform-token", request.Header.Get("Authorization"))
-		assert.Equal(t, "@guided.w3id", request.Header.Get("X-ENAME"))
+		f.mu.Lock()
+		expectedEName := "@guided.w3id"
+		if f.manifest.EName != nil {
+			expectedEName = *f.manifest.EName
+		}
+		f.mu.Unlock()
+		assert.Equal(t, expectedEName, request.Header.Get("X-ENAME"))
 		var input map[string]any
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
 		if strings.Contains(input["query"].(string), "PlatformAccreditations") {
@@ -444,7 +467,7 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	assert.Equal(t, false, fake.published[2]["isActive"])
 }
 
-func TestProcessorDefersIdentityUntilFirstDeployment(t *testing.T) {
+func TestProcessorReservesIdentityUntilFirstDeployment(t *testing.T) {
 	fake := newFakePlatformInfrastructure(t)
 	fake.manifest.PublicKey = ""
 	store := openTestStore(t)
@@ -458,8 +481,14 @@ func TestProcessorDefersIdentityUntilFirstDeployment(t *testing.T) {
 	job, err = store.Get(42)
 	require.NoError(t, err)
 	assert.Equal(t, StatusAwaitingDeploy, job.Status)
-	assert.Empty(t, job.EName)
+	assert.NotEmpty(t, job.EName)
+	assert.NotEmpty(t, job.RegistryEntropy)
+	assert.NotEmpty(t, job.Namespace)
+	assert.False(t, job.IdentityProvisioned)
+	require.NotNil(t, fake.manifest.EName)
+	assert.Equal(t, job.EName, *fake.manifest.EName)
 	assert.Zero(t, fake.provisionCalls)
+	reservedEName := job.EName
 
 	job, err = processor.BootstrapPlatformIdentity(context.Background(), BootstrapPlatformRequest{
 		RepositoryID:  42,
@@ -469,7 +498,8 @@ func TestProcessorDefersIdentityUntilFirstDeployment(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, StatusPublished, job.Status)
-	assert.Equal(t, "@guided.w3id", job.EName)
+	assert.Equal(t, reservedEName, job.EName)
+	assert.True(t, job.IdentityProvisioned)
 	assert.Equal(t, "z0123456789", fake.manifest.PublicKey)
 	assert.Equal(t, 1, fake.provisionCalls)
 	assert.Empty(t, job.ProvisioningKey)

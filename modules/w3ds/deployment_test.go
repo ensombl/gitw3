@@ -30,3 +30,14 @@ func TestBuildDeploymentAttestation(t *testing.T) {
 	assert.True(t, len(signingPayload) < 80)
 	assert.Contains(t, signingPayload, DeploymentPayloadPrefix)
 }
+
+func TestSoftwareVersionEName(t *testing.T) {
+	eName, err := SoftwareVersionEName("@0699e093-2dd9-59cc-a416-7dc69623ebfd", "1.2.3")
+	require.NoError(t, err)
+	assert.Equal(t, "@c4cc7cd1-8670-5a37-8a7b-8ebc0b6022d8", eName)
+
+	_, err = SoftwareVersionEName("@not-a-uuid", "1.2.3")
+	assert.Error(t, err)
+	_, err = SoftwareVersionEName("@0699e093-2dd9-59cc-a416-7dc69623ebfd", "")
+	assert.Error(t, err)
+}

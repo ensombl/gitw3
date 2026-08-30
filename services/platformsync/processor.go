@@ -74,18 +74,27 @@ func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeployme
 	if existing, err := p.store.GetDeployment(input.ID); err != nil || existing != nil {
 		return existing, err
 	}
-	if err := p.requireDeploymentCertification(ctx, input.RepositoryID, input.PlatformEName, input.Version); err != nil {
+	platform, err := p.store.Get(input.RepositoryID)
+	if err != nil {
 		return nil, err
 	}
-	platformID, err := uuid.Parse(strings.TrimPrefix(input.PlatformEName, "@"))
-	if err != nil {
-		return nil, errors.New("platform eName must contain a UUID")
+	if platform == nil || platform.EName != input.PlatformEName {
+		return nil, errors.New("platform identity does not match this repository")
+	}
+	activatesPlatform := platformIdentityReserved(platform) && !platformIdentityProvisioned(platform)
+	if !activatesPlatform {
+		if err := p.requireDeploymentCertification(ctx, input.RepositoryID, input.PlatformEName, input.Version); err != nil {
+			return nil, err
+		}
 	}
 	identity, err := p.w3ds.prepareIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
-	versionEName := "@" + uuid.NewSHA1(platformID, []byte("software-version:"+input.Version)).String()
+	versionEName, err := w3ds.SoftwareVersionEName(input.PlatformEName, input.Version)
+	if err != nil {
+		return nil, err
+	}
 	_, _, bundle, err := w3ds.BuildDeploymentAttestation(
 		identity.EName, input.DeploymentName, input.Environment, input.DeployerEName,
 		input.PlatformEName, versionEName, input.Version, input.ReleaseTag, input.CommitSHA, input.PublicKey,
@@ -100,7 +109,8 @@ func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeployme
 		DeploymentName: input.DeploymentName, Environment: input.Environment, DeployerEName: input.DeployerEName,
 		Version: input.Version, ReleaseTag: input.ReleaseTag, CommitSHA: strings.ToLower(input.CommitSHA),
 		PublicKey: input.PublicKey, RegistryEntropy: identity.RegistryEntropy, Namespace: identity.Namespace,
-		BundlePayload: bundle, Status: DeploymentAwaitingSignature, CreatedAt: now,
+		ActivatesPlatform: activatesPlatform,
+		BundlePayload:     bundle, Status: DeploymentAwaitingSignature, CreatedAt: now,
 	}
 	if err := p.store.SaveDeployment(job); err != nil {
 		return nil, err
@@ -141,8 +151,14 @@ func (p *Processor) ReconcileDeployment(ctx context.Context, job *DeploymentJob)
 	if job == nil || job.WalletSignature == "" {
 		return errors.New("signed deployment job is required")
 	}
-	if err := p.requireDeploymentCertification(ctx, job.RepositoryID, job.PlatformEName, job.Version); err != nil {
-		return err
+	if job.ActivatesPlatform {
+		if err := p.activateReservedPlatform(ctx, job.RepositoryID, job.PlatformEName, job.PublicKey); err != nil {
+			return err
+		}
+	} else {
+		if err := p.requireDeploymentCertification(ctx, job.RepositoryID, job.PlatformEName, job.Version); err != nil {
+			return err
+		}
 	}
 	job.Status = DeploymentPublishing
 	job.LastError = ""
@@ -215,6 +231,49 @@ func NewProcessor(config Config, store *Store, client *http.Client) *Processor {
 		forgejo: newForgejoClient(config, client),
 		w3ds:    newW3DSClient(config, client),
 	}
+}
+
+func platformIdentityReserved(job *Job) bool {
+	return job != nil && job.EName != "" && job.RegistryEntropy != "" && job.Namespace != ""
+}
+
+func platformIdentityProvisioned(job *Job) bool {
+	if job == nil || job.EName == "" {
+		return false
+	}
+	// Jobs created before identity reservation was introduced already point to
+	// provisioned platform eVaults and have no reservation material.
+	return job.IdentityProvisioned || !platformIdentityReserved(job)
+}
+
+func (p *Processor) activateReservedPlatform(ctx context.Context, repositoryID int64, platformEName, publicKey string) error {
+	job, err := p.store.Get(repositoryID)
+	if err != nil {
+		return err
+	}
+	if job == nil || job.EName != platformEName || !platformIdentityReserved(job) {
+		return errors.New("reserved platform identity is unavailable")
+	}
+	if platformIdentityProvisioned(job) {
+		return nil
+	}
+	if _, err := p.w3ds.provisionPrepared(ctx, &preparedIdentity{
+		RegistryEntropy: job.RegistryEntropy,
+		Namespace:       job.Namespace,
+		EName:           job.EName,
+	}, publicKey); err != nil {
+		return err
+	}
+	job.IdentityProvisioned = true
+	job.ProvisioningKey = publicKey
+	job.Status = StatusPublishing
+	job.LastError = ""
+	job.Attempts = 0
+	job.NextAttempt = time.Now().UTC()
+	if err := p.store.Save(job); err != nil {
+		return err
+	}
+	return p.Reconcile(ctx, job)
 }
 
 // BootstrapPlatformIdentity activates a new platform with the key selected for its first deployment.
@@ -300,6 +359,42 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		provisioningKey = job.ProvisioningKey
 	}
 	if job.EName == "" && provisioningKey == "" {
+		identity, err := p.w3ds.prepareIdentity(ctx)
+		if err != nil {
+			return err
+		}
+		job.EName = identity.EName
+		job.RegistryEntropy = identity.RegistryEntropy
+		job.Namespace = identity.Namespace
+		job.PlatformName = manifest.PlatformName
+		job.EnvelopeID = uuid.NewSHA1(uuid.NameSpaceURL, []byte(p.config.ForgejoURL+fmt.Sprintf("/repositories/%d", job.RepositoryID))).String()
+		if err := p.store.Save(job); err != nil {
+			return err
+		}
+	}
+	if job.EName == "" {
+		ename, err := p.w3ds.provision(ctx, provisioningKey)
+		if err != nil {
+			return err
+		}
+		job.EName = ename
+		job.IdentityProvisioned = true
+		job.PlatformName = manifest.PlatformName
+		job.EnvelopeID = uuid.NewSHA1(uuid.NameSpaceURL, []byte(p.config.ForgejoURL+fmt.Sprintf("/repositories/%d", job.RepositoryID))).String()
+		if err := p.store.Save(job); err != nil {
+			return err
+		}
+	}
+	if manifest.EName == nil {
+		manifest.EName = &job.EName
+		manifestChanged = true
+	}
+	if platformIdentityReserved(job) && !platformIdentityProvisioned(job) && provisioningKey == "" {
+		if manifestChanged && !job.Archive {
+			if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, "chore: reserve platform identity", manifest); err != nil {
+				return err
+			}
+		}
 		job.Manifest = manifest
 		job.PlatformName = manifest.PlatformName
 		job.Status = StatusAwaitingDeploy
@@ -308,24 +403,18 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		job.NextAttempt = time.Time{}
 		return p.store.Save(job)
 	}
-	if job.EName == "" {
-		ename, err := p.w3ds.provision(ctx, provisioningKey)
-		if err != nil {
+	if platformIdentityReserved(job) && !platformIdentityProvisioned(job) {
+		if _, err := p.w3ds.provisionPrepared(ctx, &preparedIdentity{
+			RegistryEntropy: job.RegistryEntropy,
+			Namespace:       job.Namespace,
+			EName:           job.EName,
+		}, provisioningKey); err != nil {
 			return err
 		}
-		job.EName = ename
-		job.PlatformName = manifest.PlatformName
-		job.EnvelopeID = uuid.NewSHA1(uuid.NameSpaceURL, []byte(p.config.ForgejoURL+fmt.Sprintf("/repositories/%d", job.RepositoryID))).String()
-		if err := p.store.Save(job); err != nil {
-			return err
-		}
+		job.IdentityProvisioned = true
 	}
 	if manifest.PublicKey == "" {
 		manifest.PublicKey = provisioningKey
-		manifestChanged = true
-	}
-	if manifest.EName == nil {
-		manifest.EName = &job.EName
 		manifestChanged = true
 	}
 	if !job.Archive {

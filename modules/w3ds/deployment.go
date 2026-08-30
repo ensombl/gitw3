@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -45,6 +47,21 @@ type SoftwareVersionData struct {
 	Version       string `json:"version"`
 	ReleaseTag    string `json:"releaseTag"`
 	CommitSHA     string `json:"commitSha"`
+}
+
+// SoftwareVersionEName returns the stable record identity for one released
+// version of a platform. Software version identities are registry records and
+// do not imply that a separate eVault exists for the version.
+func SoftwareVersionEName(platformEName, version string) (string, error) {
+	platformID, err := uuid.Parse(strings.TrimPrefix(strings.TrimSpace(platformEName), "@"))
+	if err != nil {
+		return "", errors.New("platform eName must contain a UUID")
+	}
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return "", errors.New("software version is required")
+	}
+	return "@" + uuid.NewSHA1(platformID, []byte("software-version:"+version)).String(), nil
 }
 
 type DeploymentBindingDocument struct {

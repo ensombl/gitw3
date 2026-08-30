@@ -89,6 +89,7 @@ func Deploy(ctx *context.Context) {
 		return
 	}
 	platformEName := platformENameForManifest(ctx, manifest)
+	platformActivated := strings.TrimSpace(manifest.PublicKey) != ""
 	walletEName, err := w3dsENameForUser(ctx, ctx.Doer)
 	if err != nil {
 		ctx.ServerError("w3dsENameForUser", err)
@@ -101,7 +102,7 @@ func Deploy(ctx *context.Context) {
 	}
 	certificationsAvailable := true
 	hasCertifiedRelease := false
-	if platformEName != "" && len(releases) > 0 {
+	if platformActivated && platformEName != "" && len(releases) > 0 {
 		certifications, certificationErr := loadDeploymentCertifications(ctx, ctx.Repo.Repository.ID, platformEName, releases)
 		if certificationErr != nil {
 			certificationsAvailable = false
@@ -133,9 +134,9 @@ func Deploy(ctx *context.Context) {
 	ctx.Data["DeploymentCertificationsAvailable"] = certificationsAvailable
 	ctx.Data["HasCertifiedDeploymentRelease"] = hasCertifiedRelease
 	ctx.Data["Deployments"] = deployments
-	ctx.Data["PlatformNeedsDeploymentIdentity"] = platformEName == ""
+	ctx.Data["PlatformNeedsDeploymentIdentity"] = !platformActivated
 	ctx.Data["CanCreateDeployment"] = walletEName != "" && len(releases) > 0 && setting.PlatformManifestSync.Enabled &&
-		(platformEName == "" || (certificationsAvailable && hasCertifiedRelease))
+		platformEName != "" && (!platformActivated || (certificationsAvailable && hasCertifiedRelease))
 	ctx.HTML(http.StatusOK, tplRepoDeploy)
 }
 
@@ -189,7 +190,8 @@ func CreateDeployment(ctx *context.Context) {
 		deploymentJSONError(ctx, http.StatusBadRequest, "The release tag must be a semantic version such as v1.2.3.")
 		return
 	}
-	if platformEName != "" {
+	platformActivated := strings.TrimSpace(manifest.PublicKey) != ""
+	if platformActivated && platformEName != "" {
 		certifications, certificationErr := loadDeploymentCertifications(ctx, ctx.Repo.Repository.ID, platformEName, []deploymentReleaseView{{Version: version}})
 		if certificationErr != nil {
 			deploymentJSONError(ctx, http.StatusServiceUnavailable, ctx.Locale.TrString("platform.deploy.certification_unavailable"))
@@ -213,21 +215,8 @@ func CreateDeployment(ctx *context.Context) {
 		return
 	}
 	if platformEName == "" {
-		bootstrapped, err := callDeploymentPublisher(ctx, http.MethodPost, "/api/v1/platforms/bootstrap", map[string]any{
-			"repositoryId":  ctx.Repo.Repository.ID,
-			"fullName":      ctx.Repo.Repository.FullName(),
-			"defaultBranch": ctx.Repo.Repository.DefaultBranch,
-			"publicKey":     form.PublicKey,
-		})
-		if err != nil {
-			deploymentJSONError(ctx, http.StatusBadGateway, "GitW3 could not activate the platform identity: "+err.Error())
-			return
-		}
-		platformEName = strings.TrimSpace(bootstrapped.EName)
-		if platformEName == "" {
-			deploymentJSONError(ctx, http.StatusBadGateway, "The platform publisher did not return an identity.")
-			return
-		}
+		deploymentJSONError(ctx, http.StatusConflict, "GitW3 is still reserving the permanent platform eName. Try again in a moment.")
+		return
 	}
 	id := uuid.NewString()
 	prepared, err := callDeploymentPublisher(ctx, http.MethodPost, "/api/v1/deployments/prepare", map[string]any{

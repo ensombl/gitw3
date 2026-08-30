@@ -36,29 +36,32 @@ const (
 
 // Job is the durable, repository-scoped reconciliation record.
 type Job struct {
-	RepositoryID      int64                        `json:"repositoryId"`
-	FullName          string                       `json:"fullName"`
-	DefaultBranch     string                       `json:"defaultBranch"`
-	TargetSHA         string                       `json:"targetSha"`
-	LastSHA           string                       `json:"lastSha,omitempty"`
-	EName             string                       `json:"ename,omitempty"`
-	ProvisioningKey   string                       `json:"provisioningPublicKey,omitempty"`
-	EnvelopeID        string                       `json:"envelopeId,omitempty"`
-	PlatformName      string                       `json:"platformName,omitempty"`
-	ReleaseTag        string                       `json:"releaseTag,omitempty"`
-	ReleaseVersion    string                       `json:"releaseVersion,omitempty"`
-	AuthorENames      []string                     `json:"authorEnames,omitempty"`
-	Manifest          *w3ds.PlatformManifest       `json:"manifest,omitempty"`
-	Decision          *w3ds.AccreditationDecision  `json:"decision,omitempty"`
-	Decisions         []w3ds.AccreditationDecision `json:"decisions,omitempty"`
-	DecisionCheckedAt time.Time                    `json:"decisionCheckedAt,omitempty"`
-	Archive           bool                         `json:"archive"`
-	Status            Status                       `json:"status"`
-	Attempts          int                          `json:"attempts"`
-	LastError         string                       `json:"lastError,omitempty"`
-	NextAttempt       time.Time                    `json:"nextAttempt"`
-	CreatedAt         time.Time                    `json:"createdAt"`
-	UpdatedAt         time.Time                    `json:"updatedAt"`
+	RepositoryID        int64                        `json:"repositoryId"`
+	FullName            string                       `json:"fullName"`
+	DefaultBranch       string                       `json:"defaultBranch"`
+	TargetSHA           string                       `json:"targetSha"`
+	LastSHA             string                       `json:"lastSha,omitempty"`
+	EName               string                       `json:"ename,omitempty"`
+	RegistryEntropy     string                       `json:"registryEntropy,omitempty"`
+	Namespace           string                       `json:"namespace,omitempty"`
+	IdentityProvisioned bool                         `json:"identityProvisioned,omitempty"`
+	ProvisioningKey     string                       `json:"provisioningPublicKey,omitempty"`
+	EnvelopeID          string                       `json:"envelopeId,omitempty"`
+	PlatformName        string                       `json:"platformName,omitempty"`
+	ReleaseTag          string                       `json:"releaseTag,omitempty"`
+	ReleaseVersion      string                       `json:"releaseVersion,omitempty"`
+	AuthorENames        []string                     `json:"authorEnames,omitempty"`
+	Manifest            *w3ds.PlatformManifest       `json:"manifest,omitempty"`
+	Decision            *w3ds.AccreditationDecision  `json:"decision,omitempty"`
+	Decisions           []w3ds.AccreditationDecision `json:"decisions,omitempty"`
+	DecisionCheckedAt   time.Time                    `json:"decisionCheckedAt,omitempty"`
+	Archive             bool                         `json:"archive"`
+	Status              Status                       `json:"status"`
+	Attempts            int                          `json:"attempts"`
+	LastError           string                       `json:"lastError,omitempty"`
+	NextAttempt         time.Time                    `json:"nextAttempt"`
+	CreatedAt           time.Time                    `json:"createdAt"`
+	UpdatedAt           time.Time                    `json:"updatedAt"`
 }
 
 type DeploymentStatus string
@@ -88,6 +91,7 @@ type DeploymentJob struct {
 	BundlePayload             string           `json:"bundlePayload"`
 	WalletSignature           string           `json:"walletSignature,omitempty"`
 	KeyBindingCertificate     string           `json:"keyBindingCertificate,omitempty"`
+	ActivatesPlatform         bool             `json:"activatesPlatform,omitempty"`
 	DeploymentKeyDocumentID   string           `json:"deploymentKeyDocumentId,omitempty"`
 	SoftwareVersionDocumentID string           `json:"softwareVersionDocumentId,omitempty"`
 	ProfileEnvelopeID         string           `json:"profileEnvelopeId,omitempty"`
