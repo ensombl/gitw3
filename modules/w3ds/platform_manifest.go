@@ -18,14 +18,62 @@ import (
 )
 
 const (
-	PlatformManifestPath          = ".w3ds/platform.json"
-	PlatformManifestVersion       = 1
-	DefaultPlatformVersion        = "0.1.0"
-	UserProfileOntology           = "550e8400-e29b-41d4-a716-446655440000"
-	PlatformAccreditationOntology = "e1749947-5a10-4973-b9fa-230d8714c36a"
-	PPASubmissionStatementType    = "w3ds.ppa.release-submission"
-	PPASubmissionPayloadPrefix    = "gitw3:ppa:v1:"
+	PlatformManifestPath           = ".w3ds/platform.json"
+	PlatformManifestVersion        = 1
+	DefaultPlatformVersion         = "0.1.0"
+	UserProfileOntology            = "550e8400-e29b-41d4-a716-446655440000"
+	PlatformAccreditationOntology  = "e1749947-5a10-4973-b9fa-230d8714c36a"
+	PPASubmissionStatementType     = "w3ds.ppa.release-submission"
+	PPASubmissionPayloadPrefix     = "gitw3:ppa:v1:"
+	PlatformMigrationStatementType = "w3ds.platform-port"
+	PlatformMigrationPayloadPrefix = "gitw3:platform-port:v1:"
 )
+
+type PlatformMigrationStatement struct {
+	Type              string `json:"type"`
+	SchemaVersion     int    `json:"schemaVersion"`
+	PlatformEName     string `json:"platformEName"`
+	ProfileEnvelopeID string `json:"profileEnvelopeId"`
+	ProfileDigest     string `json:"profileDigest"`
+	TargetInstance    string `json:"targetInstance"`
+	TargetOwner       string `json:"targetOwner"`
+	TargetRepository  string `json:"targetRepository"`
+	SignerEName       string `json:"signerEName"`
+	IssuedAt          string `json:"issuedAt"`
+	Nonce             string `json:"nonce"`
+}
+
+func (s *PlatformMigrationStatement) SigningPayload() (string, error) {
+	if s == nil {
+		return "", errors.New("platform migration statement is required")
+	}
+	data, err := json.Marshal(s)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(data)
+	return PlatformMigrationPayloadPrefix + base64.RawURLEncoding.EncodeToString(digest[:]), nil
+}
+
+type PlatformMigrationProof struct {
+	Statement             PlatformMigrationStatement `json:"statement"`
+	Payload               string                     `json:"payload"`
+	Signature             string                     `json:"signature"`
+	PublicKey             string                     `json:"publicKey"`
+	KeyBindingCertificate string                     `json:"keyBindingCertificate"`
+	VerifiedAt            string                     `json:"verifiedAt"`
+}
+
+type PlatformMigration struct {
+	Status                 string                  `json:"status"`
+	ProfileEnvelopeID      string                  `json:"profileEnvelopeId"`
+	ProfileDigest          string                  `json:"profileDigest"`
+	LegacyTokenFingerprint string                  `json:"legacyTokenFingerprint"`
+	SourceProfile          json.RawMessage         `json:"sourceProfile"`
+	SourceAuthorENames     []string                `json:"sourceAuthorEnames,omitempty"`
+	Proof                  *PlatformMigrationProof `json:"proof"`
+	ActivatedAt            string                  `json:"activatedAt,omitempty"`
+}
 
 // PPASubmissionStatement is the canonical release application an authorized
 // repository owner signs with their eID wallet.
@@ -114,6 +162,7 @@ type PlatformManifest struct {
 	SubmissionProof   *PPASubmissionProof  `json:"submissionProof,omitempty"`
 	SubmissionHistory []PPASubmissionProof `json:"submissionHistory,omitempty"`
 	IsDraft           bool                 `json:"isDraft"`
+	Migration         *PlatformMigration   `json:"migration,omitempty"`
 }
 
 // NewPlatformManifest creates a manifest whose eName will be filled by the publisher.
@@ -181,7 +230,71 @@ func (m *PlatformManifest) Validate(allowLocalHTTP bool) error {
 	if m.EName != nil && strings.TrimSpace(*m.EName) == "" {
 		return errors.New("ename must be null or a non-empty W3DS identifier")
 	}
+	if err := m.validateMigration(); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (m *PlatformManifest) validateMigration() error {
+	if m.Migration == nil {
+		return nil
+	}
+	migration := m.Migration
+	if migration.Status != "staged" && migration.Status != "activating" && migration.Status != "active" {
+		return errors.New("migration status must be staged, activating, or active")
+	}
+	if m.EName == nil || !strings.HasPrefix(strings.TrimSpace(*m.EName), "@") {
+		return errors.New("a migrated platform requires its existing eName")
+	}
+	if strings.TrimSpace(migration.ProfileEnvelopeID) == "" || !isSHA256Hex(migration.ProfileDigest) || !isSHA256Hex(migration.LegacyTokenFingerprint) {
+		return errors.New("migration is missing its source profile identity")
+	}
+	if len(migration.SourceProfile) == 0 || !json.Valid(migration.SourceProfile) {
+		return errors.New("migration sourceProfile must contain valid JSON")
+	}
+	proof := migration.Proof
+	if proof == nil {
+		return errors.New("migration requires an eID wallet signature proof")
+	}
+	statement := &proof.Statement
+	if statement.Type != PlatformMigrationStatementType || statement.SchemaVersion != 1 ||
+		statement.PlatformEName != strings.TrimSpace(*m.EName) || statement.ProfileEnvelopeID != migration.ProfileEnvelopeID ||
+		statement.ProfileDigest != migration.ProfileDigest || !strings.HasPrefix(statement.SignerEName, "@") ||
+		strings.TrimSpace(statement.TargetInstance) == "" || strings.TrimSpace(statement.TargetOwner) == "" || strings.TrimSpace(statement.TargetRepository) == "" ||
+		strings.TrimSpace(statement.Nonce) == "" {
+		return errors.New("migration proof does not match the source platform or target repository")
+	}
+	if _, err := time.Parse(time.RFC3339, statement.IssuedAt); err != nil {
+		return errors.New("migration proof has an invalid issuance time")
+	}
+	if _, err := time.Parse(time.RFC3339, proof.VerifiedAt); err != nil {
+		return errors.New("migration proof has an invalid verification time")
+	}
+	payload, err := statement.SigningPayload()
+	if err != nil || proof.Payload != payload || proof.Signature == "" || proof.PublicKey == "" || proof.KeyBindingCertificate == "" {
+		return errors.New("migration proof is missing valid cryptographic evidence")
+	}
+	if migration.Status == "active" {
+		if _, err := time.Parse(time.RFC3339, migration.ActivatedAt); err != nil {
+			return errors.New("active migration requires a valid activation time")
+		}
+	} else if migration.ActivatedAt != "" {
+		return errors.New("only an active migration may have activatedAt")
+	}
+	return nil
+}
+
+func isSHA256Hex(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	for _, char := range value {
+		if !strings.ContainsRune("0123456789abcdef", char) {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *PlatformManifest) validateSubmissionProof() error {

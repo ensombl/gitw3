@@ -5,6 +5,7 @@ package w3ds
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,6 +191,29 @@ func TestPlatformManifestLifecycleDefaultsAreBackwardsCompatible(t *testing.T) {
 	assert.Empty(t, legacy.SubmissionVersion)
 	assert.False(t, legacy.IsDraft)
 	require.NoError(t, legacy.Validate(false))
+}
+
+func TestPlatformManifestValidatesSignedMigration(t *testing.T) {
+	manifest := validManifest()
+	ename := "@existing-platform"
+	manifest.EName = &ename
+	statement := PlatformMigrationStatement{
+		Type: PlatformMigrationStatementType, SchemaVersion: 1, PlatformEName: ename,
+		ProfileEnvelopeID: "profile-1", ProfileDigest: strings.Repeat("a", 64),
+		TargetInstance: "https://gitw3.example", TargetOwner: "owner", TargetRepository: "repo",
+		SignerEName: "@owner", IssuedAt: time.Now().UTC().Format(time.RFC3339), Nonce: "nonce",
+	}
+	payload, err := statement.SigningPayload()
+	require.NoError(t, err)
+	manifest.Migration = &PlatformMigration{
+		Status: "staged", ProfileEnvelopeID: "profile-1", ProfileDigest: strings.Repeat("a", 64),
+		LegacyTokenFingerprint: strings.Repeat("b", 64), SourceProfile: json.RawMessage(`{"platformName":"example"}`),
+		Proof: &PlatformMigrationProof{Statement: statement, Payload: payload, Signature: "signature", PublicKey: "key", KeyBindingCertificate: "certificate", VerifiedAt: time.Now().UTC().Format(time.RFC3339)},
+	}
+	require.NoError(t, manifest.Validate(false))
+
+	manifest.Migration.ProfileEnvelopeID = "different"
+	require.ErrorContains(t, manifest.Validate(false), "proof does not match")
 }
 
 func TestNormalizeReleaseVersion(t *testing.T) {
