@@ -213,6 +213,7 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	var server *httptest.Server
 	provisioned := false
 	createdDocuments := 0
+	profilePublished := false
 	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/entropy":
@@ -220,6 +221,9 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 		case "/platforms/certification":
 			_ = json.NewEncoder(response).Encode(map[string]any{"token": "platform-token"})
 		case "/records/software-versions":
+			assert.True(t, provisioned, "version registration must follow deployment provisioning")
+			assert.Equal(t, 2, createdDocuments, "version registration must follow signed document publication")
+			assert.True(t, profilePublished, "version registration must follow deployment profile publication")
 			assert.Equal(t, "Bearer platform-token", request.Header.Get("Authorization"))
 			_ = json.NewEncoder(response).Encode(map[string]string{"ename": "@c4cc7cd1-8670-5a37-8a7b-8ebc0b6022d8"})
 		case "/resolve":
@@ -246,6 +250,7 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 				createdDocuments++
 				_ = json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"createBindingDocument": map[string]any{"metaEnvelopeId": fmt.Sprintf("document-%d", createdDocuments), "errors": []any{}}}})
 			case strings.Contains(query, "PublishDeployment"):
+				profilePublished = true
 				_ = json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"updateMetaEnvelopeById": map[string]any{"metaEnvelope": map[string]string{"id": "profile"}}}})
 			}
 		default:
@@ -263,6 +268,8 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, DeploymentAwaitingSignature, job.Status)
+	assert.False(t, provisioned, "preparing a signing request must not create W3DS resources")
+	assert.Zero(t, createdDocuments, "preparing a signing request must not publish documents")
 	expectedDeploymentEName, err := deploymentEName(entropyToken, job.Namespace)
 	require.NoError(t, err)
 	assert.Equal(t, expectedDeploymentEName, job.DeploymentEName)

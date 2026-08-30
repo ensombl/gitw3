@@ -418,9 +418,6 @@ func (c *w3dsClient) deploymentRegistered(ctx context.Context, ename string) (bo
 }
 
 func (c *w3dsClient) publishDeployment(ctx context.Context, job *DeploymentJob) error {
-	if err := c.registerSoftwareVersion(ctx, job); err != nil {
-		return err
-	}
 	registered, err := c.deploymentRegistered(ctx, job.DeploymentEName)
 	if err != nil {
 		return err
@@ -494,7 +491,7 @@ func (c *w3dsClient) publishDeployment(ctx context.Context, job *DeploymentJob) 
 	if result.Data.Update.MetaEnvelope == nil {
 		return errors.New("eVault returned no deployment profile")
 	}
-	return nil
+	return c.registerSoftwareVersion(ctx, job)
 }
 
 func (c *w3dsClient) ensureDeploymentBinding(ctx context.Context, endpoint string, headers map[string]string, document w3ds.DeploymentBindingDocument, job *DeploymentJob) (string, error) {
