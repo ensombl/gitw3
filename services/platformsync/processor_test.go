@@ -25,14 +25,16 @@ import (
 )
 
 type fakePlatformInfrastructure struct {
-	mu             sync.Mutex
-	manifest       *w3ds.PlatformManifest
-	manifestExists bool
-	release        *platformRelease
-	provisionCalls int
-	published      []map[string]any
-	accreditations []w3ds.AccreditationDecision
-	server         *httptest.Server
+	mu                     sync.Mutex
+	manifest               *w3ds.PlatformManifest
+	manifestExists         bool
+	release                *platformRelease
+	provisionCalls         int
+	activationCalls        int
+	manifestUpdateFailures int
+	published              []map[string]any
+	accreditations         []w3ds.AccreditationDecision
+	server                 *httptest.Server
 }
 
 func newFakePlatformInfrastructure(t *testing.T) *fakePlatformInfrastructure {
@@ -69,6 +71,14 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		content := base64.StdEncoding.EncodeToString(data)
 		json.NewEncoder(response).Encode(map[string]any{"sha": "blob-sha", "content": content})
 	case request.Method == http.MethodPut && request.URL.Path == "/api/v1/repos/alice/platform/contents/.w3ds/platform.json":
+		f.mu.Lock()
+		if f.manifestUpdateFailures > 0 {
+			f.manifestUpdateFailures--
+			f.mu.Unlock()
+			http.Error(response, "temporary Forgejo failure", http.StatusServiceUnavailable)
+			return
+		}
+		f.mu.Unlock()
 		var input struct {
 			Content string `json:"content"`
 		}
@@ -142,6 +152,9 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		json.NewEncoder(response).Encode(map[string]string{"fingerprint": tokenFingerprint("legacy-token")})
 	case request.Method == http.MethodPost && request.URL.Path == "/platforms/migrations/activate":
 		assert.Equal(t, "Bearer registry-secret", request.Header.Get("Authorization"))
+		f.mu.Lock()
+		f.activationCalls++
+		f.mu.Unlock()
 		json.NewEncoder(response).Encode(map[string]any{"token": "manager-token"})
 	case request.Method == http.MethodPost && request.URL.Path == "/platforms/management/token":
 		assert.Equal(t, "Bearer registry-secret", request.Header.Get("Authorization"))
@@ -349,6 +362,37 @@ func TestActivateMigrationReusesOriginalProfileEnvelope(t *testing.T) {
 	assert.Equal(t, "existing-profile", activated.EnvelopeID)
 	require.Len(t, fake.published, 1)
 	assert.Equal(t, "@existing-platform", fake.published[0]["ename"])
+}
+
+func TestActivateMigrationResumesAfterManifestCommitFailure(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	addMigrationProof(t, fake.manifest, "staged")
+	fake.manifestUpdateFailures = 1
+	store := openTestStore(t)
+	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-1", false))
+	job, _ := store.Get(42)
+	config := testConfig(fake.server.URL, "")
+	config.RegistrySharedSecret = "registry-secret"
+	processor := NewProcessor(config, store, fake.server.Client())
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+
+	_, err := processor.ActivatePlatformMigration(context.Background(), ActivatePlatformMigrationRequest{
+		RepositoryID: 42, EName: "@existing-platform", ProfileEnvelopeID: "existing-profile",
+		ProfileDigest: fake.manifest.Migration.ProfileDigest, Token: "legacy-token",
+	})
+	require.ErrorContains(t, err, "temporary Forgejo failure")
+	interrupted, err := store.Get(42)
+	require.NoError(t, err)
+	assert.True(t, interrupted.MigrationActivated)
+	assert.Empty(t, fake.published)
+
+	require.NoError(t, processor.Reconcile(context.Background(), interrupted))
+	resumed, err := store.Get(42)
+	require.NoError(t, err)
+	assert.Equal(t, StatusPublished, resumed.Status)
+	assert.Equal(t, "active", fake.manifest.Migration.Status)
+	assert.Equal(t, 1, fake.activationCalls)
+	require.Len(t, fake.published, 1)
 }
 
 func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {

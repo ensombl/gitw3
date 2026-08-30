@@ -121,7 +121,7 @@ func (p *Processor) ActivatePlatformMigration(ctx context.Context, input Activat
 	if err != nil || job == nil {
 		return nil, errors.New("staged platform migration was not found")
 	}
-	manifest, fileSHA, err := p.forgejo.manifest(ctx, job.FullName, job.DefaultBranch)
+	manifest, _, err := p.forgejo.manifest(ctx, job.FullName, job.DefaultBranch)
 	if err != nil || manifest.Migration == nil || manifest.Migration.Status != "staged" || manifest.EName == nil {
 		return nil, errors.New("repository does not contain a staged platform migration")
 	}
@@ -158,13 +158,9 @@ func (p *Processor) ActivatePlatformMigration(ctx context.Context, input Activat
 	if err := p.w3ds.activateMigration(ctx, input.EName, migration.ProfileEnvelopeID, input.Token); err != nil {
 		return nil, err
 	}
-	migration.Status = "active"
-	migration.ActivatedAt = time.Now().UTC().Format(time.RFC3339)
-	if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, "chore: activate platform migration", manifest); err != nil {
-		return nil, err
-	}
-	job.Manifest = manifest
-	job.Status = StatusPublishing
+	job.MigrationActivated = true
+	job.MigrationActivatedAt = time.Now().UTC()
+	job.Status = StatusActivating
 	job.NextAttempt = time.Now().UTC()
 	if err := p.store.Save(job); err != nil {
 		return nil, err
@@ -467,11 +463,24 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 			job.CreatedAt = time.Now().UTC()
 		}
 		if manifest.Migration.Status == "staged" {
-			job.Status = StatusAwaitingCutover
-			job.Attempts = 0
-			job.LastError = ""
-			job.NextAttempt = time.Time{}
-			return p.store.Save(job)
+			if job.MigrationActivated {
+				manifest.Migration.Status = "active"
+				manifest.Migration.ActivatedAt = job.MigrationActivatedAt.Format(time.RFC3339)
+				if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, "chore: activate platform migration", manifest); err != nil {
+					return err
+				}
+				manifest, fileSHA, err = p.forgejo.manifest(ctx, job.FullName, job.DefaultBranch)
+				if err != nil {
+					return err
+				}
+				job.Manifest = manifest
+			} else {
+				job.Status = StatusAwaitingCutover
+				job.Attempts = 0
+				job.LastError = ""
+				job.NextAttempt = time.Time{}
+				return p.store.Save(job)
+			}
 		}
 	}
 	if job.EName == "" && manifest.EName != nil {

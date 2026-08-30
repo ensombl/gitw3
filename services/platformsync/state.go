@@ -38,32 +38,34 @@ const (
 
 // Job is the durable, repository-scoped reconciliation record.
 type Job struct {
-	RepositoryID        int64                        `json:"repositoryId"`
-	FullName            string                       `json:"fullName"`
-	DefaultBranch       string                       `json:"defaultBranch"`
-	TargetSHA           string                       `json:"targetSha"`
-	LastSHA             string                       `json:"lastSha,omitempty"`
-	EName               string                       `json:"ename,omitempty"`
-	RegistryEntropy     string                       `json:"registryEntropy,omitempty"`
-	Namespace           string                       `json:"namespace,omitempty"`
-	IdentityProvisioned bool                         `json:"identityProvisioned,omitempty"`
-	ProvisioningKey     string                       `json:"provisioningPublicKey,omitempty"`
-	EnvelopeID          string                       `json:"envelopeId,omitempty"`
-	PlatformName        string                       `json:"platformName,omitempty"`
-	ReleaseTag          string                       `json:"releaseTag,omitempty"`
-	ReleaseVersion      string                       `json:"releaseVersion,omitempty"`
-	AuthorENames        []string                     `json:"authorEnames,omitempty"`
-	Manifest            *w3ds.PlatformManifest       `json:"manifest,omitempty"`
-	Decision            *w3ds.AccreditationDecision  `json:"decision,omitempty"`
-	Decisions           []w3ds.AccreditationDecision `json:"decisions,omitempty"`
-	DecisionCheckedAt   time.Time                    `json:"decisionCheckedAt,omitempty"`
-	Archive             bool                         `json:"archive"`
-	Status              Status                       `json:"status"`
-	Attempts            int                          `json:"attempts"`
-	LastError           string                       `json:"lastError,omitempty"`
-	NextAttempt         time.Time                    `json:"nextAttempt"`
-	CreatedAt           time.Time                    `json:"createdAt"`
-	UpdatedAt           time.Time                    `json:"updatedAt"`
+	RepositoryID         int64                        `json:"repositoryId"`
+	FullName             string                       `json:"fullName"`
+	DefaultBranch        string                       `json:"defaultBranch"`
+	TargetSHA            string                       `json:"targetSha"`
+	LastSHA              string                       `json:"lastSha,omitempty"`
+	EName                string                       `json:"ename,omitempty"`
+	RegistryEntropy      string                       `json:"registryEntropy,omitempty"`
+	Namespace            string                       `json:"namespace,omitempty"`
+	IdentityProvisioned  bool                         `json:"identityProvisioned,omitempty"`
+	MigrationActivated   bool                         `json:"migrationActivated,omitempty"`
+	MigrationActivatedAt time.Time                    `json:"migrationActivatedAt,omitempty"`
+	ProvisioningKey      string                       `json:"provisioningPublicKey,omitempty"`
+	EnvelopeID           string                       `json:"envelopeId,omitempty"`
+	PlatformName         string                       `json:"platformName,omitempty"`
+	ReleaseTag           string                       `json:"releaseTag,omitempty"`
+	ReleaseVersion       string                       `json:"releaseVersion,omitempty"`
+	AuthorENames         []string                     `json:"authorEnames,omitempty"`
+	Manifest             *w3ds.PlatformManifest       `json:"manifest,omitempty"`
+	Decision             *w3ds.AccreditationDecision  `json:"decision,omitempty"`
+	Decisions            []w3ds.AccreditationDecision `json:"decisions,omitempty"`
+	DecisionCheckedAt    time.Time                    `json:"decisionCheckedAt,omitempty"`
+	Archive              bool                         `json:"archive"`
+	Status               Status                       `json:"status"`
+	Attempts             int                          `json:"attempts"`
+	LastError            string                       `json:"lastError,omitempty"`
+	NextAttempt          time.Time                    `json:"nextAttempt"`
+	CreatedAt            time.Time                    `json:"createdAt"`
+	UpdatedAt            time.Time                    `json:"updatedAt"`
 }
 
 type DeploymentStatus string
@@ -259,7 +261,8 @@ func (s *Store) Ready(now time.Time, limit int) ([]*Job, error) {
 			if err := json.Unmarshal(data, &job); err != nil {
 				return err
 			}
-			if (job.Status == StatusIdentityPending || job.Status == StatusPublishing || job.Status == StatusFailed) && !job.NextAttempt.After(now) {
+			activationReady := job.Status == StatusActivating && job.MigrationActivated
+			if (job.Status == StatusIdentityPending || job.Status == StatusPublishing || activationReady || job.Status == StatusFailed) && !job.NextAttempt.After(now) {
 				jobs = append(jobs, &job)
 			}
 			return nil
