@@ -220,7 +220,7 @@ export function initW3DSDeploy() {
       const offer = await response.json() as DeploymentOffer;
       if (deploymentEName) deploymentEName.textContent = offer.deploymentEName;
       if (versionEName) versionEName.textContent = offer.versionEName;
-      await toCanvas(canvas, offer.uri, {scale: 8, margin: 4, errorCorrectionLevel: 'L'});
+      await toCanvas(canvas, offer.uri, {scale: 5, margin: 4, errorCorrectionLevel: 'L'});
       openWallet.href = offer.uri;
       status.textContent = status.dataset.waiting ?? '';
       poll(offer.statusUrl);
