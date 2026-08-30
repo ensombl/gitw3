@@ -470,7 +470,6 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 func TestProcessorReservesIdentityUntilFirstDeployment(t *testing.T) {
 	fake := newFakePlatformInfrastructure(t)
 	fake.manifest.PublicKey = ""
-	fake.release = &platformRelease{TagName: "v0.1.1", Version: "0.1.1"}
 	store := openTestStore(t)
 	processor := NewProcessor(testConfig(fake.server.URL, ""), store, &http.Client{Timeout: time.Second})
 
@@ -486,11 +485,27 @@ func TestProcessorReservesIdentityUntilFirstDeployment(t *testing.T) {
 	assert.NotEmpty(t, job.RegistryEntropy)
 	assert.NotEmpty(t, job.Namespace)
 	assert.False(t, job.IdentityProvisioned)
-	assert.Equal(t, "v0.1.1", job.ReleaseTag)
-	assert.Equal(t, "0.1.1", job.ReleaseVersion)
+	assert.Equal(t, "v0.1.0", job.ReleaseTag)
+	assert.Equal(t, "0.1.0", job.ReleaseVersion)
 	require.NotNil(t, fake.manifest.EName)
 	assert.Equal(t, job.EName, *fake.manifest.EName)
+	addSubmissionProof(t, fake.manifest, "alice/platform", 42)
+	fake.release = &platformRelease{TagName: "v0.1.1", Version: "0.1.1"}
+	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-2", false))
+	job, err = store.Get(42)
+	require.NoError(t, err)
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+	job, err = store.Get(42)
+	require.NoError(t, err)
+	assert.Equal(t, StatusAwaitingDeploy, job.Status)
+	assert.Equal(t, "v0.1.1", job.ReleaseTag)
+	assert.Equal(t, "0.1.1", job.ReleaseVersion)
+	assert.Equal(t, job.EName, *fake.manifest.EName)
 	assert.Equal(t, "0.1.1", fake.manifest.Version)
+	assert.False(t, fake.manifest.InSubmission)
+	assert.Empty(t, fake.manifest.SubmissionVersion)
+	assert.Nil(t, fake.manifest.SubmissionProof)
+	assert.NotEmpty(t, fake.manifest.SubmissionHistory)
 	assert.Zero(t, fake.provisionCalls)
 	reservedEName := job.EName
 	deployment, err := processor.PrepareDeployment(context.Background(), PrepareDeploymentRequest{
