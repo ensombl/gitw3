@@ -28,6 +28,8 @@ type Status string
 const (
 	StatusIdentityPending Status = "identity_pending"
 	StatusAwaitingDeploy  Status = "awaiting_deployment"
+	StatusAwaitingCutover Status = "awaiting_cutover"
+	StatusActivating      Status = "activating"
 	StatusPublishing      Status = "publishing"
 	StatusPublished       Status = "published"
 	StatusFailed          Status = "failed"
@@ -220,6 +222,24 @@ func (s *Store) Save(job *Job) error {
 	return s.db.Update(func(tx *bolt.Tx) error {
 		return tx.Bucket([]byte(jobsBucket)).Put(jobKey(job.RepositoryID), data)
 	})
+}
+
+func (s *Store) FindByEName(ename string, exceptRepositoryID int64) (*Job, error) {
+	var found *Job
+	err := s.db.View(func(tx *bolt.Tx) error {
+		return tx.Bucket([]byte(jobsBucket)).ForEach(func(_, data []byte) error {
+			var job Job
+			if err := json.Unmarshal(data, &job); err != nil {
+				return err
+			}
+			if job.RepositoryID != exceptRepositoryID && job.EName == ename && job.Status != StatusArchived {
+				copy := job
+				found = &copy
+			}
+			return nil
+		})
+	})
+	return found, err
 }
 
 func (s *Store) Delete(repositoryID int64) error {

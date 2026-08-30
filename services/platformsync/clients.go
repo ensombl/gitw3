@@ -6,7 +6,9 @@ package platformsync
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -265,6 +267,137 @@ type preparedIdentity struct {
 	RegistryEntropy string
 	Namespace       string
 	EName           string
+}
+
+type legacyPlatformProfile struct {
+	ID           string
+	Digest       string
+	Payload      json.RawMessage
+	AuthorENames []string
+}
+
+func (c *w3dsClient) inspectLegacyToken(ctx context.Context, token string) error {
+	if strings.TrimSpace(c.config.RegistrySharedSecret) == "" {
+		return errors.New("Registry migration credential is not configured")
+	}
+	var result struct {
+		Fingerprint string `json:"fingerprint"`
+	}
+	return c.postJSON(ctx, c.config.RegistryURL+"/platforms/migrations/inspect-token", map[string]string{"token": token}, &result,
+		map[string]string{"Authorization": "Bearer " + c.config.RegistrySharedSecret})
+}
+
+func (c *w3dsClient) legacyPlatformProfile(ctx context.Context, ename, token string) (*legacyPlatformProfile, error) {
+	endpoint, err := c.resolve(ctx, ename)
+	if err != nil {
+		return nil, err
+	}
+	graphql := map[string]any{
+		"query": `query ExistingPlatformProfiles($ontologyId: ID!, $first: Int!) {
+	metaEnvelopes(filter: {ontologyId: $ontologyId}, first: $first) { edges { node { id parsed } } }
+}`,
+		"variables": map[string]any{"ontologyId": w3ds.UserProfileOntology, "first": 100},
+	}
+	var result struct {
+		Data struct {
+			MetaEnvelopes struct {
+				Edges []struct {
+					Node struct {
+						ID     string          `json:"id"`
+						Parsed json.RawMessage `json:"parsed"`
+					} `json:"node"`
+				} `json:"edges"`
+			} `json:"metaEnvelopes"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := c.postJSON(ctx, endpoint, graphql, &result, map[string]string{"Authorization": "Bearer " + token, "X-ENAME": ename}); err != nil {
+		return nil, fmt.Errorf("read existing PlatformProfile: %w", err)
+	}
+	if len(result.Errors) > 0 {
+		return nil, errors.New(result.Errors[0].Message)
+	}
+	matches := make([]legacyPlatformProfile, 0, 1)
+	for _, edge := range result.Data.MetaEnvelopes.Edges {
+		var payload map[string]any
+		if edge.Node.ID == "" || json.Unmarshal(edge.Node.Parsed, &payload) != nil || strings.TrimSpace(stringValue(payload["ename"])) != ename {
+			continue
+		}
+		canonical, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		digest := sha256.Sum256(canonical)
+		matches = append(matches, legacyPlatformProfile{
+			ID: edge.Node.ID, Digest: hex.EncodeToString(digest[:]), Payload: canonical,
+			AuthorENames: explicitProfileAuthors(payload),
+		})
+	}
+	if len(matches) != 1 {
+		return nil, fmt.Errorf("expected exactly one PlatformProfile for %s, found %d", ename, len(matches))
+	}
+	return &matches[0], nil
+}
+
+func explicitProfileAuthors(payload map[string]any) []string {
+	seen := map[string]struct{}{}
+	authors := make([]string, 0)
+	for _, field := range []string{"authorEnames", "authors", "ownerEName", "submittedBy", "contactEName"} {
+		values := []any{payload[field]}
+		if list, ok := payload[field].([]any); ok {
+			values = list
+		}
+		for _, value := range values {
+			ename := strings.TrimSpace(stringValue(value))
+			if !strings.HasPrefix(ename, "@") {
+				continue
+			}
+			if _, ok := seen[ename]; ok {
+				continue
+			}
+			seen[ename] = struct{}{}
+			authors = append(authors, ename)
+		}
+	}
+	return authors
+}
+
+func stringValue(value any) string {
+	text, _ := value.(string)
+	return text
+}
+
+func (c *w3dsClient) activateMigration(ctx context.Context, ename, envelopeID, legacyToken string) error {
+	if strings.TrimSpace(c.config.RegistrySharedSecret) == "" {
+		return errors.New("Registry migration credential is not configured")
+	}
+	var result struct {
+		Token string `json:"token"`
+	}
+	return c.postJSON(ctx, c.config.RegistryURL+"/platforms/migrations/activate", map[string]string{
+		"ename": ename, "manager": c.config.PublisherURL, "profileEnvelopeId": envelopeID, "legacyToken": legacyToken,
+	}, &result, map[string]string{"Authorization": "Bearer " + c.config.RegistrySharedSecret})
+}
+
+func (c *w3dsClient) managerToken(ctx context.Context, ename string) (string, error) {
+	if strings.TrimSpace(c.config.RegistrySharedSecret) == "" {
+		return "", errors.New("Registry migration credential is not configured")
+	}
+	var result struct {
+		Token string `json:"token"`
+	}
+	err := c.postJSON(ctx, c.config.RegistryURL+"/platforms/management/token", map[string]string{
+		"ename": ename, "manager": c.config.PublisherURL,
+	}, &result, map[string]string{"Authorization": "Bearer " + c.config.RegistrySharedSecret})
+	if err != nil {
+		return "", err
+	}
+	if result.Token == "" {
+		return "", errors.New("Registry returned no platform manager token")
+	}
+	return result.Token, nil
 }
 
 func deploymentEName(registryEntropy, namespace string) (string, error) {
@@ -647,7 +780,12 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 	if err != nil {
 		return err
 	}
-	token, err := c.platformToken(ctx)
+	var token string
+	if manifest.Migration != nil && (manifest.Migration.Status == "active" || manifest.Migration.Status == "activating") {
+		token, err = c.managerToken(ctx, ename)
+	} else {
+		token, err = c.platformToken(ctx)
+	}
 	if err != nil {
 		return err
 	}
@@ -656,7 +794,13 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 	if domains == nil {
 		domains = []string{}
 	}
-	payload := map[string]any{
+	payload := map[string]any{}
+	if manifest.Migration != nil && len(manifest.Migration.SourceProfile) > 0 {
+		if err := json.Unmarshal(manifest.Migration.SourceProfile, &payload); err != nil {
+			return fmt.Errorf("decode migrated source profile: %w", err)
+		}
+	}
+	updates := map[string]any{
 		"platformName":      manifest.PlatformName,
 		"displayName":       manifest.DisplayName,
 		"description":       manifest.Description,
@@ -674,6 +818,9 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 		"submissionVersion": manifest.SubmissionVersion,
 		"isDraft":           manifest.IsDraft,
 		"authorEnames":      authorENames,
+	}
+	for name, value := range updates {
+		payload[name] = value
 	}
 	if manifest.SubmissionProof != nil {
 		payload["submissionProof"] = manifest.SubmissionProof

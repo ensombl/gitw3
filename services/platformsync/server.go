@@ -46,6 +46,8 @@ func NewServer(config Config, store *Store, processors ...*Processor) *Server {
 	server.mux.HandleFunc("GET /api/v1/status/{repositoryID}", server.handleStatus)
 	server.mux.HandleFunc("POST /api/v1/platforms/bootstrap", server.handleBootstrapPlatform)
 	server.mux.HandleFunc("POST /api/v1/platforms/deployment-certifications", server.handleDeploymentCertifications)
+	server.mux.HandleFunc("POST /api/v1/platforms/migrations/inspect", server.handleInspectMigration)
+	server.mux.HandleFunc("POST /api/v1/platforms/migrations/activate", server.handleActivateMigration)
 	server.mux.HandleFunc("POST /api/v1/deployments/prepare", server.handlePrepareDeployment)
 	server.mux.HandleFunc("POST /api/v1/deployments/{deploymentID}/finalize", server.handleFinalizeDeployment)
 	server.mux.HandleFunc("GET /api/v1/deployments/{deploymentID}", server.handleDeploymentStatus)
@@ -53,6 +55,54 @@ func NewServer(config Config, store *Store, processors ...*Processor) *Server {
 		response.WriteHeader(http.StatusNoContent)
 	})
 	return server
+}
+
+func (s *Server) handleInspectMigration(response http.ResponseWriter, request *http.Request) {
+	if !s.authorized(request) {
+		http.Error(response, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.processor == nil {
+		http.Error(response, "platform publisher unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	request.Body = http.MaxBytesReader(response, request.Body, maxWebhookBody)
+	var input InspectPlatformMigrationRequest
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		http.Error(response, "invalid platform migration", http.StatusBadRequest)
+		return
+	}
+	inspection, err := s.processor.InspectPlatformMigration(request.Context(), input)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+	response.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(response).Encode(inspection)
+}
+
+func (s *Server) handleActivateMigration(response http.ResponseWriter, request *http.Request) {
+	if !s.authorized(request) {
+		http.Error(response, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.processor == nil {
+		http.Error(response, "platform publisher unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	request.Body = http.MaxBytesReader(response, request.Body, maxWebhookBody)
+	var input ActivatePlatformMigrationRequest
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		http.Error(response, "invalid platform migration activation", http.StatusBadRequest)
+		return
+	}
+	job, err := s.processor.ActivatePlatformMigration(request.Context(), input)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusConflict)
+		return
+	}
+	response.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(response).Encode(map[string]any{"status": job.Status, "ename": job.EName})
 }
 
 func (s *Server) handleDeploymentCertifications(response http.ResponseWriter, request *http.Request) {

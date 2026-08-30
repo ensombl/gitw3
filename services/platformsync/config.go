@@ -17,37 +17,39 @@ const (
 
 // Config contains all deployment-specific platform publisher settings.
 type Config struct {
-	ListenAddr          string
-	StatePath           string
-	ForgejoURL          string
-	ForgejoToken        string
-	WebhookSecret       string
-	InternalToken       string
-	RegistryURL         string
-	ProvisionerURL      string
-	VerificationID      string
-	PublisherURL        string
-	RequestTimeout      time.Duration
-	ReconcilePeriod     time.Duration
-	AccreditationPeriod time.Duration
+	ListenAddr           string
+	StatePath            string
+	ForgejoURL           string
+	ForgejoToken         string
+	WebhookSecret        string
+	InternalToken        string
+	RegistryURL          string
+	RegistrySharedSecret string
+	ProvisionerURL       string
+	VerificationID       string
+	PublisherURL         string
+	RequestTimeout       time.Duration
+	ReconcilePeriod      time.Duration
+	AccreditationPeriod  time.Duration
 }
 
 // ConfigFromEnv loads the standalone service configuration.
 func ConfigFromEnv() (Config, error) {
 	config := Config{
-		ListenAddr:          envOr("PLATFORM_SYNC_LISTEN_ADDR", ":8090"),
-		StatePath:           envOr("PLATFORM_SYNC_STATE_PATH", "data/platform-manifest-sync.db"),
-		ForgejoURL:          strings.TrimRight(os.Getenv("PLATFORM_SYNC_FORGEJO_URL"), "/"),
-		ForgejoToken:        os.Getenv("PLATFORM_SYNC_FORGEJO_TOKEN"),
-		WebhookSecret:       os.Getenv("PLATFORM_SYNC_WEBHOOK_SECRET"),
-		InternalToken:       os.Getenv("PLATFORM_SYNC_INTERNAL_TOKEN"),
-		RegistryURL:         strings.TrimRight(envOr("PLATFORM_SYNC_REGISTRY_URL", ProductionRegistryURL), "/"),
-		ProvisionerURL:      strings.TrimRight(envOr("PLATFORM_SYNC_PROVISIONER_URL", ProductionProvisionerURL), "/"),
-		VerificationID:      os.Getenv("PLATFORM_SYNC_VERIFICATION_ID"),
-		PublisherURL:        os.Getenv("PLATFORM_SYNC_PUBLISHER_URL"),
-		RequestTimeout:      20 * time.Second,
-		ReconcilePeriod:     2 * time.Second,
-		AccreditationPeriod: 10 * time.Second,
+		ListenAddr:           envOr("PLATFORM_SYNC_LISTEN_ADDR", ":8090"),
+		StatePath:            envOr("PLATFORM_SYNC_STATE_PATH", "data/platform-manifest-sync.db"),
+		ForgejoURL:           strings.TrimRight(os.Getenv("PLATFORM_SYNC_FORGEJO_URL"), "/"),
+		ForgejoToken:         os.Getenv("PLATFORM_SYNC_FORGEJO_TOKEN"),
+		WebhookSecret:        os.Getenv("PLATFORM_SYNC_WEBHOOK_SECRET"),
+		InternalToken:        os.Getenv("PLATFORM_SYNC_INTERNAL_TOKEN"),
+		RegistryURL:          strings.TrimRight(envOr("PLATFORM_SYNC_REGISTRY_URL", ProductionRegistryURL), "/"),
+		RegistrySharedSecret: os.Getenv("PLATFORM_SYNC_REGISTRY_SHARED_SECRET"),
+		ProvisionerURL:       strings.TrimRight(envOr("PLATFORM_SYNC_PROVISIONER_URL", ProductionProvisionerURL), "/"),
+		VerificationID:       os.Getenv("PLATFORM_SYNC_VERIFICATION_ID"),
+		PublisherURL:         os.Getenv("PLATFORM_SYNC_PUBLISHER_URL"),
+		RequestTimeout:       20 * time.Second,
+		ReconcilePeriod:      2 * time.Second,
+		AccreditationPeriod:  10 * time.Second,
 	}
 	if err := config.Validate(); err != nil {
 		return Config{}, err

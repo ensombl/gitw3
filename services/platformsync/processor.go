@@ -5,6 +5,9 @@ package platformsync
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -58,12 +61,119 @@ type CheckDeploymentCertificationsRequest struct {
 	Versions      []string `json:"versions"`
 }
 
+type InspectPlatformMigrationRequest struct {
+	EName string `json:"ename"`
+	Token string `json:"token"`
+}
+
+type PlatformMigrationInspection struct {
+	EName             string          `json:"ename"`
+	ProfileEnvelopeID string          `json:"profileEnvelopeId"`
+	ProfileDigest     string          `json:"profileDigest"`
+	TokenFingerprint  string          `json:"tokenFingerprint"`
+	Profile           json.RawMessage `json:"profile"`
+	AuthorENames      []string        `json:"authorEnames"`
+}
+
+type ActivatePlatformMigrationRequest struct {
+	RepositoryID      int64  `json:"repositoryId"`
+	EName             string `json:"ename"`
+	ProfileEnvelopeID string `json:"profileEnvelopeId"`
+	ProfileDigest     string `json:"profileDigest"`
+	Token             string `json:"token"`
+}
+
 type DeploymentCertification struct {
 	Certified bool                        `json:"certified"`
 	Decision  *w3ds.AccreditationDecision `json:"decision,omitempty"`
 }
 
 var ErrDeploymentCertificationRequired = errors.New("PPA certification is required")
+
+func (p *Processor) InspectPlatformMigration(ctx context.Context, input InspectPlatformMigrationRequest) (*PlatformMigrationInspection, error) {
+	if !strings.HasPrefix(strings.TrimSpace(input.EName), "@") || strings.TrimSpace(input.Token) == "" {
+		return nil, errors.New("an existing platform eName and token are required")
+	}
+	if strings.TrimSpace(p.config.RegistrySharedSecret) == "" {
+		return nil, errors.New("platform migration is not configured")
+	}
+	if err := p.w3ds.inspectLegacyToken(ctx, input.Token); err != nil {
+		return nil, err
+	}
+	profile, err := p.w3ds.legacyPlatformProfile(ctx, strings.TrimSpace(input.EName), input.Token)
+	if err != nil {
+		return nil, err
+	}
+	return &PlatformMigrationInspection{
+		EName: strings.TrimSpace(input.EName), ProfileEnvelopeID: profile.ID,
+		ProfileDigest: profile.Digest, TokenFingerprint: tokenFingerprint(input.Token),
+		Profile: profile.Payload, AuthorENames: profile.AuthorENames,
+	}, nil
+}
+
+func tokenFingerprint(token string) string {
+	digest := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(digest[:])
+}
+
+func (p *Processor) ActivatePlatformMigration(ctx context.Context, input ActivatePlatformMigrationRequest) (*Job, error) {
+	job, err := p.store.Get(input.RepositoryID)
+	if err != nil || job == nil {
+		return nil, errors.New("staged platform migration was not found")
+	}
+	manifest, fileSHA, err := p.forgejo.manifest(ctx, job.FullName, job.DefaultBranch)
+	if err != nil || manifest.Migration == nil || manifest.Migration.Status != "staged" || manifest.EName == nil {
+		return nil, errors.New("repository does not contain a staged platform migration")
+	}
+	migration := manifest.Migration
+	if *manifest.EName != input.EName || migration.ProfileEnvelopeID != input.ProfileEnvelopeID || migration.ProfileDigest != input.ProfileDigest ||
+		migration.LegacyTokenFingerprint != tokenFingerprint(input.Token) {
+		return nil, errors.New("the platform, profile, or original token does not match the staged migration")
+	}
+	if other, err := p.store.FindByEName(input.EName, input.RepositoryID); err != nil {
+		return nil, err
+	} else if other != nil {
+		return nil, errors.New("another GitW3 repository already manages this platform eName")
+	}
+	inspection, err := p.InspectPlatformMigration(ctx, InspectPlatformMigrationRequest{EName: input.EName, Token: input.Token})
+	if err != nil {
+		return nil, err
+	}
+	if inspection.ProfileEnvelopeID != migration.ProfileEnvelopeID || inspection.ProfileDigest != migration.ProfileDigest {
+		return nil, errors.New("the source PlatformProfile changed after staging; restart the migration to review it again")
+	}
+	release, err := p.forgejo.latestRelease(ctx, job.FullName)
+	if err != nil || release.Version != manifest.Version {
+		return nil, errors.New("publish a stable Git release matching the staged platform version before cutover")
+	}
+	job.Status = StatusActivating
+	job.EName = input.EName
+	job.EnvelopeID = migration.ProfileEnvelopeID
+	job.PlatformName = manifest.PlatformName
+	job.ReleaseTag = release.TagName
+	job.ReleaseVersion = release.Version
+	if err := p.store.Save(job); err != nil {
+		return nil, err
+	}
+	if err := p.w3ds.activateMigration(ctx, input.EName, migration.ProfileEnvelopeID, input.Token); err != nil {
+		return nil, err
+	}
+	migration.Status = "active"
+	migration.ActivatedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, "chore: activate platform migration", manifest); err != nil {
+		return nil, err
+	}
+	job.Manifest = manifest
+	job.Status = StatusPublishing
+	job.NextAttempt = time.Now().UTC()
+	if err := p.store.Save(job); err != nil {
+		return nil, err
+	}
+	if err := p.Reconcile(ctx, job); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
 
 func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeploymentRequest) (*DeploymentJob, error) {
 	if input.ID == "" || input.RepositoryID <= 0 || input.PlatformEName == "" || input.DeploymentName == "" ||
@@ -345,6 +455,25 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 	if job.PlatformName != "" && manifest.PlatformName != job.PlatformName {
 		return errors.New("platformName is immutable after first publication")
 	}
+	if manifest.Migration != nil {
+		if manifest.EName == nil || manifest.Migration.ProfileEnvelopeID == "" {
+			return errors.New("migrated platform manifest is incomplete")
+		}
+		job.EName = *manifest.EName
+		job.EnvelopeID = manifest.Migration.ProfileEnvelopeID
+		job.PlatformName = manifest.PlatformName
+		job.Manifest = manifest
+		if job.CreatedAt.IsZero() {
+			job.CreatedAt = time.Now().UTC()
+		}
+		if manifest.Migration.Status == "staged" {
+			job.Status = StatusAwaitingCutover
+			job.Attempts = 0
+			job.LastError = ""
+			job.NextAttempt = time.Time{}
+			return p.store.Save(job)
+		}
+	}
 	if job.EName == "" && manifest.EName != nil {
 		return errors.New("an existing eName cannot be claimed through new-platform onboarding")
 	}
@@ -389,7 +518,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		manifest.EName = &job.EName
 		manifestChanged = true
 	}
-	if !job.Archive {
+	if !job.Archive && manifest.Migration == nil {
 		release, err := p.forgejo.latestRelease(ctx, job.FullName)
 		switch {
 		case errors.Is(err, ErrReleaseNotFound):
@@ -430,7 +559,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 			manifestMessage = "chore: sync latest platform release"
 		}
 	}
-	if platformIdentityReserved(job) && !platformIdentityProvisioned(job) && provisioningKey == "" {
+	if manifest.Migration == nil && platformIdentityReserved(job) && !platformIdentityProvisioned(job) && provisioningKey == "" {
 		if manifestChanged && !job.Archive {
 			if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, manifestMessage, manifest); err != nil {
 				return err
@@ -444,7 +573,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		job.NextAttempt = time.Time{}
 		return p.store.Save(job)
 	}
-	if platformIdentityReserved(job) && !platformIdentityProvisioned(job) {
+	if manifest.Migration == nil && platformIdentityReserved(job) && !platformIdentityProvisioned(job) {
 		if _, err := p.w3ds.provisionPrepared(ctx, &preparedIdentity{
 			RegistryEntropy: job.RegistryEntropy,
 			Namespace:       job.Namespace,
@@ -454,7 +583,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		}
 		job.IdentityProvisioned = true
 	}
-	if manifest.PublicKey == "" {
+	if manifest.Migration == nil && manifest.PublicKey == "" {
 		manifest.PublicKey = provisioningKey
 		manifestChanged = true
 	}
@@ -474,11 +603,15 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		if ref == "" {
 			ref = job.DefaultBranch
 		}
-		authorENames, err := p.forgejo.authorENames(ctx, job.FullName, ref)
-		if err != nil {
-			return err
+		if manifest.Migration != nil && len(job.AuthorENames) == 0 {
+			job.AuthorENames = append([]string(nil), manifest.Migration.SourceAuthorENames...)
+		} else {
+			authorENames, err := p.forgejo.authorENames(ctx, job.FullName, ref)
+			if err != nil {
+				return err
+			}
+			job.AuthorENames = authorENames
 		}
-		job.AuthorENames = authorENames
 	}
 	if err := p.w3ds.publish(ctx, job.EnvelopeID, manifest, job.CreatedAt, job.Archive, job.AuthorENames); err != nil {
 		return err

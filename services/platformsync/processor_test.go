@@ -5,7 +5,9 @@ package platformsync
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -227,6 +229,76 @@ func addSubmissionProof(t *testing.T, manifest *w3ds.PlatformManifest, repositor
 		VerifiedAt:            time.Now().UTC().Format(time.RFC3339),
 	}
 	manifest.SubmissionHistory = []w3ds.PPASubmissionProof{*manifest.SubmissionProof}
+}
+
+func addMigrationProof(t *testing.T, manifest *w3ds.PlatformManifest, status string) {
+	t.Helper()
+	ename := "@existing-platform"
+	manifest.EName = &ename
+	profile := json.RawMessage(`{"authorEnames":["@alice.w3id"],"description":"Initial description","displayName":"Guided Platform","domains":["productivity","work"],"ename":"@existing-platform","isDraft":false,"platformName":"guided-platform","url":"https://guided.example.com","version":"0.1.0"}`)
+	digest := sha256.Sum256(profile)
+	statement := w3ds.PlatformMigrationStatement{
+		Type: w3ds.PlatformMigrationStatementType, SchemaVersion: 1, PlatformEName: ename,
+		ProfileEnvelopeID: "existing-profile", ProfileDigest: hex.EncodeToString(digest[:]),
+		TargetInstance: "https://gitw3.example.com", TargetOwner: "alice", TargetRepository: "platform",
+		SignerEName: "@alice.w3id", IssuedAt: time.Now().UTC().Format(time.RFC3339), Nonce: "nonce",
+	}
+	payload, err := statement.SigningPayload()
+	require.NoError(t, err)
+	manifest.Migration = &w3ds.PlatformMigration{
+		Status: status, ProfileEnvelopeID: "existing-profile", ProfileDigest: hex.EncodeToString(digest[:]),
+		LegacyTokenFingerprint: strings.Repeat("b", 64), SourceProfile: profile, SourceAuthorENames: []string{"@alice.w3id"},
+		Proof: &w3ds.PlatformMigrationProof{Statement: statement, Payload: payload, Signature: "signature", PublicKey: "key", KeyBindingCertificate: "certificate", VerifiedAt: time.Now().UTC().Format(time.RFC3339)},
+	}
+}
+
+func TestInspectPlatformMigrationFindsOneExactProfile(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/platforms/migrations/inspect-token":
+			assert.Equal(t, "Bearer registry-secret", request.Header.Get("Authorization"))
+			json.NewEncoder(response).Encode(map[string]string{"fingerprint": "accepted"})
+		case "/resolve":
+			json.NewEncoder(response).Encode(map[string]string{"uri": server.URL})
+		case "/graphql":
+			assert.Equal(t, "Bearer legacy-token", request.Header.Get("Authorization"))
+			json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"metaEnvelopes": map[string]any{"edges": []any{
+				map[string]any{"node": map[string]any{"id": "profile-1", "parsed": map[string]any{"ename": "@other", "platformName": "other"}}},
+				map[string]any{"node": map[string]any{"id": "profile-2", "parsed": map[string]any{"ename": "@existing", "platformName": "existing", "authorEnames": []string{"@alice", "@bob"}}}},
+			}}}})
+		default:
+			http.NotFound(response, request)
+		}
+	}))
+	t.Cleanup(server.Close)
+	config := testConfig(server.URL, "")
+	config.RegistrySharedSecret = "registry-secret"
+	processor := NewProcessor(config, openTestStore(t), server.Client())
+
+	inspection, err := processor.InspectPlatformMigration(context.Background(), InspectPlatformMigrationRequest{EName: "@existing", Token: "legacy-token"})
+	require.NoError(t, err)
+	assert.Equal(t, "profile-2", inspection.ProfileEnvelopeID)
+	assert.Equal(t, []string{"@alice", "@bob"}, inspection.AuthorENames)
+	assert.Equal(t, tokenFingerprint("legacy-token"), inspection.TokenFingerprint)
+}
+
+func TestReconcileStagesMigrationWithoutPublishing(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	addMigrationProof(t, fake.manifest, "staged")
+	store := openTestStore(t)
+	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-1", false))
+	job, err := store.Get(42)
+	require.NoError(t, err)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, fake.server.Client())
+
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+	staged, err := store.Get(42)
+	require.NoError(t, err)
+	assert.Equal(t, StatusAwaitingCutover, staged.Status)
+	assert.Equal(t, "@existing-platform", staged.EName)
+	assert.Equal(t, "existing-profile", staged.EnvelopeID)
+	assert.Empty(t, fake.published)
 }
 
 func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
