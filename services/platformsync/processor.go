@@ -350,6 +350,60 @@ func platformIdentityProvisioned(job *Job) bool {
 	return job.IdentityProvisioned || !platformIdentityReserved(job)
 }
 
+func expiredRegistryEntropy(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "exp") && strings.Contains(message, "claim timestamp check failed")
+}
+
+// provisionReservedPlatform completes a keyless reservation. Reservations
+// created by older GitW3 builds could sit past the Registry entropy JWT's
+// lifetime. If that unpublished eName does not resolve, replace the stale
+// reservation with a fresh one before anything has been published.
+func (p *Processor) provisionReservedPlatform(ctx context.Context, job *Job) (bool, error) {
+	prepared := &preparedIdentity{
+		RegistryEntropy: job.RegistryEntropy,
+		Namespace:       job.Namespace,
+		EName:           job.EName,
+	}
+	if _, err := p.w3ds.provisionPrepared(ctx, prepared, ""); err != nil {
+		registered, resolveErr := p.w3ds.deploymentRegistered(ctx, job.EName)
+		if resolveErr != nil {
+			return false, resolveErr
+		}
+		if registered {
+			job.IdentityProvisioned = true
+			job.ProvisioningKey = ""
+			return false, nil
+		}
+		if !expiredRegistryEntropy(err) {
+			return false, err
+		}
+		identity, prepareErr := p.w3ds.prepareIdentity(ctx)
+		if prepareErr != nil {
+			return false, prepareErr
+		}
+		job.EName = identity.EName
+		job.RegistryEntropy = identity.RegistryEntropy
+		job.Namespace = identity.Namespace
+		job.IdentityProvisioned = false
+		job.ProvisioningKey = ""
+		if saveErr := p.store.Save(job); saveErr != nil {
+			return false, saveErr
+		}
+		if _, provisionErr := p.w3ds.provisionPrepared(ctx, identity, ""); provisionErr != nil {
+			return false, provisionErr
+		}
+		job.IdentityProvisioned = true
+		return true, nil
+	}
+	job.IdentityProvisioned = true
+	job.ProvisioningKey = ""
+	return false, nil
+}
+
 func (p *Processor) activateReservedPlatform(ctx context.Context, repositoryID int64, platformEName string) error {
 	job, err := p.store.Get(repositoryID)
 	if err != nil {
@@ -361,15 +415,13 @@ func (p *Processor) activateReservedPlatform(ctx context.Context, repositoryID i
 	if platformIdentityProvisioned(job) {
 		return nil
 	}
-	if _, err := p.w3ds.provisionPrepared(ctx, &preparedIdentity{
-		RegistryEntropy: job.RegistryEntropy,
-		Namespace:       job.Namespace,
-		EName:           job.EName,
-	}, ""); err != nil {
+	rotated, err := p.provisionReservedPlatform(ctx, job)
+	if err != nil {
 		return err
 	}
-	job.IdentityProvisioned = true
-	job.ProvisioningKey = ""
+	if rotated || job.EName != platformEName {
+		return errors.New("platform identity reservation changed; restart this deployment against the current platform eName")
+	}
 	job.Status = StatusPublishing
 	job.LastError = ""
 	job.Attempts = 0
@@ -565,14 +617,15 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		}
 	}
 	if manifest.Migration == nil && platformIdentityReserved(job) && !platformIdentityProvisioned(job) {
-		if _, err := p.w3ds.provisionPrepared(ctx, &preparedIdentity{
-			RegistryEntropy: job.RegistryEntropy,
-			Namespace:       job.Namespace,
-			EName:           job.EName,
-		}, provisioningKey); err != nil {
+		rotated, err := p.provisionReservedPlatform(ctx, job)
+		if err != nil {
 			return err
 		}
-		job.IdentityProvisioned = true
+		if rotated {
+			manifest.EName = &job.EName
+			manifestChanged = true
+			manifestMessage = "chore: refresh platform identity"
+		}
 	}
 	if manifest.Migration == nil && manifest.PublicKey == "" && provisioningKey != "" {
 		manifest.PublicKey = provisioningKey

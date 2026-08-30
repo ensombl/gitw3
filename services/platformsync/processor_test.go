@@ -33,6 +33,9 @@ type fakePlatformInfrastructure struct {
 	activationCalls        int
 	manifestUpdateFailures int
 	provisionedKeys        []string
+	provisionFailures      int
+	successfulProvisions   int
+	resolveMissing         bool
 	published              []map[string]any
 	accreditations         []w3ds.AccreditationDecision
 	server                 *httptest.Server
@@ -128,6 +131,13 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		f.mu.Lock()
 		f.provisionCalls++
 		f.provisionedKeys = append(f.provisionedKeys, input["publicKey"])
+		if f.provisionFailures > 0 {
+			f.provisionFailures--
+			f.mu.Unlock()
+			http.Error(response, `{"success":false,"error":"JWT verification failed: exp claim timestamp check failed"}`, http.StatusInternalServerError)
+			return
+		}
+		f.successfulProvisions++
 		reserved := f.manifest.PublicKey == ""
 		f.mu.Unlock()
 		w3id := "@guided.w3id"
@@ -139,6 +149,11 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		json.NewEncoder(response).Encode(map[string]any{"success": true, "w3id": w3id, "uri": f.server.URL})
 	case request.Method == http.MethodGet && request.URL.Path == "/resolve":
 		f.mu.Lock()
+		if f.resolveMissing && f.successfulProvisions == 0 {
+			f.mu.Unlock()
+			http.NotFound(response, request)
+			return
+		}
 		expectedEName := "@guided.w3id"
 		if f.manifest.EName != nil {
 			expectedEName = *f.manifest.EName
@@ -693,13 +708,16 @@ func TestProcessorProvisionsPlatformIdentityWithoutKey(t *testing.T) {
 	assert.Empty(t, fake.manifest.PublicKey)
 }
 
-func TestProcessorResumesPreviouslyReservedIdentityWithoutKey(t *testing.T) {
+func TestProcessorRefreshesExpiredUnpublishedReservationWithoutKey(t *testing.T) {
 	fake := newFakePlatformInfrastructure(t)
 	fake.manifest.PublicKey = ""
+	fake.provisionFailures = 1
+	fake.resolveMissing = true
 	store := openTestStore(t)
 	processor := NewProcessor(testConfig(fake.server.URL, ""), store, fake.server.Client())
 	identity, err := processor.w3ds.prepareIdentity(context.Background())
 	require.NoError(t, err)
+	originalEName := identity.EName
 	require.NoError(t, store.Save(&Job{
 		RepositoryID: 42, FullName: "alice/platform", DefaultBranch: "main", TargetSHA: "commit-1", Status: StatusAwaitingDeploy,
 		EName: identity.EName, RegistryEntropy: identity.RegistryEntropy, Namespace: identity.Namespace,
@@ -714,8 +732,12 @@ func TestProcessorResumesPreviouslyReservedIdentityWithoutKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, StatusPublished, job.Status)
 	assert.True(t, job.IdentityProvisioned)
+	assert.NotEqual(t, originalEName, job.EName)
+	require.NotNil(t, fake.manifest.EName)
+	assert.Equal(t, job.EName, *fake.manifest.EName)
 	assert.Empty(t, fake.manifest.PublicKey)
-	assert.Equal(t, []string{""}, fake.provisionedKeys)
+	assert.Equal(t, []string{"", ""}, fake.provisionedKeys)
+	assert.Equal(t, 2, fake.provisionCalls)
 }
 
 func TestProcessorIgnoresRepositoriesWithoutManifest(t *testing.T) {
