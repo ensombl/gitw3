@@ -48,7 +48,7 @@
 					</article>
 				{{end}}
 			</div>
-			<div class="w3ds-welcome-empty{{if $welcome.Versions}} tw-hidden{{end}}" data-w3ds-welcome-empty>
+			<div class="w3ds-welcome-empty{{if not $welcome.Ready}} tw-hidden{{else if $welcome.Versions}} tw-hidden{{end}}" data-w3ds-welcome-empty>
 				{{svg "octicon-tag" 24}}
 				<div><strong>{{ctx.Locale.Tr "platform.welcome.no_versions"}}</strong><p>{{ctx.Locale.Tr "platform.welcome.no_versions_help"}}</p></div>
 			</div>
