@@ -168,7 +168,12 @@
 										<summary>{{svg "octicon-copilot" 18}} <span>{{ctx.Locale.Tr "platform.deploy.ai_title"}}</span></summary>
 										<div class="deployment-ai-helper-content">
 											<p>{{ctx.Locale.Tr "platform.deploy.ai_help"}}</p>
-											<textarea id="deployment-ai-prompt-{{.ID}}" readonly rows="18">You are helping me connect this repository's server deployment to W3DS. Inspect the repository and its existing deployment setup before changing anything.
+											<div class="deployment-ai-prompt-box">
+												<div class="deployment-ai-prompt-toolbar">
+													<span>{{svg "octicon-terminal" 16}} {{ctx.Locale.Tr "platform.deploy.ai_prompt_label"}}</span>
+													<button type="button" class="ui small button" data-clipboard-target="#deployment-ai-prompt-{{.ID}}">{{svg "octicon-copy" 16}} {{ctx.Locale.Tr "platform.deploy.ai_copy"}}</button>
+												</div>
+												<pre id="deployment-ai-prompt-{{.ID}}" tabindex="0"><code>You are helping me connect this repository's server deployment to W3DS. Inspect the repository and its existing deployment setup before changing anything.
 
 Verified deployment context:
 - Platform eName: {{.PlatformEName}}
@@ -187,10 +192,10 @@ Please:
 4. Create a narrow PP-Auth adapter boundary around that signer. The PP-Auth SDK is not published yet, so do not invent a package name, endpoint, token format, or protocol. Leave a clearly documented integration point for the real SDK.
 5. Ensure client code can never import the key loader. Add safe configuration examples containing placeholders only, ignore local key files, and add tests for missing, malformed, mismatched, and accidentally client-exposed keys.
 6. Update the server deployment documentation with exact secret-manager or mount steps for this project's host, file permissions, startup checks, rotation, and rollback.
-7. At the end, list the files changed and the exact commands I should run. Tell me where I must configure the secret, but never request or display the secret value.</textarea>
-											<div class="deployment-ai-helper-actions">
-												<button type="button" class="ui primary button" data-clipboard-target="#deployment-ai-prompt-{{.ID}}">{{svg "octicon-copy" 16}} {{ctx.Locale.Tr "platform.deploy.ai_copy"}}</button>
-												<span>{{svg "octicon-shield-lock" 16}} {{ctx.Locale.Tr "platform.deploy.ai_secret_warning"}}</span>
+7. At the end, list the files changed and the exact commands I should run. Tell me where I must configure the secret, but never request or display the secret value.</code></pre>
+											</div>
+											<div class="deployment-ai-secret-note">
+												{{svg "octicon-shield-lock" 16}} <span>{{ctx.Locale.Tr "platform.deploy.ai_secret_warning"}}</span>
 											</div>
 										</div>
 									</details>
