@@ -34,19 +34,28 @@
 			<section class="w3ds-section">
 				<h2>{{ctx.Locale.Tr "platform.deploy.new"}}</h2>
 				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.deploy.new_help"}}</p>
-				{{if not .PlatformEName}}
-					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.identity_wait"}}</div>
-				{{else if not .DeploymentWalletEName}}
+				{{if not .DeploymentWalletEName}}
 					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.wallet_help"}}</div>
 				{{else if not .DeploymentReleases}}
 					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.release_missing"}}</div>
 				{{else if not .CanCreateDeployment}}
 					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.publisher_missing"}}</div>
+				{{else if .PlatformNeedsDeploymentIdentity}}
+					<div class="ui info message"><div class="header">{{ctx.Locale.Tr "platform.deploy.identity_first_title"}}</div><p>{{ctx.Locale.Tr "platform.deploy.identity_first_help"}}</p></div>
 				{{end}}
 
-				<form class="ui form deploy-form" data-deployment-form action="{{.RepoLink}}/deploy" method="post">
+				<ol class="platform-wizard-steps deploy-wizard-steps" aria-label="{{ctx.Locale.Tr "platform.deploy.new"}}">
+					<li class="platform-wizard-step active" data-deployment-step-indicator="1"><span class="platform-wizard-step-number">1</span><span>{{ctx.Locale.Tr "platform.deploy.step_release"}}</span></li>
+					<li class="platform-wizard-step" data-deployment-step-indicator="2"><span class="platform-wizard-step-number">2</span><span>{{ctx.Locale.Tr "platform.deploy.step_location"}}</span></li>
+					<li class="platform-wizard-step" data-deployment-step-indicator="3"><span class="platform-wizard-step-number">3</span><span>{{ctx.Locale.Tr "platform.deploy.step_key"}}</span></li>
+					<li class="platform-wizard-step" data-deployment-step-indicator="4"><span class="platform-wizard-step-number">4</span><span>{{ctx.Locale.Tr "platform.deploy.step_sign"}}</span></li>
+				</ol>
+
+				<form class="ui form deploy-form" data-deployment-form data-platform-needs-identity="{{if .PlatformNeedsDeploymentIdentity}}true{{else}}false{{end}}" action="{{.RepoLink}}/deploy" method="post">
 					{{.CsrfTokenHtml}}
-					<div class="deploy-form-grid">
+					<fieldset class="platform-wizard-panel deploy-wizard-panel" data-deployment-step="1">
+						<legend>{{ctx.Locale.Tr "platform.deploy.release_heading"}}</legend>
+						<p>{{ctx.Locale.Tr "platform.deploy.release_intro"}}</p>
 						<div class="required field">
 							<label for="deployment_release">{{ctx.Locale.Tr "platform.deploy.release"}}</label>
 							<select id="deployment_release" name="release_id" required {{if not .CanCreateDeployment}}disabled{{end}}>
@@ -55,6 +64,13 @@
 							</select>
 							<p class="help">{{ctx.Locale.Tr "platform.deploy.release_help"}}</p>
 						</div>
+						<div class="deploy-doc-note">{{svg "octicon-tag"}}<div><strong>{{ctx.Locale.Tr "platform.deploy.release_doc_title"}}</strong><p>{{ctx.Locale.Tr "platform.deploy.release_doc_help"}}</p></div></div>
+					</fieldset>
+
+					<fieldset class="platform-wizard-panel deploy-wizard-panel tw-hidden" data-deployment-step="2" hidden>
+						<legend>{{ctx.Locale.Tr "platform.deploy.location_heading"}}</legend>
+						<p>{{ctx.Locale.Tr "platform.deploy.location_intro"}}</p>
+						<div class="deploy-form-grid">
 						<div class="required field">
 							<label for="deployment_name">{{ctx.Locale.Tr "platform.deploy.name"}}</label>
 							<input id="deployment_name" name="deployment_name" maxlength="100" placeholder="{{ctx.Locale.Tr "platform.deploy.name_placeholder"}}" required {{if not .CanCreateDeployment}}disabled{{end}}>
@@ -72,28 +88,57 @@
 							<label for="deployment_custom_environment">{{ctx.Locale.Tr "platform.deploy.custom_environment"}}</label>
 							<input id="deployment_custom_environment" name="custom_environment" maxlength="100" placeholder="eu-west, customer-demo, edge-01">
 						</div>
-					</div>
-
-					<h3>{{ctx.Locale.Tr "platform.deploy.key_title"}}</h3>
-					<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.deploy.key_help"}}</p>
-					<div class="platform-wizard-choices deploy-key-choices">
-						<label class="platform-wizard-choice"><input type="radio" name="deployment_key_mode" value="generate" checked> <span>{{ctx.Locale.Tr "platform.deploy.key_generate"}}<small>{{ctx.Locale.Tr "platform.deploy.key_generate_help"}}</small></span></label>
-						<label class="platform-wizard-choice"><input type="radio" name="deployment_key_mode" value="paste"> <span>{{ctx.Locale.Tr "platform.deploy.key_paste"}}<small>{{ctx.Locale.Tr "platform.deploy.key_paste_help"}}</small></span></label>
-					</div>
-					<div data-generated-deployment-key>
-						<button type="button" class="ui button" data-generate-deployment-key {{if not .CanCreateDeployment}}disabled{{end}}>{{svg "octicon-key"}} {{ctx.Locale.Tr "platform.deploy.key_download"}}</button>
-						<label class="deploy-key-confirm"><input type="checkbox" data-deployment-key-saved> {{ctx.Locale.Tr "platform.deploy.key_saved"}}</label>
-					</div>
-					<div class="tw-hidden" data-pasted-deployment-key>
-						<div class="required field">
-							<label for="deployment_public_key_paste">{{ctx.Locale.Tr "platform.deploy.public_key"}}</label>
-							<textarea id="deployment_public_key_paste" rows="3" placeholder="z..." maxlength="8192"></textarea>
 						</div>
-					</div>
-					<input type="hidden" name="public_key" data-deployment-public-key>
-					<div class="deploy-submit-row">
-						<button type="submit" class="ui primary button" data-create-deployment {{if not .CanCreateDeployment}}disabled{{end}}>{{svg "octicon-rocket"}} {{ctx.Locale.Tr "platform.deploy.create"}}</button>
-						<span>{{ctx.Locale.Tr "platform.deploy.create_help"}}</span>
+						<div class="deploy-doc-note">{{svg "octicon-location"}}<div><strong>{{ctx.Locale.Tr "platform.deploy.location_doc_title"}}</strong><p>{{ctx.Locale.Tr "platform.deploy.location_doc_help"}}</p></div></div>
+					</fieldset>
+
+					<fieldset class="platform-wizard-panel deploy-wizard-panel tw-hidden" data-deployment-step="3" hidden>
+						<legend>{{ctx.Locale.Tr "platform.deploy.key_title"}}</legend>
+						<p>{{ctx.Locale.Tr "platform.deploy.key_help"}}</p>
+						<div class="deploy-ppauth-card">
+							<div class="deploy-ppauth-icon">{{svg "octicon-shield-lock" 24}}</div>
+							<div><div class="tw-flex tw-items-center tw-gap-2"><strong>{{ctx.Locale.Tr "platform.deploy.ppauth_title"}}</strong><span class="ui blue label">{{ctx.Locale.Tr "platform.deploy.coming_soon"}}</span></div><p>{{ctx.Locale.Tr "platform.deploy.ppauth_help"}}</p><a href="https://docs.w3ds.metastate.foundation" target="_blank" rel="noopener noreferrer">{{ctx.Locale.Tr "platform.deploy.read_docs"}} {{svg "octicon-link-external"}}</a></div>
+						</div>
+						<div class="platform-wizard-choices deploy-key-choices">
+							<label class="platform-wizard-choice"><input type="radio" name="deployment_key_mode" value="generate" checked> <span>{{ctx.Locale.Tr "platform.deploy.key_generate"}}<small>{{ctx.Locale.Tr "platform.deploy.key_generate_help"}}</small></span></label>
+							<label class="platform-wizard-choice"><input type="radio" name="deployment_key_mode" value="paste"> <span>{{ctx.Locale.Tr "platform.deploy.key_paste"}}<small>{{ctx.Locale.Tr "platform.deploy.key_paste_help"}}</small></span></label>
+						</div>
+						<div data-generated-deployment-key>
+							<button type="button" class="ui primary button" data-generate-deployment-key {{if not .CanCreateDeployment}}disabled{{end}}>{{svg "octicon-key"}} {{ctx.Locale.Tr "platform.deploy.key_download"}}</button>
+							<label class="deploy-key-confirm"><input type="checkbox" data-deployment-key-saved> {{ctx.Locale.Tr "platform.deploy.key_saved"}}</label>
+						</div>
+						<div class="tw-hidden" data-pasted-deployment-key>
+							<div class="required field">
+								<label for="deployment_public_key_paste">{{ctx.Locale.Tr "platform.deploy.public_key"}}</label>
+								<textarea id="deployment_public_key_paste" rows="3" placeholder="z..." maxlength="8192"></textarea>
+							</div>
+						</div>
+						<input type="hidden" name="public_key" data-deployment-public-key>
+						<div class="ui warning message"><div class="header">{{ctx.Locale.Tr "platform.deploy.private_key_title"}}</div><p>{{ctx.Locale.Tr "platform.deploy.private_key_help"}}</p></div>
+					</fieldset>
+
+					<fieldset class="platform-wizard-panel deploy-wizard-panel tw-hidden" data-deployment-step="4" hidden>
+						<legend>{{ctx.Locale.Tr "platform.deploy.review_heading"}}</legend>
+						<p>{{ctx.Locale.Tr "platform.deploy.review_intro"}}</p>
+						<dl class="deploy-review-summary">
+							<div><dt>{{ctx.Locale.Tr "platform.deploy.release"}}</dt><dd data-deployment-review-release>—</dd></div>
+							<div><dt>{{ctx.Locale.Tr "platform.deploy.name"}}</dt><dd data-deployment-review-name>—</dd></div>
+							<div><dt>{{ctx.Locale.Tr "platform.deploy.environment"}}</dt><dd data-deployment-review-environment>—</dd></div>
+							<div><dt>{{ctx.Locale.Tr "platform.deploy.deployer_identity"}}</dt><dd>{{.DeploymentWalletEName}}</dd></div>
+						</dl>
+						{{if .PlatformNeedsDeploymentIdentity}}<div class="ui info message"><div class="header">{{ctx.Locale.Tr "platform.deploy.review_activation_title"}}</div><p>{{ctx.Locale.Tr "platform.deploy.review_activation_help"}}</p></div>{{end}}
+						<h3>{{ctx.Locale.Tr "platform.deploy.documents_title"}}</h3>
+						<div class="deploy-document-list">
+							<div><span>1</span><div><strong>{{ctx.Locale.Tr "platform.deploy.document_key_title"}}</strong><p>{{ctx.Locale.Tr "platform.deploy.document_key_help"}}</p></div></div>
+							<div><span>2</span><div><strong>{{ctx.Locale.Tr "platform.deploy.document_version_title"}}</strong><p>{{ctx.Locale.Tr "platform.deploy.document_version_help"}}</p></div></div>
+						</div>
+						<label class="deploy-review-confirm"><input type="checkbox" data-deployment-review-confirm required> <span>{{ctx.Locale.Tr "platform.deploy.review_confirm"}}</span></label>
+					</fieldset>
+
+					<div class="deploy-wizard-actions">
+						<button type="button" class="ui button tw-hidden" data-deployment-back hidden>{{ctx.Locale.Tr "platform.create.back"}}</button>
+						<button type="button" class="ui primary button tw-ml-auto" data-deployment-next {{if not .CanCreateDeployment}}disabled{{end}}>{{ctx.Locale.Tr "platform.create.next"}}</button>
+						<button type="submit" class="ui primary button tw-ml-auto tw-hidden" data-create-deployment hidden {{if not .CanCreateDeployment}}disabled{{end}}>{{svg "octicon-rocket"}} {{ctx.Locale.Tr "platform.deploy.create"}}</button>
 					</div>
 				</form>
 			</section>

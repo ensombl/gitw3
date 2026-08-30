@@ -75,6 +75,85 @@ export function initW3DSDeploy() {
     }
   });
 
+  const validateDeploymentKey = () => {
+    const mode = form.querySelector<HTMLInputElement>('input[name="deployment_key_mode"]:checked')?.value;
+    if (mode === 'generate') {
+      if (!publicKey?.value || !saved?.checked) {
+        saved?.setCustomValidity('Generate, download, and confirm that you saved the private key.');
+        saved?.reportValidity();
+        saved?.setCustomValidity('');
+        return false;
+      }
+    } else {
+      const value = pastedKey?.value.trim() || '';
+      if (!value.startsWith('z')) {
+        pastedKey?.setCustomValidity('Enter a z-prefixed W3DS public key.');
+        pastedKey?.reportValidity();
+        pastedKey?.setCustomValidity('');
+        return false;
+      }
+      if (publicKey) publicKey.value = value;
+    }
+    return true;
+  };
+
+  const steps = Array.from(form.querySelectorAll<HTMLElement>('[data-deployment-step]'));
+  const indicators = Array.from(root.querySelectorAll<HTMLElement>('[data-deployment-step-indicator]'));
+  const back = form.querySelector<HTMLButtonElement>('[data-deployment-back]');
+  const next = form.querySelector<HTMLButtonElement>('[data-deployment-next]');
+  const reviewRelease = form.querySelector<HTMLElement>('[data-deployment-review-release]');
+  const reviewName = form.querySelector<HTMLElement>('[data-deployment-review-name]');
+  const reviewEnvironment = form.querySelector<HTMLElement>('[data-deployment-review-environment]');
+  let currentStep = 0;
+
+  const updateReview = () => {
+    const release = form.querySelector<HTMLSelectElement>('#deployment_release');
+    const name = form.querySelector<HTMLInputElement>('#deployment_name');
+    if (reviewRelease) reviewRelease.textContent = release?.selectedOptions[0]?.textContent?.trim() || '—';
+    if (reviewName) reviewName.textContent = name?.value.trim() || '—';
+    if (reviewEnvironment) {
+      reviewEnvironment.textContent = environment?.value === 'custom' ?
+        customEnvironmentInput?.value.trim() || '—' :
+        environment?.selectedOptions[0]?.textContent?.trim() || '—';
+    }
+  };
+
+  const showStep = () => {
+    for (const [index, step] of steps.entries()) setHidden(step, index !== currentStep);
+    for (const [index, indicator] of indicators.entries()) {
+      indicator.classList.toggle('active', index === currentStep);
+      indicator.classList.toggle('completed', index < currentStep);
+    }
+    if (back) setHidden(back, currentStep === 0);
+    if (next) setHidden(next, currentStep === steps.length - 1);
+    const submitButton = form.querySelector<HTMLElement>('[data-create-deployment]');
+    setHidden(submitButton, currentStep !== steps.length - 1);
+    if (currentStep === steps.length - 1) updateReview();
+  };
+
+  const currentStepIsValid = () => {
+    const controls = steps[currentStep]?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select') ?? [];
+    for (const control of controls) {
+      if (!control.checkValidity()) {
+        control.reportValidity();
+        return false;
+      }
+    }
+    if (currentStep === 2) return validateDeploymentKey();
+    return true;
+  };
+
+  next?.addEventListener('click', () => {
+    if (!currentStepIsValid()) return;
+    currentStep += 1;
+    showStep();
+  });
+  back?.addEventListener('click', () => {
+    currentStep = Math.max(0, currentStep - 1);
+    showStep();
+  });
+  showStep();
+
   const submit = form.querySelector<HTMLButtonElement>('[data-create-deployment]');
   const dialog = document.getElementById('w3ds-deployment-signing-modal') as HTMLDialogElement | null;
   const canvas = dialog?.querySelector<HTMLCanvasElement>('[data-deployment-qr]');
@@ -119,25 +198,7 @@ export function initW3DSDeploy() {
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const mode = form.querySelector<HTMLInputElement>('input[name="deployment_key_mode"]:checked')?.value;
-    if (mode === 'generate') {
-      if (!publicKey?.value || !saved?.checked) {
-        saved?.setCustomValidity('Generate, download, and confirm that you saved the private key.');
-        saved?.reportValidity();
-        saved?.setCustomValidity('');
-        return;
-      }
-    } else {
-      const value = pastedKey?.value.trim() || '';
-      if (!value.startsWith('z')) {
-        pastedKey?.setCustomValidity('Enter a z-prefixed W3DS public key.');
-        pastedKey?.reportValidity();
-        pastedKey?.setCustomValidity('');
-        return;
-      }
-      if (publicKey) publicKey.value = value;
-    }
-    if (!form.reportValidity()) return;
+    if (!validateDeploymentKey() || !form.reportValidity()) return;
 
     stopped = false;
     setBusy(true);

@@ -6,6 +6,10 @@
   list-style: none;
 }
 
+.platform-wizard-steps.three-steps {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .platform-wizard-step {
   position: relative;
   display: flex;

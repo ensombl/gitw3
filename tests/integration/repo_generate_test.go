@@ -253,6 +253,13 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	assert.Nil(t, manifest.EName)
 	assert.True(t, manifest.IsDraft)
 	assert.False(t, manifest.InSubmission)
+
+	deployResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/deploy", user.Name, repoName), http.StatusOK)
+	deployPage := NewHTMLParser(t, deployResp.Body)
+	deployPage.AssertElement(t, "form[data-deployment-form][data-platform-needs-identity='true']", true)
+	assert.Equal(t, 4, deployPage.doc.Find("[data-deployment-step-indicator]").Length())
+	assert.Equal(t, 4, deployPage.doc.Find("[data-deployment-step]").Length())
+	deployPage.AssertElement(t, ".deploy-ppauth-card a[href='https://docs.w3ds.metastate.foundation']", true)
 }
 
 func TestW3DSEditPlatform(t *testing.T) {
