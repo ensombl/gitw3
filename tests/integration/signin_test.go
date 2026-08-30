@@ -17,6 +17,7 @@ import (
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/test"
 	"forgejo.org/modules/translation"
+	"forgejo.org/services/auth/source/oauth2"
 	"forgejo.org/services/forms"
 	"forgejo.org/tests"
 
@@ -125,6 +126,36 @@ func TestProviderDisplayNameIsPathEscaped(t *testing.T) {
 			htmlDoc.AssertElement(t, fmt.Sprintf("a.oauth-login-link[href='/user/oauth2/%s']", url.PathEscape(testCase)), true)
 		})
 	}
+}
+
+func TestNativeW3DSLogin(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+
+	session := emptyTestSession(t)
+	response := session.MakeRequest(t, NewRequest(t, "GET", "/user/login"), http.StatusOK)
+	htmlDoc := NewHTMLParser(t, response.Body)
+	htmlDoc.AssertElement(t, "#w3ds-login-button[href='/user/login/w3ds']", true)
+
+	response = session.MakeRequest(t, NewRequest(t, "GET", "/user/login/w3ds"), http.StatusSeeOther)
+	assert.Equal(t, "/user/login", test.RedirectURL(response))
+	response = session.MakeRequest(t, NewRequest(t, "GET", "/user/login"), http.StatusOK)
+	assert.Contains(t, response.Body.String(), translation.NewLocale("en-US").TrString("auth.w3ds_login_unavailable"))
+
+	addAuthSource(t, authSourcePayloadGitLabCustom("W3DS"))
+	response = MakeRequest(t, NewRequest(t, "GET", "/user/login"), http.StatusOK)
+	htmlDoc = NewHTMLParser(t, response.Body)
+	assert.Equal(t, 1, htmlDoc.doc.Find("#w3ds-login-button").Length())
+	assert.Equal(t, 0, htmlDoc.doc.Find("a.oauth-login-link[href='/user/oauth2/W3DS']").Length())
+
+	response = MakeRequest(t, NewRequest(t, "GET", "/user/login/w3ds"), http.StatusSeeOther)
+	assert.Equal(t, "/user/oauth2/W3DS", test.RedirectURL(response))
+
+	oauth2.RemoveProviderFromGothic("W3DS")
+	session = emptyTestSession(t)
+	response = session.MakeRequest(t, NewRequest(t, "GET", "/user/login/w3ds"), http.StatusSeeOther)
+	assert.Equal(t, "/user/login", test.RedirectURL(response))
+	response = session.MakeRequest(t, NewRequest(t, "GET", "/user/login"), http.StatusOK)
+	assert.Contains(t, response.Body.String(), translation.NewLocale("en-US").TrString("auth.w3ds_login_unavailable"))
 }
 
 func TestDisableSignin(t *testing.T) {

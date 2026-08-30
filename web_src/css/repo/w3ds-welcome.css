@@ -1,0 +1,193 @@
+#w3ds-welcome-page {
+  max-width: 980px;
+  padding-block: 2.5rem 4rem;
+}
+
+.w3ds-welcome-hero {
+  max-width: 720px;
+  margin: 0 auto 2rem;
+  text-align: center;
+}
+
+.w3ds-welcome-check {
+  display: grid;
+  width: 4rem;
+  height: 4rem;
+  margin: 0 auto 1rem;
+  place-items: center;
+  border-radius: 9999px;
+  background: var(--color-green);
+  color: var(--color-white);
+}
+
+.w3ds-welcome-eyebrow,
+.w3ds-welcome-kicker {
+  margin: 0 0 0.35rem;
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.w3ds-welcome-hero h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2rem, 5vw, 3rem);
+}
+
+.w3ds-welcome-lead {
+  margin: 0;
+  color: var(--color-text-light-1);
+  font-size: 1.15rem;
+}
+
+.w3ds-welcome-identity,
+.w3ds-welcome-versions,
+.w3ds-welcome-ai {
+  margin-top: 1rem;
+  padding: 1.75rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: 0.75rem;
+  background: var(--color-box-body);
+}
+
+.w3ds-welcome-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.w3ds-welcome-section-heading h2,
+.w3ds-welcome-ai h2 {
+  margin: 0 0 0.5rem;
+}
+
+.w3ds-welcome-ename,
+.w3ds-welcome-version-ename {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.w3ds-welcome-ename {
+  margin: 1.25rem 0;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--border-radius);
+  background: var(--color-primary-alpha-10);
+}
+
+.w3ds-welcome-ename code,
+.w3ds-welcome-version-ename code {
+  overflow: hidden;
+  flex: 1;
+  color: var(--color-text);
+  font-size: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.w3ds-welcome-explanation {
+  font-size: 1.05rem;
+}
+
+.w3ds-welcome-vault-note,
+.w3ds-welcome-record-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  color: var(--color-text-light-1);
+}
+
+.w3ds-welcome-version-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.w3ds-welcome-version {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.7fr) minmax(18rem, 1.3fr);
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  background: var(--color-box-header);
+}
+
+.w3ds-welcome-version > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.w3ds-welcome-version > div:first-child span {
+  color: var(--color-text-light-2);
+  font-size: 0.9rem;
+}
+
+.w3ds-welcome-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  border: 1px dashed var(--color-secondary-dark-2);
+  border-radius: var(--border-radius);
+  color: var(--color-text-light-1);
+}
+
+.w3ds-welcome-empty strong {
+  color: var(--color-text);
+}
+
+.w3ds-welcome-empty p {
+  margin: 0.35rem 0 0;
+}
+
+.w3ds-welcome-ai {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.w3ds-welcome-ai p {
+  margin: 0;
+  color: var(--color-text-light-1);
+}
+
+.w3ds-welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+@media (max-width: 700px) {
+  #w3ds-welcome-page {
+    padding-block-start: 1.5rem;
+  }
+
+  .w3ds-welcome-identity,
+  .w3ds-welcome-versions,
+  .w3ds-welcome-ai {
+    padding: 1.25rem;
+  }
+
+  .w3ds-welcome-version,
+  .w3ds-welcome-ai {
+    grid-template-columns: 1fr;
+  }
+
+  .w3ds-welcome-ename {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 1rem;
+  }
+}

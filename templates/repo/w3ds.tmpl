@@ -1,0 +1,240 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository">
+	{{template "repo/header" .}}
+	<div id="w3ds-platform-page" class="ui container"{{if .IsW3DSPlatform}} data-w3ds-status-url="{{.RepoLink}}/w3ds/status" data-w3ds-poll-interval="5000" data-w3ds-checked-text="{{ctx.Locale.Tr "platform.status.checked"}}" data-w3ds-refresh-failed-text="{{ctx.Locale.Tr "platform.status.refresh_failed"}}"{{end}}>
+		{{template "base/alert" .}}
+		{{if .W3DSOnboarded}}
+			<div class="ui positive message">
+				<div class="header">{{ctx.Locale.Tr "platform.status.created"}}</div>
+				<p>{{ctx.Locale.Tr "platform.status.created_help"}}</p>
+				{{if .W3DSUseAI}}
+					<p>{{ctx.Locale.Tr "platform.status.ai_help"}}</p>
+					<div class="ui action input fluid"><input readonly value="npx skills add MetaState-Prototype-Project/prototype@w3ds"><button type="button" class="ui button" data-clipboard-text="npx skills add MetaState-Prototype-Project/prototype@w3ds">{{ctx.Locale.Tr "copy"}}</button></div>
+				{{end}}
+			</div>
+		{{end}}
+
+		{{if .IsW3DSPlatform}}
+			{{$publication := .PlatformPublication}}
+			{{$manifest := .PlatformManifest}}
+			{{$release := .PlatformRelease}}
+			{{$edit := .PlatformEditForm}}
+			{{$lastCommitID := .PlatformLastCommitID}}
+			<div class="w3ds-page-heading">
+				<div>
+					<h1>{{ctx.Locale.Tr "platform.repo.heading"}}</h1>
+					<p>{{ctx.Locale.Tr "platform.repo.intro"}}</p>
+				</div>
+				{{if .CanEditW3DS}}
+					<a class="ui primary button" href="#w3ds-platform-edit">{{svg "octicon-pencil"}} {{ctx.Locale.Tr "platform.edit.action"}}</a>
+				{{else}}
+					<a class="ui basic button" href="{{.RepoLink}}/src/branch/{{PathEscapeSegments .Repository.DefaultBranch}}/{{.PlatformManifestPath}}">{{svg "octicon-file-code"}} {{ctx.Locale.Tr "platform.repo.view_manifest"}}</a>
+				{{end}}
+			</div>
+
+			{{if .PlatformMigrationStaged}}
+				<section class="w3ds-section" aria-labelledby="w3ds-migration-heading">
+					<h2 id="w3ds-migration-heading">{{ctx.Locale.Tr "platform.port.activation_title"}}</h2>
+					<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.port.activation_help" $manifest.EName}}</p>
+					<div class="ui ordered steps fluid">
+						<div class="completed step"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.port.activation_stage_signed"}}</div></div></div>
+						<div class="step"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.port.activation_push"}}</div><div class="description">{{ctx.Locale.Tr "platform.port.activation_push_help"}}</div></div></div>
+						<div class="step"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.port.activation_release"}}</div><div class="description">{{ctx.Locale.Tr "platform.port.activation_release_help" $manifest.Version}}</div></div></div>
+						<div class="step"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.port.activation_cutover"}}</div></div></div>
+					</div>
+					{{if .CanAdminW3DS}}
+						<form class="ui form tw-mt-4" method="post" action="{{.RepoLink}}/w3ds/migration/activate">
+							{{.CsrfTokenHtml}}
+							<div class="required field"><label>{{ctx.Locale.Tr "platform.port.token"}}</label><input type="password" name="token" required autocomplete="off" maxlength="32768"><span class="help">{{ctx.Locale.Tr "platform.port.activation_token_help"}}</span></div>
+							<button class="ui negative button" type="submit">{{ctx.Locale.Tr "platform.port.activation_button"}}</button>
+						</form>
+					{{else}}
+						<div class="ui info message">{{ctx.Locale.Tr "platform.port.activation_admin"}}</div>
+					{{end}}
+				</section>
+			{{end}}
+
+			<section class="w3ds-section" aria-labelledby="w3ds-live-heading">
+				<h2 id="w3ds-live-heading">{{ctx.Locale.Tr "platform.repo.live_status"}}</h2>
+				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.repo.live_help"}}</p>
+				<div id="w3ds-publication-status" data-status="{{$publication.Status}}" class="ui {{$publication.Tone}} message">
+					<div class="header" data-w3ds-status-title>{{$publication.Title}}</div><p data-w3ds-status-message>{{$publication.Message}}</p>
+					{{if $.Permission.IsAdmin}}<p data-w3ds-status-error class="{{if not $publication.LastError}}tw-hidden{{end}}"><code>{{$publication.LastError}}</code></p>{{end}}
+				</div>
+				<p class="w3ds-status-checked" data-w3ds-status-checked aria-live="polite">{{ctx.Locale.Tr "platform.status.checking"}}</p>
+			</section>
+
+			<section class="w3ds-section" aria-labelledby="w3ds-guide-heading">
+				<h2 id="w3ds-guide-heading">{{ctx.Locale.Tr "platform.repo.guide_title"}}</h2>
+				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.repo.guide_help"}}</p>
+				<ol class="w3ds-guide">
+					<li class="complete"><span class="w3ds-guide-number">1</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_manifest"}} <span class="ui green label">{{ctx.Locale.Tr "platform.repo.ready"}}</span></div><p>{{ctx.Locale.Tr "platform.repo.step_manifest_help"}}</p></div></li>
+					<li class="{{if .PlatformIdentityReady}}complete{{end}}" data-w3ds-identity-step><span class="w3ds-guide-number">2</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_identity"}} <span class="ui {{$publication.Identity.Tone}} label" data-w3ds-step-label>{{$publication.Identity.Label}}</span></div><p data-w3ds-step-message>{{$publication.Identity.Message}}</p></div></li>
+					<li class="{{if $manifest.URL}}complete{{end}}" data-w3ds-application-step><span class="w3ds-guide-number">3</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_application"}} <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label" data-w3ds-step-label>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></div><p data-w3ds-step-message>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.step_application_ready" $manifest.URL}}{{else}}{{ctx.Locale.Tr "platform.repo.step_application_missing"}}{{end}}</p></div></li>
+					<li class="{{if $publication.Release.Ready}}complete{{end}}" data-w3ds-release-step><span class="w3ds-guide-number">4</span><div><div class="w3ds-guide-title">{{ctx.Locale.Tr "platform.repo.step_release"}} <span class="ui {{$publication.Release.Tone}} label" data-w3ds-step-label>{{$publication.Release.Label}}</span></div><p data-w3ds-step-message>{{$publication.Release.Message}}</p></div></li>
+				</ol>
+			</section>
+
+			<section class="w3ds-section w3ds-visibility" aria-labelledby="w3ds-visibility-heading">
+				<div>
+					<div class="tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
+						<h2 id="w3ds-visibility-heading">{{ctx.Locale.Tr "platform.visibility.title"}}</h2>
+						<span class="ui {{if $manifest.IsDraft}}grey{{else}}green{{end}} label">{{if $manifest.IsDraft}}{{ctx.Locale.Tr "platform.visibility.draft"}}{{else}}{{ctx.Locale.Tr "platform.visibility.published"}}{{end}}</span>
+					</div>
+					<p class="w3ds-section-help">{{if $manifest.IsDraft}}{{ctx.Locale.Tr "platform.visibility.draft_help"}}{{else}}{{ctx.Locale.Tr "platform.visibility.published_help"}}{{end}}</p>
+				</div>
+				{{if .CanEditW3DS}}
+					<form action="{{.RepoLink}}/w3ds/visibility" method="post">
+						<input type="hidden" name="last_commit_id" value="{{$lastCommitID}}">
+						<button type="submit" class="w3ds-visibility-switch {{if not $manifest.IsDraft}}active{{end}}" role="switch" aria-checked="{{if $manifest.IsDraft}}false{{else}}true{{end}}" aria-label="{{if $manifest.IsDraft}}{{ctx.Locale.Tr "platform.visibility.publish"}}{{else}}{{ctx.Locale.Tr "platform.visibility.make_draft"}}{{end}}">
+							<span class="w3ds-visibility-track" aria-hidden="true"><span></span></span>
+							<span>{{if $manifest.IsDraft}}{{ctx.Locale.Tr "platform.visibility.publish"}}{{else}}{{ctx.Locale.Tr "platform.visibility.make_draft"}}{{end}}</span>
+						</button>
+					</form>
+				{{end}}
+			</section>
+
+			<section id="w3ds-platform-edit" class="w3ds-section" aria-labelledby="w3ds-details-heading">
+				<h2 id="w3ds-details-heading">{{ctx.Locale.Tr "platform.repo.details"}}</h2>
+				{{if .CanEditW3DS}}
+					<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.edit.help"}}</p>
+					{{if .DomainOntologyUnavailable}}<div class="ui negative message">{{ctx.Locale.Tr "platform.domains.unavailable"}}</div>{{end}}
+					<form class="ui form" action="{{.RepoLink}}/w3ds" method="post">
+						<input type="hidden" name="last_commit_id" value="{{$edit.LastCommitID}}">
+						<div class="w3ds-edit-grid">
+							<div class="required field {{if .Err_PlatformDisplayName}}error{{end}}">
+								<label for="platform_display_name">{{ctx.Locale.Tr "platform.repo.display_name"}}</label>
+								<input id="platform_display_name" name="platform_display_name" value="{{$edit.PlatformDisplayName}}" maxlength="100" required>
+							</div>
+							<div class="field">
+								<label for="platform_version">{{ctx.Locale.Tr "platform.repo.version"}}</label>
+								<div class="ui action input fluid">
+									<input id="platform_version" data-w3ds-release-version value="{{if $release}}{{$release.Tag}}{{end}}" placeholder="{{ctx.Locale.Tr "platform.repo.release_none"}}" readonly>
+									<a class="ui button" data-w3ds-release-link data-w3ds-release-create-url="{{.RepoLink}}/releases/new" href="{{if $release}}{{$release.URL}}{{else}}{{.RepoLink}}/releases/new{{end}}">{{if $release}}{{ctx.Locale.Tr "platform.repo.view_release"}}{{else}}{{ctx.Locale.Tr "platform.repo.create_release"}}{{end}}</a>
+								</div>
+								<span class="help">{{ctx.Locale.Tr "platform.edit.release_version_help"}}</span>
+							</div>
+						</div>
+						<div class="required field {{if .Err_PlatformDescription}}error{{end}}">
+							<label for="platform_description">{{ctx.Locale.Tr "platform.edit.description"}}</label>
+							<textarea id="platform_description" name="platform_description" rows="4" maxlength="2048" required>{{$edit.PlatformDescription}}</textarea>
+						</div>
+						<div class="required field {{if .Err_PlatformDomains}}error{{end}}">
+							<label>{{ctx.Locale.Tr "platform.domains.label"}}</label>
+							<div class="w3ds-domain-options" role="group" aria-label="{{ctx.Locale.Tr "platform.domains.label"}}">
+								{{range .PlatformDomains}}<label class="w3ds-domain-option"><input type="checkbox" name="platform_domains" value="{{.ID}}" {{if .Selected}}checked{{end}} {{if $.DomainOntologyUnavailable}}disabled{{end}}><span><strong>{{.Label}}</strong><small>{{.Description}}</small></span></label>{{end}}
+							</div>
+							<span class="help">{{ctx.Locale.Tr "platform.domains.help"}}</span>
+						</div>
+						<div class="w3ds-edit-grid">
+							<div class="field {{if .Err_PlatformURL}}error{{end}}">
+								<label for="platform_url">{{ctx.Locale.Tr "platform.repo.application_url"}}</label>
+								<input id="platform_url" name="platform_url" type="url" value="{{$edit.PlatformURL}}" maxlength="2048" placeholder="https://my-platform.example">
+								<span class="help">{{ctx.Locale.Tr "platform.edit.application_help"}}</span>
+							</div>
+							<div class="field {{if .Err_PlatformLogoURL}}error{{end}}">
+								<label for="platform_logo_url">{{ctx.Locale.Tr "platform.edit.logo_url"}}</label>
+								<input id="platform_logo_url" name="platform_logo_url" type="url" value="{{$edit.PlatformLogoURL}}" maxlength="2048" placeholder="https://my-platform.example/logo.png">
+							</div>
+						</div>
+						<div class="ui info message w3ds-stable-identity">
+							<div class="header">{{ctx.Locale.Tr "platform.edit.stable_title"}}</div>
+							<p>{{ctx.Locale.Tr "platform.edit.stable_help" $manifest.PlatformName}}</p>
+						</div>
+						<div class="w3ds-edit-actions">
+							<button type="submit" class="ui primary button">{{svg "octicon-check"}} {{ctx.Locale.Tr "platform.edit.save"}}</button>
+							<span>{{ctx.Locale.Tr "platform.edit.commit_help"}}</span>
+						</div>
+					</form>
+				{{else}}
+					<dl class="w3ds-details">
+						<div><dt>{{ctx.Locale.Tr "platform.repo.display_name"}}</dt><dd>{{$manifest.DisplayName}}</dd></div>
+						<div><dt>{{ctx.Locale.Tr "platform.repo.version"}}</dt><dd>{{if $release}}<a href="{{$release.URL}}">{{$release.Tag}}</a>{{else}}{{ctx.Locale.Tr "platform.repo.release_none"}}{{end}}</dd></div>
+						<div><dt>{{ctx.Locale.Tr "platform.domains.label"}}</dt><dd>{{if $manifest.Domains}}{{if .DomainOntologyUnavailable}}{{range $manifest.Domains}}<span class="ui label">{{.}}</span> {{end}}{{else}}{{range .PlatformDomains}}{{if .Selected}}<span class="ui label" title="{{.Description}}">{{.Label}}</span> {{end}}{{end}}{{end}}{{else}}{{$manifest.Category}}{{end}}</dd></div>
+						<div><dt>{{ctx.Locale.Tr "platform.repo.application_url"}}</dt><dd>{{if $manifest.URL}}<a href="{{$manifest.URL}}" rel="noopener noreferrer">{{$manifest.URL}}</a>{{else}}{{ctx.Locale.Tr "platform.repo.not_set"}}{{end}}</dd></div>
+					</dl>
+				{{end}}
+			</section>
+
+			<section class="w3ds-section w3ds-ppa" aria-labelledby="w3ds-ppa-heading">
+				<div class="w3ds-ppa-icon">{{svg "octicon-verified" 32}}</div>
+				<div class="w3ds-ppa-content">
+					<div class="tw-flex tw-items-center tw-gap-2 tw-flex-wrap">
+						<h2 id="w3ds-ppa-heading">{{ctx.Locale.Tr "platform.ppa.title"}}</h2>
+						<span data-w3ds-ppa-label class="ui {{if eq $publication.PPAStatus "denied"}}red{{else if eq $publication.PPAStatus "granted"}}green{{else if eq $publication.PPAStatus "submitted"}}yellow{{else}}blue{{end}} label {{if eq $publication.PPAStatus "incomplete"}}tw-hidden{{end}}">{{$publication.PPALabel}}</span>
+					</div>
+					<p data-w3ds-ppa-help class="{{if or (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted")}}tw-hidden{{end}}">{{ctx.Locale.Tr "platform.ppa.help"}}</p>
+					<div class="w3ds-ppa-history {{if not $publication.PPAHistory}}tw-hidden{{end}}" data-w3ds-ppa-history data-time-prefix="{{ctx.Locale.Tr "platform.ppa.history_recorded_prefix"}}">
+						<h3 data-w3ds-ppa-history-title data-title-prefix="{{ctx.Locale.Tr "platform.ppa.conversation" "%s"}}">{{ctx.Locale.Tr "platform.ppa.conversation" $publication.PPAVersion}}</h3>
+						<ol data-w3ds-ppa-history-list>
+							{{range $event := $publication.PPAHistory}}
+								<li class="w3ds-ppa-turn w3ds-ppa-turn-{{$event.Kind}}" data-kind="{{$event.Kind}}">
+									<article class="ui {{$event.Tone}} message w3ds-ppa-bubble">
+										<div class="w3ds-ppa-bubble-heading">
+											<strong class="header">{{$event.Title}}</strong>
+											{{if $event.Actor}}<span class="w3ds-ppa-history-actor" title="{{$event.Actor}}">{{$event.Actor}}</span>{{end}}
+										</div>
+										<p class="w3ds-ppa-bubble-message">{{$event.Message}}</p>
+										{{if $event.CreatedAt}}<time class="w3ds-ppa-decision-time" data-w3ds-event-time data-created-at="{{$event.CreatedAt}}">{{ctx.Locale.Tr "platform.ppa.history_recorded_prefix"}} {{$event.CreatedAt}}</time>{{end}}
+									</article>
+								</li>
+							{{end}}
+						</ol>
+					</div>
+					<ul class="w3ds-ppa-checklist {{if or (eq $publication.PPAStatus "submitted") (eq $publication.PPAStatus "denied") (eq $publication.PPAStatus "granted")}}tw-hidden{{end}}" data-w3ds-ppa-checklist>
+						<li data-w3ds-ppa-release>{{if $publication.Release.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.release"}}</span> <span class="ui {{if $publication.Release.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Release.Label}}</span></li>
+						<li data-w3ds-ppa-domains>{{if $publication.Domains.Ready}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.domains"}}</span> <span class="ui {{if $publication.Domains.Ready}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{$publication.Domains.Label}}</span></li>
+						<li data-w3ds-ppa-identity>{{if .PlatformIdentityReady}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.identity"}}</span> <span class="ui {{if .PlatformIdentityReady}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if .PlatformIdentityReady}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
+						<li data-w3ds-ppa-application>{{if $manifest.URL}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.deployment"}}</span> <span class="ui {{if $manifest.URL}}green{{else}}grey{{end}} label" data-w3ds-requirement-label>{{if $manifest.URL}}{{ctx.Locale.Tr "platform.repo.ready"}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
+						<li>{{if .PPAWalletReady}}{{svg "octicon-check-circle-fill"}}{{svg "octicon-circle" 16 "tw-hidden"}}{{else}}{{svg "octicon-check-circle-fill" 16 "tw-hidden"}}{{svg "octicon-circle"}}{{end}} <span>{{ctx.Locale.Tr "platform.ppa.wallet"}}</span> <span class="ui {{if .PPAWalletReady}}green{{else}}grey{{end}} label">{{if .PPAWalletReady}}{{.PPAWalletEName}}{{else}}{{ctx.Locale.Tr "platform.repo.waiting"}}{{end}}</span></li>
+					</ul>
+					<div data-w3ds-ppa-action class="{{if eq $publication.PPAStatus "granted"}}tw-hidden{{end}}">
+					{{if .CanAdminW3DS}}
+						<form class="ui form w3ds-ppa-apply" data-w3ds-ppa-form action="{{.RepoLink}}/w3ds/ppa" method="post">
+							<input type="hidden" name="last_commit_id" value="{{$lastCommitID}}">
+							<div class="field {{if ne $publication.PPAStatus "denied"}}tw-hidden{{end}}" data-w3ds-ppa-response>
+								<label for="w3ds-ppa-response">{{ctx.Locale.Tr "platform.ppa.response_label"}}</label>
+								<textarea id="w3ds-ppa-response" name="response_to_decision" rows="4" maxlength="2048" placeholder="{{ctx.Locale.Tr "platform.ppa.response_placeholder"}}" data-w3ds-ppa-response-input {{if eq $publication.PPAStatus "denied"}}required{{end}}></textarea>
+								<span class="help">{{ctx.Locale.Tr "platform.ppa.response_help"}}</span>
+							</div>
+							<div class="w3ds-ppa-apply-actions">
+								<button type="submit" class="ui {{if eq $publication.PPAStatus "submitted"}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="{{if .PPAWalletReady}}true{{else}}false{{end}}" {{if not .CanApplyPPA}}disabled{{end}}>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
+								<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if and (or (eq $publication.PPAStatus "ready") (eq $publication.PPAStatus "denied")) (not .PPAWalletReady)}}{{ctx.Locale.Tr "platform.ppa.wallet_required"}}{{else}}{{$publication.PPAActionMessage}}{{end}}</span>
+							</div>
+						</form>
+					{{else}}
+						<button type="button" class="ui {{if eq $publication.PPAStatus "submitted"}}positive{{else}}primary{{end}} button" data-w3ds-ppa-apply data-can-edit="false" disabled>{{svg "octicon-verified"}} <span data-w3ds-ppa-button-label>{{$publication.PPAButton}}</span></button>
+						<span class="w3ds-ppa-note" data-w3ds-ppa-note>{{if or (eq $publication.PPAStatus "ready") (eq $publication.PPAStatus "denied")}}{{ctx.Locale.Tr "platform.ppa.admin_required"}}{{else}}{{$publication.PPAActionMessage}}{{end}}</span>
+					{{end}}
+					</div>
+				</div>
+			</section>
+
+			{{if .CanAdminW3DS}}
+				<dialog id="w3ds-ppa-signing-modal">
+					<article>
+						<header>{{ctx.Locale.Tr "platform.ppa.signing_title"}}</header>
+						<div class="content w3ds-ppa-signing-content">
+							<p>{{ctx.Locale.Tr "platform.ppa.signing_help" .PPAWalletEName}}</p>
+							<div class="w3ds-ppa-signing-qr"><canvas data-w3ds-ppa-qr aria-label="{{ctx.Locale.Tr "platform.ppa.signing_qr"}}"></canvas></div>
+							<a class="ui primary button" data-w3ds-ppa-open href="#">{{svg "octicon-device-mobile"}} {{ctx.Locale.Tr "platform.ppa.signing_open"}}</a>
+							<p class="w3ds-ppa-signing-status" data-w3ds-ppa-signing-status data-starting="{{ctx.Locale.Tr "platform.ppa.signing_starting"}}" data-waiting="{{ctx.Locale.Tr "platform.ppa.signing_waiting"}}" data-complete="{{ctx.Locale.Tr "platform.ppa.signing_complete"}}" data-failed="{{ctx.Locale.Tr "platform.ppa.signing_failed"}}" aria-live="polite"></p>
+						</div>
+						<footer><button type="button" class="ui cancel button">{{ctx.Locale.Tr "cancel"}}</button></footer>
+					</article>
+				</dialog>
+			{{end}}
+		{{else}}
+			<div class="w3ds-empty-state">
+				{{svg "octicon-shield-check" 48}}
+				<h1>{{ctx.Locale.Tr "platform.repo.setup_title"}}</h1>
+				<p>{{ctx.Locale.Tr "platform.repo.setup_help"}}</p>
+				<div class="tw-flex tw-gap-2 tw-flex-wrap tw-justify-center">
+					<a class="ui primary button" href="{{AppSubUrl}}/repo/create/new">{{ctx.Locale.Tr "platform.new.make"}}</a>
+					<a class="ui basic button" href="{{AppSubUrl}}/repo/create/port">{{ctx.Locale.Tr "platform.new.port"}}</a>
+				</div>
+			</div>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}

@@ -1045,7 +1045,6 @@ func renderHomeCode(ctx *context.Context) {
 		HandleGitError(ctx, "Repo.Commit.GetTreeEntryByPath", err)
 		return
 	}
-
 	checkOutdatedBranch(ctx)
 
 	checkCitationFile(ctx, entry)

@@ -91,6 +91,11 @@ import {initColorPickers} from './features/colorpicker.js';
 import {initRepoMilestoneEditor} from './features/repo-milestone.js';
 import {initModalClose} from './modules/modal.ts';
 import {initAuthorizedIntegrationClaimRuleEditor} from './features/authorized-integration.js';
+import {initPlatformOnboarding} from './features/platform-onboarding.ts';
+import {initW3DSPlatformStatus} from './features/w3ds-platform-status.ts';
+import {initW3DSDeploy} from './features/w3ds-deploy.ts';
+import {initW3DSPlatformPort} from './features/w3ds-platform-port.ts';
+import {initW3DSWelcome} from './features/w3ds-welcome.ts';
 
 // Init Gitea's Fomantic settings
 initGiteaFomantic();
@@ -197,6 +202,11 @@ onDomReady(() => {
   initColorPickers();
   initModalClose();
   initAuthorizedIntegrationClaimRuleEditor();
+  initPlatformOnboarding();
+  initW3DSPlatformStatus();
+  initW3DSDeploy();
+  initW3DSPlatformPort();
+  initW3DSWelcome();
 
   // Deactivate CSS-only noJS usability supplements
   document.body.classList.remove('no-js');

@@ -85,8 +85,14 @@ First run serves the install wizard at `http://localhost:3000`. If that port is 
 
 ### Testing W3DS login locally
 
-W3DS login isn't part of this codebase (see above) — it's a separate OIDC bridge wired in as a
-Forgejo OAuth2 authentication source. To exercise it locally:
+GitW3 owns an always-visible **Continue with W3DS** button and the stable `/user/login/w3ds` entry
+point. The cryptographic wallet flow remains in the separate `w3ds-oidc-bridge` implemented by the
+MetaState team in
+[MetaState-Prototype-Project/prototype#1102](https://github.com/MetaState-Prototype-Project/prototype/pull/1102).
+The bridge is wired into Forgejo as an OAuth2 authentication source named exactly `W3DS`; GitW3
+keeps the native button visible and reports a clear configuration error when that source is absent.
+
+To exercise the complete flow locally:
 
 1. Run the OIDC bridge service (out of scope for this repo) and note its client ID, client secret,
    and `.well-known/openid-configuration` discovery URL.
@@ -148,6 +154,16 @@ the admin Users API. To exercise it locally:
    and a "Test Delivery" (or a real push) actually reaches the service.
 7. Don't register the webhook twice — two system webhooks pointed at the same URL produce two envelopes per
    push; the sync service has no deduplication for that case by design.
+
+### Platform onboarding and Marketplace publication
+
+The **New** action now offers guided W3DS platform creation. New-platform repositories receive a
+versioned `.w3ds/platform.json`, optional browser-generated identity keys, and the documented W3DS AI
+skill quick install. A companion process provisions the platform eName and keeps its Marketplace
+PlatformProfile synchronized from the default branch.
+
+See **[docs/gitw3/platform-onboarding.md](docs/gitw3/platform-onboarding.md)** for the manifest contract,
+service deployment, system webhook, credentials, status integration, and failure behavior.
 
 ## Licence
 

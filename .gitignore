@@ -58,6 +58,7 @@ cpu.out
 /build/lint-locale/lint-locale
 /build/lint-locale-usage/lint-locale-usage
 /gitea
+/platform-manifest-sync
 /gitea-vet
 /debug
 /integrations.test

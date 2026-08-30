@@ -50,10 +50,59 @@ type CreateRepoForm struct {
 
 	ForkSingleBranch string
 	ObjectFormatName string
+
+	PlatformName        string   `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDisplayName string   `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDescription string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformURL         string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformLogoURL     string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformDomains     []string `binding:"platform_domains;Required;"`
+	UseAITooling        bool
 }
 
 // Validate validates the fields
 func (f *CreateRepoForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
+	ctx := context.GetValidateContext(req)
+	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
+}
+
+// UpdatePlatformForm contains the editable W3DS platform profile fields.
+type UpdatePlatformForm struct {
+	PlatformDisplayName string   `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDescription string   `binding:"Required;MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformURL         string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformLogoURL     string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformDomains     []string `binding:"platform_domains;Required;"`
+	LastCommitID        string   `binding:"Required;MaxSize(64)"`
+}
+
+// Validate validates the editable platform profile fields.
+func (f *UpdatePlatformForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
+	ctx := context.GetValidateContext(req)
+	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
+}
+
+// PlatformManifestActionForm protects a one-click manifest update from stale writes.
+type PlatformManifestActionForm struct {
+	LastCommitID string `binding:"Required;MaxSize(64)"`
+}
+
+// CreateDeploymentForm contains the user-selected release and runtime identity.
+type CreateDeploymentForm struct {
+	ReleaseID         int64  `binding:"Required"`
+	DeploymentName    string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	Environment       string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	CustomEnvironment string `binding:"MaxSize(100)" preprocess:"TrimSpace"`
+	PublicKey         string `binding:"Required;MaxSize(8192)" preprocess:"TrimSpace"`
+}
+
+func (f *CreateDeploymentForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
+	ctx := context.GetValidateContext(req)
+	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
+}
+
+// Validate validates a platform manifest action.
+func (f *PlatformManifestActionForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
 	ctx := context.GetValidateContext(req)
 	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
 }

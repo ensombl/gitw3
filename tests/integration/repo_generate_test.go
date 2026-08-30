@@ -5,6 +5,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	repo_model "forgejo.org/models/repo"
 	"forgejo.org/models/unittest"
@@ -20,11 +22,56 @@ import (
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/test"
 	"forgejo.org/modules/translation"
+	"forgejo.org/modules/w3ds"
+	files_service "forgejo.org/services/repository/files"
 	"forgejo.org/tests"
 	"forgejo.org/tests/forgery"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func assertPlatformCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.User) {
+	form := htmlDoc.doc.Find("form#platform-onboarding-form[action='/repo/create/new']")
+	assert.Equal(t, 1, form.Length(), "Expected the guided platform creation form")
+	assert.Equal(t, 3, form.Find(".platform-wizard-step").Length(), "Expected three wizard steps")
+	assert.Equal(t, 2, form.Find(".platform-wizard-choice").Length(), "Expected two accessible wizard choices")
+	assert.Equal(t, 1, form.Find("[data-platform-ai-install].blue.message").Length(), "Expected a visible AI install message")
+	assert.Equal(t, 2, form.Find("[data-platform-step].tw-hidden").Length(), "Expected only the first wizard panel to be visible")
+	assert.Equal(t, 1, form.Find("#platform-step-back.tw-hidden").Length(), "Expected the back button to start hidden")
+	assert.Equal(t, 1, form.Find("#platform-create-submit.tw-hidden").Length(), "Expected the submit button to start hidden")
+	htmlDoc.AssertDropdownHasSelectedOption(t, "uid", strconv.FormatInt(owner.ID, 10))
+	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_url"} {
+		assert.Equal(t, 1, form.Find(fmt.Sprintf("[name='%s']", name)).Length(), "missing %s", name)
+	}
+	assert.Greater(t, form.Find(".w3ds-domain-option input[name='platform_domains']").Length(), 0, "published domains should be visible choices")
+	_, platformURLRequired := form.Find("[name='platform_url']").Attr("required")
+	assert.False(t, platformURLRequired, "platform_url should be optional")
+}
+
+func useTestDomainOntology(t *testing.T) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		assert.Equal(t, "/domains", request.URL.Path)
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{
+			"schemaId":"test-domain-schema",
+			"domains":[
+				{"id":"productivity","label":"Productivity","description":"Tools for getting things done."},
+				{"id":"social","label":"Social","description":"Social applications."}
+			]
+		}`))
+	}))
+	previousURL := setting.PlatformManifestSync.OntologyURL
+	previousTimeout := setting.PlatformManifestSync.Timeout
+	setting.PlatformManifestSync.OntologyURL = server.URL
+	setting.PlatformManifestSync.Timeout = 2 * time.Second
+	t.Cleanup(func() {
+		setting.PlatformManifestSync.OntologyURL = previousURL
+		setting.PlatformManifestSync.Timeout = previousTimeout
+		server.Close()
+	})
+}
 
 func assertRepoCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.User, templateID string) {
 	_, exists := htmlDoc.doc.Find("form.ui.form[action^='/repo/create']").Attr("action")
@@ -128,23 +175,203 @@ Clone URL: %s%s/%s.git`,
 // test form elements before and after POST error response
 func TestRepoCreateForm(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
+	useTestDomainOntology(t)
 	userName := "user1"
 	session := loginUser(t, userName)
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: userName})
 
-	req := NewRequest(t, "GET", "/repo/create")
+	req := NewRequest(t, "GET", "/repo/create/new")
 	resp := session.MakeRequest(t, req, http.StatusOK)
 	htmlDoc := NewHTMLParser(t, resp.Body)
-	assertRepoCreateForm(t, htmlDoc, user, "")
+	assertPlatformCreateForm(t, htmlDoc, user)
 
-	req = NewRequestWithValues(t, "POST", "/repo/create", map[string]string{})
+	req = NewRequestWithValues(t, "POST", "/repo/create/new", map[string]string{
+		"uid": strconv.FormatInt(user.ID, 10),
+	})
 	resp = session.MakeRequest(t, req, http.StatusOK)
 	htmlDoc = NewHTMLParser(t, resp.Body)
-	assertRepoCreateForm(t, htmlDoc, user, "")
+	assertPlatformCreateForm(t, htmlDoc, user)
+}
+
+func TestPlatformCreateChoice(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	session := loginUser(t, "user1")
+	resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create"), http.StatusOK)
+	htmlDoc := NewHTMLParser(t, resp.Body)
+	htmlDoc.AssertElement(t, "a[href='/repo/create/new']", true)
+	htmlDoc.AssertElement(t, "a[href='/repo/create/port']", true)
+}
+
+func TestPlatformCreateCommitsManifest(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	useTestDomainOntology(t)
+	session := loginUser(t, "user1")
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user1"})
+	repoName := "guided-platform"
+	req := NewRequestWithValues(t, "POST", "/repo/create/new", map[string]string{
+		"uid":                   strconv.FormatInt(user.ID, 10),
+		"repo_name":             repoName,
+		"default_branch":        "master",
+		"object_format_name":    "sha1",
+		"platform_name":         "guided-platform",
+		"platform_display_name": "Guided Platform",
+		"platform_description":  "A platform created through the guided flow",
+		"platform_domains":      "productivity",
+	})
+	resp := session.MakeRequest(t, req, http.StatusSeeOther)
+	redirect := test.RedirectURL(resp)
+	assert.Contains(t, redirect, "/"+user.Name+"/"+repoName+"/w3ds/welcome")
+	pageResp := session.MakeRequest(t, NewRequest(t, "GET", redirect), http.StatusOK)
+	page := NewHTMLParser(t, pageResp.Body)
+	page.AssertElement(t, "#w3ds-welcome-page[data-w3ds-welcome-status-url='/"+user.Name+"/"+repoName+"/w3ds/welcome/status']", true)
+	page.AssertElement(t, "[data-w3ds-welcome-pending]", true)
+	page.AssertElement(t, "[data-w3ds-welcome-identity].tw-hidden", true)
+	page.AssertElement(t, "[data-w3ds-welcome-empty].tw-hidden", true)
+	welcomeStatusResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds/welcome/status", user.Name, repoName), http.StatusOK)
+	var welcomeStatus map[string]any
+	require.NoError(t, json.Unmarshal(welcomeStatusResp.Body.Bytes(), &welcomeStatus))
+	assert.Equal(t, false, welcomeStatus["ready"])
+	assert.Empty(t, welcomeStatus["ename"])
+	assert.Empty(t, welcomeStatus["versions"])
+
+	pageResp = session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds", user.Name, repoName), http.StatusOK)
+	page = NewHTMLParser(t, pageResp.Body)
+	page.AssertElement(t, "#w3ds-platform-page", true)
+	page.AssertElement(t, ".overflow-menu-items a.item.active[href='/"+user.Name+"/"+repoName+"/w3ds']", true)
+	page.AssertElement(t, "#w3ds-publication-status", true)
+	page.AssertElement(t, "#w3ds-platform-page[data-w3ds-status-url='/"+user.Name+"/"+repoName+"/w3ds/status']", true)
+	page.AssertElement(t, "button[data-w3ds-ppa-apply][disabled]", true)
+	page.AssertElement(t, "form[action='/"+user.Name+"/"+repoName+"/w3ds']", true)
+	page.AssertElement(t, "form[action='/"+user.Name+"/"+repoName+"/w3ds/visibility'] button[role='switch'][aria-checked='false']", true)
+	assert.Equal(t, "Guided Platform", page.GetInputValueByName("platform_display_name"))
+	statusResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds/status", user.Name, repoName), http.StatusOK)
+	var status map[string]any
+	require.NoError(t, json.Unmarshal(statusResp.Body.Bytes(), &status))
+	assert.Equal(t, "unavailable", status["status"])
+	assert.Equal(t, true, status["isDraft"])
+	assert.Equal(t, false, status["inSubmission"])
+	assert.NotEmpty(t, status["title"])
+	assert.NotEmpty(t, status["identity"])
+
+	raw := NewRequestf(t, "GET", "/%s/%s/raw/branch/master/%s", user.Name, repoName, w3ds.PlatformManifestPath)
+	rawResp := session.MakeRequest(t, raw, http.StatusOK)
+	var manifest w3ds.PlatformManifest
+	require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &manifest))
+	assert.Equal(t, "guided-platform", manifest.PlatformName)
+	assert.Equal(t, "Guided Platform", manifest.DisplayName)
+	assert.Equal(t, []string{"productivity"}, manifest.Domains)
+	assert.Empty(t, manifest.Category)
+	assert.Empty(t, manifest.URL)
+	assert.Empty(t, manifest.PublicKey)
+	assert.Nil(t, manifest.EName)
+	assert.True(t, manifest.IsDraft)
+	assert.False(t, manifest.InSubmission)
+
+	deployResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/deploy", user.Name, repoName), http.StatusOK)
+	deployPage := NewHTMLParser(t, deployResp.Body)
+	deployPage.AssertElement(t, "form[data-deployment-form][data-platform-needs-identity='true']", true)
+	assert.Equal(t, 4, deployPage.doc.Find("[data-deployment-step-indicator]").Length())
+	assert.Equal(t, 4, deployPage.doc.Find("[data-deployment-step]").Length())
+	deployPage.AssertElement(t, ".deploy-ppauth-card a[href='https://docs.w3ds.metastate.foundation']", true)
+}
+
+func TestW3DSEditPlatform(t *testing.T) {
+	onApplicationRun(t, func(t *testing.T, _ *url.URL) {
+		useTestDomainOntology(t)
+		user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user2"})
+		repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user.ID, Name: "repo1"})
+		manifest := w3ds.NewPlatformManifest(
+			"fixture-platform",
+			"Fixture Platform",
+			"A platform profile used to test inline editing",
+			"0.1.0",
+			"",
+			"",
+			[]string{"productivity"},
+		)
+		manifest.PublicKey = "z0123456789"
+		eName := "@fixture-platform.w3id"
+		manifest.EName = &eName
+		content, err := manifest.Marshal()
+		require.NoError(t, err)
+		_, err = files_service.ChangeRepoFiles(t.Context(), repo, user, &files_service.ChangeRepoFilesOptions{
+			OldBranch: repo.DefaultBranch,
+			NewBranch: repo.DefaultBranch,
+			Message:   "test: add platform manifest",
+			Files: []*files_service.ChangeRepoFile{{
+				Operation:     "create",
+				TreePath:      w3ds.PlatformManifestPath,
+				ContentReader: strings.NewReader(string(content)),
+			}},
+		})
+		require.NoError(t, err)
+		createNewRelease(t, loginUser(t, user.Name), "/"+user.Name+"/"+repo.Name, "v0.1.0", "v0.1.0", false, false)
+
+		session := loginUser(t, user.Name)
+		pageResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds", user.Name, repo.Name), http.StatusOK)
+		page := NewHTMLParser(t, pageResp.Body)
+		page.AssertElement(t, "form[action='/"+user.Name+"/"+repo.Name+"/w3ds']", true)
+		assert.Equal(t, 2, page.Find(".w3ds-domain-option input[name='platform_domains']").Length())
+		assert.Equal(t, "Fixture Platform", page.GetInputValueByName("platform_display_name"))
+
+		update := NewRequestWithURLValues(t, "POST", "/"+user.Name+"/"+repo.Name+"/w3ds", url.Values{
+			"platform_display_name": {"Fixture Platform Updated"},
+			"platform_description":  {"The profile was edited directly from the W3DS tab"},
+			"platform_domains":      {"social", "productivity"},
+			"platform_url":          {"https://guided.example"},
+			"platform_logo_url":     {"https://guided.example/logo.png"},
+			"last_commit_id":        {page.GetInputValueByName("last_commit_id")},
+		})
+		updateResp := session.MakeRequest(t, update, http.StatusSeeOther)
+		assert.Equal(t, "/"+user.Name+"/"+repo.Name+"/w3ds", test.RedirectURL(updateResp))
+
+		raw := NewRequestf(t, "GET", "/%s/%s/raw/branch/%s/%s", user.Name, repo.Name, repo.DefaultBranch, w3ds.PlatformManifestPath)
+		rawResp := session.MakeRequest(t, raw, http.StatusOK)
+		var updated w3ds.PlatformManifest
+		require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &updated))
+		assert.Equal(t, "fixture-platform", updated.PlatformName)
+		assert.Equal(t, "Fixture Platform Updated", updated.DisplayName)
+		assert.Equal(t, "The profile was edited directly from the W3DS tab", updated.Description)
+		assert.Equal(t, "0.1.0", updated.Version)
+		assert.Equal(t, []string{"social", "productivity"}, updated.Domains)
+		assert.Empty(t, updated.Category)
+		assert.Equal(t, "https://guided.example", updated.URL)
+		assert.Equal(t, "https://guided.example/logo.png", updated.LogoURL)
+		assert.Equal(t, "z0123456789", updated.PublicKey)
+		assert.True(t, updated.IsDraft)
+
+		pageResp = session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds", user.Name, repo.Name), http.StatusOK)
+		page = NewHTMLParser(t, pageResp.Body)
+		visibility := NewRequestWithValues(t, "POST", "/"+user.Name+"/"+repo.Name+"/w3ds/visibility", map[string]string{
+			"last_commit_id": page.GetInputValueByName("last_commit_id"),
+		})
+		visibilityResp := session.MakeRequest(t, visibility, http.StatusSeeOther)
+		assert.Equal(t, "/"+user.Name+"/"+repo.Name+"/w3ds", test.RedirectURL(visibilityResp))
+
+		rawResp = session.MakeRequest(t, raw, http.StatusOK)
+		require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &updated))
+		assert.False(t, updated.IsDraft)
+		assert.Equal(t, "Fixture Platform Updated", updated.DisplayName)
+
+		pageResp = session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/w3ds", user.Name, repo.Name), http.StatusOK)
+		page = NewHTMLParser(t, pageResp.Body)
+		page.AssertElement(t, "form[action='/"+user.Name+"/"+repo.Name+"/w3ds/ppa'] button[data-w3ds-ppa-apply]:not([disabled])", true)
+		apply := NewRequestWithValues(t, "POST", "/"+user.Name+"/"+repo.Name+"/w3ds/ppa", map[string]string{
+			"last_commit_id": page.GetInputValueByName("last_commit_id"),
+		})
+		applyResp := session.MakeRequest(t, apply, http.StatusSeeOther)
+		assert.Equal(t, "/"+user.Name+"/"+repo.Name+"/w3ds", test.RedirectURL(applyResp))
+
+		rawResp = session.MakeRequest(t, raw, http.StatusOK)
+		require.NoError(t, json.Unmarshal(rawResp.Body.Bytes(), &updated))
+		assert.True(t, updated.InSubmission)
+		assert.False(t, updated.IsDraft)
+	})
 }
 
 func TestRepoCreateFormRepoLimit(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
+	useTestDomainOntology(t)
 	org := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "org3"})
 	userName := "user2"
 	session := loginUser(t, userName)
@@ -160,9 +387,9 @@ func TestRepoCreateFormRepoLimit(t *testing.T) {
 		creationLimitTr := locale.TrN(maxCreationLimit, "repo.form.reach_limit_of_creation_1", "repo.form.reach_limit_of_creation_n", maxCreationLimit)
 		defer test.MockVariableValue(&setting.Repository.MaxCreationLimit, maxCreationLimit)()
 
-		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create"), http.StatusOK)
+		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create/new"), http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
-		assertRepoCreateForm(t, htmlDoc, org, "")
+		assertPlatformCreateForm(t, htmlDoc, org)
 
 		alert := htmlDoc.doc.Find("div.ui.negative.message").Text()
 		assert.Contains(t, alert, creationLimitTr)
@@ -175,9 +402,9 @@ func TestRepoCreateFormRepoLimit(t *testing.T) {
 		maxCreationLimit := 0
 		defer test.MockVariableValue(&setting.Repository.MaxCreationLimit, maxCreationLimit)()
 
-		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create"), http.StatusOK)
+		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create/new"), http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
-		assertRepoCreateForm(t, htmlDoc, org, "")
+		assertPlatformCreateForm(t, htmlDoc, org)
 
 		htmlDoc.AssertElement(t, "div.ui.negative.message", false)
 	})
@@ -192,7 +419,7 @@ func TestRepoCreateFormRepoLimit(t *testing.T) {
 
 		session := loginUser(t, "user8")
 
-		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create"), http.StatusOK)
+		resp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create/new"), http.StatusOK)
 		htmlDoc := NewHTMLParser(t, resp.Body)
 
 		alert := htmlDoc.doc.Find("div.ui.negative.message").Text()

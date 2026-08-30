@@ -154,6 +154,16 @@ func RemoveProviderFromGothic(providerName string) {
 	delete(goth.GetProviders(), providerName)
 }
 
+// IsProviderRegistered reports whether an authentication source was successfully
+// registered with Goth during startup.
+func IsProviderRegistered(providerName string) bool {
+	gothRWMutex.RLock()
+	defer gothRWMutex.RUnlock()
+
+	_, ok := goth.GetProviders()[providerName]
+	return ok
+}
+
 // ClearProviders clears all OAuth2 providers from the goth lib
 func ClearProviders() {
 	gothRWMutex.Lock()

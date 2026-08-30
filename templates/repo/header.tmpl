@@ -95,6 +95,13 @@
 					<a class="{{if .PageIsViewCode}}active {{end}}item" href="{{.RepoLink}}{{if and (ne .BranchName .Repository.DefaultBranch) (not $.PageIsWiki)}}/src/{{.BranchNameSubURL}}{{end}}">
 						{{svg "octicon-code"}} {{ctx.Locale.Tr "repo.code"}}
 					</a>
+					<a class="{{if .PageIsW3DS}}active {{end}}item" href="{{.RepoLink}}/w3ds" data-w3ds-tab data-w3ds-status-url="{{.RepoLink}}/w3ds/status">
+						{{svg "octicon-shield-check"}} {{ctx.Locale.Tr "platform.repo.tab"}}
+						{{with .PlatformPublication}}<span class="w3ds-tab-status {{if eq .PPAStatus "denied"}}denied{{else if eq .PPAStatus "granted"}}granted{{else if eq .PPAStatus "submitted"}}submitted{{else}}tw-hidden{{end}}" data-w3ds-tab-status title="{{.PPALabel}}: {{.PPAMessage}}" aria-label="{{.PPALabel}}: {{.PPAMessage}}"></span>{{else}}<span class="w3ds-tab-status tw-hidden" data-w3ds-tab-status></span>{{end}}
+					</a>
+					<a class="{{if .PageIsDeploy}}active {{end}}item" href="{{.RepoLink}}/deploy">
+						{{svg "octicon-rocket"}} {{ctx.Locale.Tr "platform.deploy.tab"}}
+					</a>
 				{{end}}
 
 				{{if .Permission.CanRead $.UnitTypeIssues}}

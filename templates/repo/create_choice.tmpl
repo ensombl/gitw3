@@ -1,0 +1,24 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository new repo">
+	<div class="ui middle very relaxed page one column grid">
+		<div class="column">
+			<h2 class="ui header">{{ctx.Locale.Tr "platform.new.title"}}</h2>
+			<p>{{ctx.Locale.Tr "platform.new.description"}}</p>
+			<div class="ui two stackable cards tw-mt-4">
+				<a class="ui card" href="{{.NewPlatformLink}}">
+					<div class="content">
+						<div class="header">{{svg "octicon-rocket" 20}} {{ctx.Locale.Tr "platform.new.make"}}</div>
+						<div class="description">{{ctx.Locale.Tr "platform.new.make_description"}}</div>
+					</div>
+				</a>
+				<a class="ui card" href="{{.PortPlatformLink}}">
+					<div class="content">
+						<div class="header">{{svg "octicon-repo-clone" 20}} {{ctx.Locale.Tr "platform.new.port"}}</div>
+						<div class="description">{{ctx.Locale.Tr "platform.new.port_description"}}</div>
+					</div>
+				</a>
+			</div>
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}

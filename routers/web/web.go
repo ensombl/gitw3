@@ -674,6 +674,7 @@ func registerRoutes(m *web.Route) {
 	m.Get("/user/login", auth.SignIn)
 	m.Group("/user", func() {
 		m.Post("/login", web.Bind(forms.SignInForm{}), auth.SignInPost)
+		m.Get("/login/w3ds", auth.SignInW3DS)
 		m.Group("", func() {
 			m.Combo("/login/openid").
 				Get(auth.SignInOpenID).
@@ -708,6 +709,9 @@ func registerRoutes(m *web.Route) {
 	}, reqSignOut)
 
 	m.Any("/user/events", routing.MarkLongPolling, events.Events)
+	m.Methods("POST, OPTIONS", "/w3ds/ppa/callback", ignoreCSRF, repo.W3DSPPACallback)
+	m.Methods("POST, OPTIONS", "/w3ds/migrations/callback", ignoreCSRF, repo.PlatformMigrationCallback)
+	m.Methods("POST, OPTIONS", "/w3ds/deploy/callback", ignoreCSRF, repo.DeploymentCallback)
 
 	m.Group("/login/oauth", func() {
 		m.Group("", func() {
@@ -1172,8 +1176,15 @@ func registerRoutes(m *web.Route) {
 
 	// ***** START: Repository *****
 	m.Group("/repo", func() {
-		m.Get("/create", repo.Create)
+		m.Get("/create", repo.CreateChoice)
 		m.Post("/create", web.Bind(forms.CreateRepoForm{}), repo.CreatePost)
+		m.Get("/create/new", repo.CreatePlatform)
+		m.Post("/create/new", web.Bind(forms.CreateRepoForm{}), repo.CreatePlatformPost)
+		m.Get("/create/port", repo.PortPlatform)
+		m.Post("/create/port", repo.PortPlatformStart)
+		m.Get("/create/port/reviews", repo.PlatformMigrationReviews)
+		m.Post("/create/port/reviews/{session}/approve", repo.ApprovePlatformMigration)
+		m.Get("/create/port/{session}", repo.PlatformMigrationStatus)
 		m.Get("/migrate", repo.Migrate)
 		m.Post("/migrate", web.Bind(forms.MigrateRepoForm{}), repo.MigratePost)
 		if !setting.Repository.DisableForks {
@@ -1679,6 +1690,23 @@ func registerRoutes(m *web.Route) {
 				m.Get("/data", repo.CodeFrequencyData)
 			}, repo.MustBeNotEmpty, context.RequireRepoReaderOr(unit.TypeCode))
 		}, context.RepoRef(), context.RequireRepoReaderOr(unit.TypeCode, unit.TypePullRequests, unit.TypeIssues, unit.TypeReleases))
+
+		m.Group("/w3ds", func() {
+			m.Combo("").Get(repo.W3DS).Post(context.RepoMustNotBeArchived(), reqSignIn, reqRepoCodeWriter, web.Bind(forms.UpdatePlatformForm{}), repo.W3DSUpdate)
+			m.Get("/welcome", reqSignIn, repo.W3DSWelcome)
+			m.Get("/welcome/status", reqSignIn, repo.W3DSWelcomeStatus)
+			m.Post("/visibility", context.RepoMustNotBeArchived(), reqSignIn, reqRepoCodeWriter, web.Bind(forms.PlatformManifestActionForm{}), repo.W3DSToggleVisibility)
+			m.Post("/migration/activate", context.RepoMustNotBeArchived(), reqSignIn, reqRepoAdmin, repo.ActivatePlatformMigration)
+			m.Post("/ppa", context.RepoMustNotBeArchived(), reqSignIn, reqRepoAdmin, repo.W3DSCreatePPASigningSession)
+			m.Get("/ppa/{session}", reqSignIn, reqRepoAdmin, repo.W3DSPPASigningStatus)
+			m.Get("/status", repo.W3DSStatus)
+		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
+
+		m.Group("/deploy", func() {
+			m.Get("", reqSignIn, repo.Deploy)
+			m.Post("", context.RepoMustNotBeArchived(), reqSignIn, web.Bind(forms.CreateDeploymentForm{}), repo.CreateDeployment)
+			m.Get("/{deployment}/status", reqSignIn, repo.DeploymentStatus)
+		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
 
 		m.Group("/activity_author_data", func() {
 			m.Get("", repo.ActivityAuthors)
