@@ -389,6 +389,34 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		manifest.EName = &job.EName
 		manifestChanged = true
 	}
+	if platformIdentityReserved(job) && !platformIdentityProvisioned(job) && provisioningKey == "" {
+		if manifestChanged && !job.Archive {
+			if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, "chore: reserve platform identity", manifest); err != nil {
+				return err
+			}
+		}
+		job.Manifest = manifest
+		job.PlatformName = manifest.PlatformName
+		job.Status = StatusAwaitingDeploy
+		job.Attempts = 0
+		job.LastError = ""
+		job.NextAttempt = time.Time{}
+		return p.store.Save(job)
+	}
+	if platformIdentityReserved(job) && !platformIdentityProvisioned(job) {
+		if _, err := p.w3ds.provisionPrepared(ctx, &preparedIdentity{
+			RegistryEntropy: job.RegistryEntropy,
+			Namespace:       job.Namespace,
+			EName:           job.EName,
+		}, provisioningKey); err != nil {
+			return err
+		}
+		job.IdentityProvisioned = true
+	}
+	if manifest.PublicKey == "" {
+		manifest.PublicKey = provisioningKey
+		manifestChanged = true
+	}
 	if !job.Archive {
 		release, err := p.forgejo.latestRelease(ctx, job.FullName)
 		switch {
@@ -429,34 +457,6 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 			}
 			manifestMessage = "chore: sync latest platform release"
 		}
-	}
-	if platformIdentityReserved(job) && !platformIdentityProvisioned(job) && provisioningKey == "" {
-		if manifestChanged && !job.Archive {
-			if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, manifestMessage, manifest); err != nil {
-				return err
-			}
-		}
-		job.Manifest = manifest
-		job.PlatformName = manifest.PlatformName
-		job.Status = StatusAwaitingDeploy
-		job.Attempts = 0
-		job.LastError = ""
-		job.NextAttempt = time.Time{}
-		return p.store.Save(job)
-	}
-	if platformIdentityReserved(job) && !platformIdentityProvisioned(job) {
-		if _, err := p.w3ds.provisionPrepared(ctx, &preparedIdentity{
-			RegistryEntropy: job.RegistryEntropy,
-			Namespace:       job.Namespace,
-			EName:           job.EName,
-		}, provisioningKey); err != nil {
-			return err
-		}
-		job.IdentityProvisioned = true
-	}
-	if manifest.PublicKey == "" {
-		manifest.PublicKey = provisioningKey
-		manifestChanged = true
 	}
 	if manifestChanged && !job.Archive {
 		if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, manifestMessage, manifest); err != nil {

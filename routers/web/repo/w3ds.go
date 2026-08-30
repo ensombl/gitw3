@@ -846,13 +846,8 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 	view.Identity.Ready = eName != ""
 	if view.Identity.Ready {
 		view.Identity.Tone = "green"
-		if status.Status == "awaiting_deployment" {
-			view.Identity.Label = ctx.Locale.TrString("platform.repo.reserved")
-			view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_reserved", eName)
-		} else {
-			view.Identity.Label = ctx.Locale.TrString("platform.repo.ready")
-			view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_ready", eName)
-		}
+		view.Identity.Label = ctx.Locale.TrString("platform.repo.ready")
+		view.Identity.Message = ctx.Locale.TrString("platform.repo.step_identity_ready", eName)
 	} else {
 		view.Identity.Tone = "blue"
 		if status.Status == "awaiting_deployment" {
