@@ -740,6 +740,31 @@ func TestProcessorRefreshesExpiredUnpublishedReservationWithoutKey(t *testing.T)
 	assert.Equal(t, 2, fake.provisionCalls)
 }
 
+func TestProcessorDropsDeletedUnpublishedReservation(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	fake.manifestExists = false
+	fake.resolveMissing = true
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, fake.server.Client())
+	identity, err := processor.w3ds.prepareIdentity(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, store.Save(&Job{
+		RepositoryID: 42, FullName: "alice/platform", DefaultBranch: "main", TargetSHA: "commit-1",
+		Status: StatusPublishing, EName: identity.EName, RegistryEntropy: identity.RegistryEntropy,
+		Namespace: identity.Namespace, Manifest: fake.manifest,
+	}))
+
+	job, err := store.Get(42)
+	require.NoError(t, err)
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+
+	job, err = store.Get(42)
+	require.NoError(t, err)
+	assert.Nil(t, job)
+	assert.Zero(t, fake.provisionCalls)
+	assert.Empty(t, fake.published)
+}
+
 func TestProcessorIgnoresRepositoriesWithoutManifest(t *testing.T) {
 	fake := newFakePlatformInfrastructure(t)
 	fake.manifestExists = false

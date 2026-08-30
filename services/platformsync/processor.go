@@ -487,6 +487,16 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		if job.EName == "" || job.Manifest == nil {
 			return p.store.Delete(job.RepositoryID)
 		}
+		if platformIdentityReserved(job) && !platformIdentityProvisioned(job) {
+			registered, resolveErr := p.w3ds.deploymentRegistered(ctx, job.EName)
+			if resolveErr != nil {
+				return resolveErr
+			}
+			if !registered {
+				return p.store.Delete(job.RepositoryID)
+			}
+			job.IdentityProvisioned = true
+		}
 		job.Archive = true
 		manifest = job.Manifest
 	} else if err != nil {
