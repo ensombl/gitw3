@@ -96,9 +96,15 @@ func (p *Processor) FinalizeDeployment(input FinalizeDeploymentRequest, job *Dep
 	if job == nil {
 		return errors.New("deployment is not awaiting a signature")
 	}
-	if (job.Status == DeploymentPublishing || job.Status == DeploymentCompleted || job.Status == DeploymentFailed) &&
+	if (job.Status == DeploymentPublishing || job.Status == DeploymentCompleted) &&
 		job.DeployerEName == input.SignerEName && job.WalletSignature == input.Signature {
 		return nil
+	}
+	if job.Status == DeploymentFailed && job.DeployerEName == input.SignerEName && job.WalletSignature == input.Signature {
+		job.Status = DeploymentPublishing
+		job.LastError = ""
+		job.NextAttempt = time.Now().UTC()
+		return p.store.SaveDeployment(job)
 	}
 	if job.Status != DeploymentAwaitingSignature {
 		return errors.New("deployment is not awaiting a signature")

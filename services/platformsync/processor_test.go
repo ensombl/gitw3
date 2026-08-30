@@ -283,6 +283,18 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, DeploymentPublishing, stored.Status)
 	assert.Equal(t, "wallet-signature", stored.WalletSignature)
+	stored.Status = DeploymentFailed
+	stored.LastError = "temporary infrastructure failure"
+	stored.NextAttempt = time.Now().Add(time.Hour)
+	require.NoError(t, store.SaveDeployment(stored))
+	require.NoError(t, processor.FinalizeDeployment(FinalizeDeploymentRequest{
+		SignerEName: "@deployer", Signature: "wallet-signature", KeyBindingCertificate: "certificate",
+	}, stored))
+	stored, err = store.GetDeployment(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, DeploymentPublishing, stored.Status)
+	assert.Empty(t, stored.LastError)
+	assert.False(t, stored.NextAttempt.After(time.Now()))
 
 	require.NoError(t, processor.ReconcileDeployment(context.Background(), stored))
 	stored, err = store.GetDeployment(job.ID)
