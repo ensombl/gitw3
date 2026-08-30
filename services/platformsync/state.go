@@ -262,7 +262,7 @@ func (s *Store) Ready(now time.Time, limit int) ([]*Job, error) {
 				return err
 			}
 			activationReady := job.Status == StatusActivating && job.MigrationActivated
-			if (job.Status == StatusIdentityPending || job.Status == StatusPublishing || activationReady || job.Status == StatusFailed) && !job.NextAttempt.After(now) {
+			if (job.Status == StatusIdentityPending || job.Status == StatusAwaitingDeploy || job.Status == StatusPublishing || activationReady || job.Status == StatusFailed) && !job.NextAttempt.After(now) {
 				jobs = append(jobs, &job)
 			}
 			return nil

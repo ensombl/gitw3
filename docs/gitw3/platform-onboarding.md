@@ -26,7 +26,6 @@ Version 1 contains:
   "url": "https://my-platform.example",
   "logoUrl": "https://my-platform.example/logo.png",
   "domains": ["productivity", "work"],
-  "publicKey": "z...",
   "inSubmission": false,
   "submissionVersion": "",
   "isDraft": true
@@ -34,7 +33,8 @@ Version 1 contains:
 ```
 
 `platformName` and the provisioned `ename` are immutable. `ename` is initially `null`; the publisher
-provisions the platform eVault and commits the assigned value with its bot account. Changes merged to
+provisions the platform eVault keylessly and commits the assigned value with its bot account. Platform
+publication does not wait for a deployment and does not require an application key. Changes merged to
 the default branch update the same public User-profile MetaEnvelope. Deleting the manifest or repository
 archives the profile so the Marketplace hides it.
 
@@ -56,9 +56,10 @@ contains `submissionProof`: the exact release statement, domains, repository com
 signature, public key, Registry certificate, and verification time. The publisher stores that proof with
 the PlatformProfile in the platform's own eVault, so the review record is bound to the submitted release.
 
-The generated-key option creates an ECDSA P-256 key in the browser. Only the public SPKI key reaches
-GitW3. The PKCS#8 private key is delivered in a one-time JSON download and is never stored by GitW3 or
-the publisher.
+The separate Deploy tab can create an ECDSA P-256 key for a deployment attestation. Only the public
+SPKI key reaches GitW3. The PKCS#8 private key is delivered in a one-time JSON download and is never
+stored by GitW3 or the publisher. This deployment key is never used to create or control the platform
+identity.
 
 ## Build and run the publisher
 

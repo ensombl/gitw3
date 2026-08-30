@@ -44,8 +44,6 @@
 					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.certification_unavailable"}}</div>
 				{{else if and .PlatformEName (not .HasCertifiedDeploymentRelease)}}
 					<div class="ui warning message"><div class="header">{{ctx.Locale.Tr "platform.deploy.certification_heading"}}</div><p>{{ctx.Locale.Tr "platform.deploy.certification_help"}}</p><a class="ui button" href="{{.RepoLink}}/w3ds">{{ctx.Locale.Tr "platform.deploy.certification_action"}}</a></div>
-				{{else if .PlatformNeedsDeploymentIdentity}}
-					<div class="ui info message"><div class="header">{{ctx.Locale.Tr "platform.deploy.identity_first_title"}}</div><p>{{ctx.Locale.Tr "platform.deploy.identity_first_help"}}</p></div>
 				{{end}}
 
 				<ol class="platform-wizard-steps deploy-wizard-steps" aria-label="{{ctx.Locale.Tr "platform.deploy.new"}}">
@@ -55,7 +53,7 @@
 					<li class="platform-wizard-step" data-deployment-step-indicator="4"><span class="platform-wizard-step-number">4</span><span>{{ctx.Locale.Tr "platform.deploy.step_sign"}}</span></li>
 				</ol>
 
-				<form class="ui form deploy-form" data-deployment-form data-platform-needs-identity="{{if .PlatformNeedsDeploymentIdentity}}true{{else}}false{{end}}" action="{{.RepoLink}}/deploy" method="post">
+				<form class="ui form deploy-form" data-deployment-form action="{{.RepoLink}}/deploy" method="post">
 					{{.CsrfTokenHtml}}
 					<fieldset class="platform-wizard-panel deploy-wizard-panel" data-deployment-step="1">
 						<legend>{{ctx.Locale.Tr "platform.deploy.release_heading"}}</legend>
@@ -130,7 +128,6 @@
 							<div><dt>{{ctx.Locale.Tr "platform.deploy.environment"}}</dt><dd data-deployment-review-environment>—</dd></div>
 							<div><dt>{{ctx.Locale.Tr "platform.deploy.deployer_identity"}}</dt><dd>{{.DeploymentWalletEName}}</dd></div>
 						</dl>
-						{{if .PlatformNeedsDeploymentIdentity}}<div class="ui info message"><div class="header">{{ctx.Locale.Tr "platform.deploy.review_activation_title"}}</div><p>{{ctx.Locale.Tr "platform.deploy.review_activation_help"}}</p></div>{{end}}
 						<h3>{{ctx.Locale.Tr "platform.deploy.documents_title"}}</h3>
 						<div class="deploy-document-list">
 							<div><span>1</span><div><strong>{{ctx.Locale.Tr "platform.deploy.document_key_title"}}</strong><p>{{ctx.Locale.Tr "platform.deploy.document_key_help"}}</p></div></div>

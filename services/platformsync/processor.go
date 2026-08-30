@@ -52,7 +52,6 @@ type BootstrapPlatformRequest struct {
 	RepositoryID  int64  `json:"repositoryId"`
 	FullName      string `json:"fullName"`
 	DefaultBranch string `json:"defaultBranch"`
-	PublicKey     string `json:"publicKey"`
 }
 
 type CheckDeploymentCertificationsRequest struct {
@@ -187,11 +186,8 @@ func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeployme
 	if platform == nil || platform.EName != input.PlatformEName {
 		return nil, errors.New("platform identity does not match this repository")
 	}
-	activatesPlatform := platformIdentityReserved(platform) && !platformIdentityProvisioned(platform)
-	if !activatesPlatform {
-		if err := p.requireDeploymentCertification(ctx, input.RepositoryID, input.PlatformEName, input.Version); err != nil {
-			return nil, err
-		}
+	if err := p.requireDeploymentCertification(ctx, input.RepositoryID, input.PlatformEName, input.Version); err != nil {
+		return nil, err
 	}
 	identity, err := p.w3ds.prepareIdentity(ctx)
 	if err != nil {
@@ -215,8 +211,7 @@ func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeployme
 		DeploymentName: input.DeploymentName, Environment: input.Environment, DeployerEName: input.DeployerEName,
 		Version: input.Version, ReleaseTag: input.ReleaseTag, CommitSHA: strings.ToLower(input.CommitSHA),
 		PublicKey: input.PublicKey, RegistryEntropy: identity.RegistryEntropy, Namespace: identity.Namespace,
-		ActivatesPlatform: activatesPlatform,
-		BundlePayload:     bundle, Status: DeploymentAwaitingSignature, CreatedAt: now,
+		BundlePayload: bundle, Status: DeploymentAwaitingSignature, CreatedAt: now,
 	}
 	if err := p.store.SaveDeployment(job); err != nil {
 		return nil, err
@@ -257,14 +252,17 @@ func (p *Processor) ReconcileDeployment(ctx context.Context, job *DeploymentJob)
 	if job == nil || job.WalletSignature == "" {
 		return errors.New("signed deployment job is required")
 	}
+	// Older queued deployments can carry this flag from the brief period when
+	// platform activation was coupled to the first deployment. Finish those
+	// reservations keylessly, then enforce certification like every other
+	// deployment.
 	if job.ActivatesPlatform {
-		if err := p.activateReservedPlatform(ctx, job.RepositoryID, job.PlatformEName, job.PublicKey); err != nil {
+		if err := p.activateReservedPlatform(ctx, job.RepositoryID, job.PlatformEName); err != nil {
 			return err
 		}
-	} else {
-		if err := p.requireDeploymentCertification(ctx, job.RepositoryID, job.PlatformEName, job.Version); err != nil {
-			return err
-		}
+	}
+	if err := p.requireDeploymentCertification(ctx, job.RepositoryID, job.PlatformEName, job.Version); err != nil {
+		return err
 	}
 	job.Status = DeploymentPublishing
 	job.LastError = ""
@@ -352,7 +350,7 @@ func platformIdentityProvisioned(job *Job) bool {
 	return job.IdentityProvisioned || !platformIdentityReserved(job)
 }
 
-func (p *Processor) activateReservedPlatform(ctx context.Context, repositoryID int64, platformEName, publicKey string) error {
+func (p *Processor) activateReservedPlatform(ctx context.Context, repositoryID int64, platformEName string) error {
 	job, err := p.store.Get(repositoryID)
 	if err != nil {
 		return err
@@ -367,11 +365,11 @@ func (p *Processor) activateReservedPlatform(ctx context.Context, repositoryID i
 		RegistryEntropy: job.RegistryEntropy,
 		Namespace:       job.Namespace,
 		EName:           job.EName,
-	}, publicKey); err != nil {
+	}, ""); err != nil {
 		return err
 	}
 	job.IdentityProvisioned = true
-	job.ProvisioningKey = publicKey
+	job.ProvisioningKey = ""
 	job.Status = StatusPublishing
 	job.LastError = ""
 	job.Attempts = 0
@@ -382,10 +380,11 @@ func (p *Processor) activateReservedPlatform(ctx context.Context, repositoryID i
 	return p.Reconcile(ctx, job)
 }
 
-// BootstrapPlatformIdentity activates a new platform with the key selected for its first deployment.
+// BootstrapPlatformIdentity completes a reserved platform identity without
+// coupling it to an application or deployment key. The endpoint remains for
+// compatibility with callers created during the reservation rollout.
 func (p *Processor) BootstrapPlatformIdentity(ctx context.Context, input BootstrapPlatformRequest) (*Job, error) {
-	if input.RepositoryID <= 0 || strings.TrimSpace(input.FullName) == "" || strings.TrimSpace(input.DefaultBranch) == "" ||
-		!strings.HasPrefix(input.PublicKey, "z") || len(input.PublicKey) > 8192 {
+	if input.RepositoryID <= 0 || strings.TrimSpace(input.FullName) == "" || strings.TrimSpace(input.DefaultBranch) == "" {
 		return nil, errors.New("complete platform identity details are required")
 	}
 	job, err := p.store.Get(input.RepositoryID)
@@ -404,15 +403,12 @@ func (p *Processor) BootstrapPlatformIdentity(ctx context.Context, input Bootstr
 	if job == nil {
 		return nil, errors.New("platform publication job was not created")
 	}
-	if job.ProvisioningKey != "" && job.ProvisioningKey != input.PublicKey {
-		return nil, errors.New("platform identity is already being activated with another key")
-	}
 	if job.EName != "" && job.Status == StatusPublished {
 		return job, nil
 	}
 	job.FullName = input.FullName
 	job.DefaultBranch = input.DefaultBranch
-	job.ProvisioningKey = input.PublicKey
+	job.ProvisioningKey = ""
 	job.Status = StatusIdentityPending
 	job.LastError = ""
 	job.Attempts = 0
@@ -568,20 +564,6 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 			manifestMessage = "chore: sync latest platform release"
 		}
 	}
-	if manifest.Migration == nil && platformIdentityReserved(job) && !platformIdentityProvisioned(job) && provisioningKey == "" {
-		if manifestChanged && !job.Archive {
-			if err := p.forgejo.updateManifest(ctx, job.FullName, job.DefaultBranch, fileSHA, manifestMessage, manifest); err != nil {
-				return err
-			}
-		}
-		job.Manifest = manifest
-		job.PlatformName = manifest.PlatformName
-		job.Status = StatusAwaitingDeploy
-		job.Attempts = 0
-		job.LastError = ""
-		job.NextAttempt = time.Time{}
-		return p.store.Save(job)
-	}
 	if manifest.Migration == nil && platformIdentityReserved(job) && !platformIdentityProvisioned(job) {
 		if _, err := p.w3ds.provisionPrepared(ctx, &preparedIdentity{
 			RegistryEntropy: job.RegistryEntropy,
@@ -592,7 +574,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		}
 		job.IdentityProvisioned = true
 	}
-	if manifest.Migration == nil && manifest.PublicKey == "" {
+	if manifest.Migration == nil && manifest.PublicKey == "" && provisioningKey != "" {
 		manifest.PublicKey = provisioningKey
 		manifestChanged = true
 	}

@@ -89,7 +89,6 @@ func Deploy(ctx *context.Context) {
 		return
 	}
 	platformEName := platformENameForManifest(ctx, manifest)
-	platformActivated := strings.TrimSpace(manifest.PublicKey) != ""
 	walletEName, err := w3dsENameForUser(ctx, ctx.Doer)
 	if err != nil {
 		ctx.ServerError("w3dsENameForUser", err)
@@ -102,7 +101,7 @@ func Deploy(ctx *context.Context) {
 	}
 	certificationsAvailable := true
 	hasCertifiedRelease := false
-	if platformActivated && platformEName != "" && len(releases) > 0 {
+	if platformEName != "" && len(releases) > 0 {
 		certifications, certificationErr := loadDeploymentCertifications(ctx, ctx.Repo.Repository.ID, platformEName, releases)
 		if certificationErr != nil {
 			certificationsAvailable = false
@@ -134,9 +133,8 @@ func Deploy(ctx *context.Context) {
 	ctx.Data["DeploymentCertificationsAvailable"] = certificationsAvailable
 	ctx.Data["HasCertifiedDeploymentRelease"] = hasCertifiedRelease
 	ctx.Data["Deployments"] = deployments
-	ctx.Data["PlatformNeedsDeploymentIdentity"] = !platformActivated
 	ctx.Data["CanCreateDeployment"] = walletEName != "" && len(releases) > 0 && setting.PlatformManifestSync.Enabled &&
-		platformEName != "" && (!platformActivated || (certificationsAvailable && hasCertifiedRelease))
+		platformEName != "" && certificationsAvailable && hasCertifiedRelease
 	ctx.HTML(http.StatusOK, tplRepoDeploy)
 }
 
@@ -190,8 +188,7 @@ func CreateDeployment(ctx *context.Context) {
 		deploymentJSONError(ctx, http.StatusBadRequest, "The release tag must be a semantic version such as v1.2.3.")
 		return
 	}
-	platformActivated := strings.TrimSpace(manifest.PublicKey) != ""
-	if platformActivated && platformEName != "" {
+	if platformEName != "" {
 		certifications, certificationErr := loadDeploymentCertifications(ctx, ctx.Repo.Repository.ID, platformEName, []deploymentReleaseView{{Version: version}})
 		if certificationErr != nil {
 			deploymentJSONError(ctx, http.StatusServiceUnavailable, ctx.Locale.TrString("platform.deploy.certification_unavailable"))

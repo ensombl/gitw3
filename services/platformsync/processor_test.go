@@ -32,6 +32,7 @@ type fakePlatformInfrastructure struct {
 	provisionCalls         int
 	activationCalls        int
 	manifestUpdateFailures int
+	provisionedKeys        []string
 	published              []map[string]any
 	accreditations         []w3ds.AccreditationDecision
 	server                 *httptest.Server
@@ -124,9 +125,9 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 	case request.Method == http.MethodPost && request.URL.Path == "/provision":
 		var input map[string]string
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
-		assert.Equal(t, "z0123456789", input["publicKey"])
 		f.mu.Lock()
 		f.provisionCalls++
+		f.provisionedKeys = append(f.provisionedKeys, input["publicKey"])
 		reserved := f.manifest.PublicKey == ""
 		f.mu.Unlock()
 		w3id := "@guided.w3id"
@@ -633,7 +634,7 @@ func TestProcessorCreatesUpdatesAndArchivesProfile(t *testing.T) {
 	assert.Equal(t, false, fake.published[2]["isActive"])
 }
 
-func TestProcessorReservesIdentityUntilFirstDeployment(t *testing.T) {
+func TestProcessorProvisionsPlatformIdentityWithoutKey(t *testing.T) {
 	fake := newFakePlatformInfrastructure(t)
 	fake.manifest.PublicKey = ""
 	store := openTestStore(t)
@@ -646,15 +647,19 @@ func TestProcessorReservesIdentityUntilFirstDeployment(t *testing.T) {
 
 	job, err = store.Get(42)
 	require.NoError(t, err)
-	assert.Equal(t, StatusAwaitingDeploy, job.Status)
+	assert.Equal(t, StatusPublished, job.Status)
 	assert.NotEmpty(t, job.EName)
 	assert.NotEmpty(t, job.RegistryEntropy)
 	assert.NotEmpty(t, job.Namespace)
-	assert.False(t, job.IdentityProvisioned)
+	assert.True(t, job.IdentityProvisioned)
 	assert.Equal(t, "v0.1.0", job.ReleaseTag)
 	assert.Equal(t, "0.1.0", job.ReleaseVersion)
 	require.NotNil(t, fake.manifest.EName)
 	assert.Equal(t, job.EName, *fake.manifest.EName)
+	assert.Empty(t, fake.manifest.PublicKey)
+	assert.Equal(t, []string{""}, fake.provisionedKeys)
+	require.Len(t, fake.published, 1)
+
 	addSubmissionProof(t, fake.manifest, "alice/platform", 42)
 	fake.release = &platformRelease{TagName: "v0.1.1", Version: "0.1.1"}
 	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-2", false))
@@ -663,7 +668,7 @@ func TestProcessorReservesIdentityUntilFirstDeployment(t *testing.T) {
 	require.NoError(t, processor.Reconcile(context.Background(), job))
 	job, err = store.Get(42)
 	require.NoError(t, err)
-	assert.Equal(t, StatusAwaitingDeploy, job.Status)
+	assert.Equal(t, StatusPublished, job.Status)
 	assert.Equal(t, "v0.1.1", job.ReleaseTag)
 	assert.Equal(t, "0.1.1", job.ReleaseVersion)
 	assert.Equal(t, job.EName, *fake.manifest.EName)
@@ -672,30 +677,45 @@ func TestProcessorReservesIdentityUntilFirstDeployment(t *testing.T) {
 	assert.Empty(t, fake.manifest.SubmissionVersion)
 	assert.Nil(t, fake.manifest.SubmissionProof)
 	assert.NotEmpty(t, fake.manifest.SubmissionHistory)
-	assert.Zero(t, fake.provisionCalls)
-	reservedEName := job.EName
+	assert.Equal(t, 1, fake.provisionCalls)
+
+	fake.accreditations = []w3ds.AccreditationDecision{{
+		PlatformEName: job.EName, PlatformVersion: "0.1.1", Decision: "granted", CreatedAt: "2026-08-30T00:00:00Z",
+	}}
 	deployment, err := processor.PrepareDeployment(context.Background(), PrepareDeploymentRequest{
-		ID: "first-deployment", RepositoryID: 42, PlatformEName: reservedEName,
+		ID: "first-deployment", RepositoryID: 42, PlatformEName: job.EName,
 		DeploymentName: "Production", Environment: "production", DeployerEName: "@deployer",
 		Version: "0.1.1", ReleaseTag: "v0.1.1", CommitSHA: strings.Repeat("a", 40), PublicKey: "z0123456789",
 	})
 	require.NoError(t, err)
-	assert.True(t, deployment.ActivatesPlatform)
-	assert.Zero(t, fake.provisionCalls, "reserving the signed deployment must not activate the platform eVault")
+	assert.False(t, deployment.ActivatesPlatform)
+	assert.Equal(t, 1, fake.provisionCalls)
+	assert.Empty(t, fake.manifest.PublicKey)
+}
 
-	job, err = processor.BootstrapPlatformIdentity(context.Background(), BootstrapPlatformRequest{
-		RepositoryID:  42,
-		FullName:      "alice/platform",
-		DefaultBranch: "main",
-		PublicKey:     "z0123456789",
-	})
+func TestProcessorResumesPreviouslyReservedIdentityWithoutKey(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	fake.manifest.PublicKey = ""
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, fake.server.Client())
+	identity, err := processor.w3ds.prepareIdentity(context.Background())
+	require.NoError(t, err)
+	require.NoError(t, store.Save(&Job{
+		RepositoryID: 42, FullName: "alice/platform", DefaultBranch: "main", TargetSHA: "commit-1", Status: StatusAwaitingDeploy,
+		EName: identity.EName, RegistryEntropy: identity.RegistryEntropy, Namespace: identity.Namespace,
+	}))
+
+	ready, err := store.Ready(time.Now().UTC(), 10)
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	require.NoError(t, processor.Reconcile(context.Background(), ready[0]))
+
+	job, err := store.Get(42)
 	require.NoError(t, err)
 	assert.Equal(t, StatusPublished, job.Status)
-	assert.Equal(t, reservedEName, job.EName)
 	assert.True(t, job.IdentityProvisioned)
-	assert.Equal(t, "z0123456789", fake.manifest.PublicKey)
-	assert.Equal(t, 1, fake.provisionCalls)
-	assert.Empty(t, job.ProvisioningKey)
+	assert.Empty(t, fake.manifest.PublicKey)
+	assert.Equal(t, []string{""}, fake.provisionedKeys)
 }
 
 func TestProcessorIgnoresRepositoriesWithoutManifest(t *testing.T) {
