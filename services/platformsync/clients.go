@@ -342,9 +342,9 @@ func (c *w3dsClient) legacyPlatformProfile(ctx context.Context, ename, token str
 }
 
 func explicitProfileAuthors(payload map[string]any) []string {
-	seen := map[string]struct{}{}
-	authors := make([]string, 0)
 	for _, field := range []string{"authorEnames", "authors", "ownerEName", "submittedBy", "contactEName"} {
+		seen := map[string]struct{}{}
+		authors := make([]string, 0)
 		values := []any{payload[field]}
 		if list, ok := payload[field].([]any); ok {
 			values = list
@@ -360,8 +360,11 @@ func explicitProfileAuthors(payload map[string]any) []string {
 			seen[ename] = struct{}{}
 			authors = append(authors, ename)
 		}
+		if len(authors) > 0 {
+			return authors
+		}
 	}
-	return authors
+	return nil
 }
 
 func stringValue(value any) string {
