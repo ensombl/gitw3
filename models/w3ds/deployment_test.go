@@ -42,3 +42,34 @@ func TestDeploymentLifecycle(t *testing.T) {
 	assert.Equal(t, w3ds_model.DeploymentCompleted, stored.Status)
 	assert.Equal(t, "doc-1", stored.DeploymentKeyDocumentID)
 }
+
+func TestDeploymentListOnlyIncludesSignedAttempts(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+	ctx := db.DefaultContext
+	expires := timeutil.TimeStamp(time.Now().Add(time.Minute).Unix())
+	for _, deployment := range []*w3ds_model.Deployment{
+		{
+			ID: "unsigned-attempt", SigningPayload: "unsigned-payload", RepositoryID: 1, UserID: 1,
+			DeployerEName: "@deployer", Name: "Unsigned", Environment: "production", ReleaseID: 1,
+			Version: "1.2.3", ReleaseTag: "v1.2.3", CommitSHA: "a", PlatformEName: "@platform",
+			VersionEName: "@version", DeploymentEName: "@unsigned", PublicKey: "zKey", BundlePayload: "{}",
+			Status: w3ds_model.DeploymentAwaitingSignature, ExpiresUnix: expires,
+		},
+		{
+			ID: "signed-attempt", SigningPayload: "signed-payload", RepositoryID: 1, UserID: 1,
+			DeployerEName: "@deployer", Name: "Signed", Environment: "production", ReleaseID: 1,
+			Version: "1.2.3", ReleaseTag: "v1.2.3", CommitSHA: "a", PlatformEName: "@platform",
+			VersionEName: "@version", DeploymentEName: "@signed", PublicKey: "zKey", BundlePayload: "{}",
+			WalletSignature: "signature", Status: w3ds_model.DeploymentFailed, Failure: "temporary failure", ExpiresUnix: expires,
+		},
+	} {
+		require.NoError(t, w3ds_model.CreateDeployment(ctx, deployment))
+	}
+
+	deployments, err := w3ds_model.ListDeploymentsForUser(ctx, 1, 1)
+	require.NoError(t, err)
+	require.Len(t, deployments, 1)
+	assert.Equal(t, "signed-attempt", deployments[0].ID)
+	assert.Equal(t, w3ds_model.DeploymentPublishing, deployments[0].Status)
+	assert.Empty(t, deployments[0].Failure)
+}

@@ -85,9 +85,15 @@ func GetDeploymentBySigningPayload(ctx context.Context, payload string) (*Deploy
 func ListDeploymentsForUser(ctx context.Context, repositoryID, userID int64) ([]*Deployment, error) {
 	deployments := make([]*Deployment, 0)
 	err := db.GetEngine(ctx).
-		Where("repository_id = ? AND user_id = ?", repositoryID, userID).
+		Where("repository_id = ? AND user_id = ? AND wallet_signature IS NOT NULL AND wallet_signature <> ''", repositoryID, userID).
 		Desc("created_unix").
 		Find(&deployments)
+	for _, deployment := range deployments {
+		if deployment.Status == DeploymentFailed {
+			deployment.Status = DeploymentPublishing
+			deployment.Failure = ""
+		}
+	}
 	return deployments, err
 }
 

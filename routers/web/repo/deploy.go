@@ -23,6 +23,7 @@ import (
 	user_model "forgejo.org/models/user"
 	w3ds_model "forgejo.org/models/w3ds"
 	"forgejo.org/modules/base"
+	"forgejo.org/modules/log"
 	"forgejo.org/modules/optional"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/timeutil"
@@ -295,9 +296,7 @@ func DeploymentCallback(ctx *context.Context) {
 		"keyBindingCertificate": verification.KeyBindingCertificate,
 	})
 	if err != nil {
-		_ = w3ds_model.UpdateDeploymentPublication(ctx, deployment.ID, w3ds_model.DeploymentFailed, err.Error(), "", "")
-		deploymentJSONError(ctx, http.StatusBadGateway, "The signature is safe, but publication has not started yet. GitW3 will retry from the Deploy tab.")
-		return
+		log.Warn("Queue signed deployment %s for publication: %v", deployment.ID, err)
 	}
 	ctx.JSON(http.StatusOK, map[string]bool{"ok": true})
 }
@@ -351,15 +350,20 @@ func DeploymentStatus(ctx *context.Context) {
 			status := string(published.Status)
 			if status == string("completed") {
 				status = w3ds_model.DeploymentCompleted
-			} else if status == string("failed") {
-				status = w3ds_model.DeploymentFailed
 			} else {
 				status = w3ds_model.DeploymentPublishing
 			}
-			_ = w3ds_model.UpdateDeploymentPublication(ctx, deployment.ID, status, published.LastError, published.DeploymentKeyDocumentID, published.SoftwareVersionDocumentID)
-			deployment.Status, deployment.Failure = status, published.LastError
+			failure := published.LastError
+			if status == w3ds_model.DeploymentPublishing {
+				failure = ""
+			}
+			_ = w3ds_model.UpdateDeploymentPublication(ctx, deployment.ID, status, failure, published.DeploymentKeyDocumentID, published.SoftwareVersionDocumentID)
+			deployment.Status, deployment.Failure = status, failure
 			deployment.DeploymentKeyDocumentID = published.DeploymentKeyDocumentID
 			deployment.SoftwareVersionDocumentID = published.SoftwareVersionDocumentID
+		} else if deployment.WalletSignature != "" {
+			_ = w3ds_model.UpdateDeploymentPublication(ctx, deployment.ID, w3ds_model.DeploymentPublishing, "", deployment.DeploymentKeyDocumentID, deployment.SoftwareVersionDocumentID)
+			deployment.Status, deployment.Failure = w3ds_model.DeploymentPublishing, ""
 		}
 	}
 	response := map[string]any{
@@ -370,6 +374,8 @@ func DeploymentStatus(ctx *context.Context) {
 	}
 	if deployment.Status == w3ds_model.DeploymentCompleted {
 		response["redirect"] = ctx.Repo.Repository.Link() + "/deploy"
+	} else if deployment.Status == w3ds_model.DeploymentPublishing {
+		response["message"] = "Signature verified. W3DS publication is queued and will retry automatically."
 	}
 	ctx.JSON(http.StatusOK, response)
 }
