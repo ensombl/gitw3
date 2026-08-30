@@ -80,6 +80,7 @@ configure:
 | `PLATFORM_SYNC_WEBHOOK_SECRET` | HMAC secret shared with the Forgejo system webhook. |
 | `PLATFORM_SYNC_INTERNAL_TOKEN` | Secret used by GitW3 to read publication status. |
 | `PLATFORM_SYNC_REGISTRY_URL` | W3DS Registry base URL; defaults to the production Registry. |
+| `PLATFORM_SYNC_REGISTRY_SHARED_SECRET` | Registry service credential required to inspect, transfer, and manage migrated PlatformProfiles. |
 | `PLATFORM_SYNC_PROVISIONER_URL` | W3DS Provisioner base URL; defaults to the production Provisioner. |
 | `PLATFORM_SYNC_VERIFICATION_ID` | Approved production provisioning verification identifier. |
 | `PLATFORM_SYNC_PUBLISHER_URL` | Certified platform URL used to request eVault tokens. |
@@ -99,10 +100,29 @@ PLATFORM_SYNC_FORGEJO_URL=http://localhost:3000 \
 PLATFORM_SYNC_FORGEJO_TOKEN='<service-token>' \
 PLATFORM_SYNC_WEBHOOK_SECRET='<webhook-secret>' \
 PLATFORM_SYNC_INTERNAL_TOKEN='<internal-token>' \
+PLATFORM_SYNC_REGISTRY_SHARED_SECRET='<registry-service-secret>' \
 PLATFORM_SYNC_VERIFICATION_ID='<approved-production-verification-id>' \
 PLATFORM_SYNC_PUBLISHER_URL=http://localhost:8090 \
 go run ./cmd/platform-manifest-sync
 ```
+
+## Port an existing platform
+
+The Port an existing platform wizard creates a fresh, staged GitW3 repository while preserving the
+existing platform eName, PlatformProfile envelope, eVault records, and per-version PPA history. The
+applicant provides the existing eName and platform token, then signs a canonical migration statement
+with the eID wallet connected to GitW3. The raw token is never persisted; only its SHA-256 fingerprint
+is stored in the repository manifest. A profile with explicit authors may only be ported by one of
+those author eNames. Authorless legacy profiles enter the site-admin review queue at
+`/repo/create/port/reviews`.
+
+Staging does not write to W3DS. The repository administrator pushes the existing code and publishes a
+stable Git release matching the preserved profile version. The W3DS tab then asks for the original
+token again before its explicit Activate migration operation. Activation re-fetches the source
+profile and rejects drift, checks that no other GitW3 repository manages the eName, atomically records
+GitW3 as the Registry manager, revokes the legacy token for PlatformProfile writes, and publishes to
+the original envelope ID. An interrupted activation stays retryable and never creates a second
+Marketplace listing.
 
 ## Register the system webhook
 
