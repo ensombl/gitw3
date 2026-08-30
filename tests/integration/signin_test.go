@@ -17,6 +17,7 @@ import (
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/test"
 	"forgejo.org/modules/translation"
+	"forgejo.org/services/auth/source/oauth2"
 	"forgejo.org/services/forms"
 	"forgejo.org/tests"
 
@@ -148,6 +149,13 @@ func TestNativeW3DSLogin(t *testing.T) {
 
 	response = MakeRequest(t, NewRequest(t, "GET", "/user/login/w3ds"), http.StatusSeeOther)
 	assert.Equal(t, "/user/oauth2/W3DS", test.RedirectURL(response))
+
+	oauth2.RemoveProviderFromGothic("W3DS")
+	session = emptyTestSession(t)
+	response = session.MakeRequest(t, NewRequest(t, "GET", "/user/login/w3ds"), http.StatusSeeOther)
+	assert.Equal(t, "/user/login", test.RedirectURL(response))
+	response = session.MakeRequest(t, NewRequest(t, "GET", "/user/login"), http.StatusOK)
+	assert.Contains(t, response.Body.String(), translation.NewLocale("en-US").TrString("auth.w3ds_login_unavailable"))
 }
 
 func TestDisableSignin(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	auth_model "forgejo.org/models/auth"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/setting"
+	"forgejo.org/services/auth/source/oauth2"
 	"forgejo.org/services/context"
 )
 
@@ -19,6 +20,12 @@ const w3dsAuthSourceName = "W3DS"
 func SignInW3DS(ctx *context.Context) {
 	if _, err := auth_model.GetActiveOAuth2SourceByName(ctx, w3dsAuthSourceName); err != nil {
 		log.Warn("W3DS login requested without an active W3DS authentication source: %v", err)
+		ctx.Flash.Error(ctx.Tr("auth.w3ds_login_unavailable"))
+		ctx.Redirect(setting.AppSubURL + "/user/login")
+		return
+	}
+	if !oauth2.IsProviderRegistered(w3dsAuthSourceName) {
+		log.Warn("W3DS login requested while its authentication provider is unavailable")
 		ctx.Flash.Error(ctx.Tr("auth.w3ds_login_unavailable"))
 		ctx.Redirect(setting.AppSubURL + "/user/login")
 		return
