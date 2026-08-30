@@ -207,17 +207,16 @@ func addSubmissionProof(t *testing.T, manifest *w3ds.PlatformManifest, repositor
 }
 
 func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
+	entropyPayload, err := json.Marshal(map[string]string{"entropy": "test-entropy-1234567890abcdef"})
+	require.NoError(t, err)
+	entropyToken := "eyJhbGciOiJFUzI1NiJ9." + base64.RawURLEncoding.EncodeToString(entropyPayload) + ".signature"
 	var server *httptest.Server
 	provisioned := false
 	createdDocuments := 0
 	server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
 		case "/entropy":
-			_ = json.NewEncoder(response).Encode(map[string]string{"token": "signed-entropy"})
-		case "/provision/preview":
-			_ = json.NewEncoder(response).Encode(map[string]any{
-				"success": true, "w3id": "@11111111-1111-5111-8111-111111111111",
-			})
+			_ = json.NewEncoder(response).Encode(map[string]string{"token": entropyToken})
 		case "/platforms/certification":
 			_ = json.NewEncoder(response).Encode(map[string]any{"token": "platform-token"})
 		case "/records/software-versions":
@@ -230,8 +229,12 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 			}
 			_ = json.NewEncoder(response).Encode(map[string]string{"uri": server.URL})
 		case "/provision":
+			var input map[string]string
+			require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
+			w3id, deriveErr := deploymentEName(input["registryEntropy"], input["namespace"])
+			require.NoError(t, deriveErr)
 			provisioned = true
-			_ = json.NewEncoder(response).Encode(map[string]any{"success": true, "w3id": "@11111111-1111-5111-8111-111111111111"})
+			_ = json.NewEncoder(response).Encode(map[string]any{"success": true, "w3id": w3id})
 		case "/graphql":
 			var input map[string]any
 			require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
@@ -260,7 +263,9 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, DeploymentAwaitingSignature, job.Status)
-	assert.Equal(t, "@11111111-1111-5111-8111-111111111111", job.DeploymentEName)
+	expectedDeploymentEName, err := deploymentEName(entropyToken, job.Namespace)
+	require.NoError(t, err)
+	assert.Equal(t, expectedDeploymentEName, job.DeploymentEName)
 	assert.Equal(t, "@c4cc7cd1-8670-5a37-8a7b-8ebc0b6022d8", job.VersionEName)
 	assert.Contains(t, job.BundlePayload, w3ds.DeploymentAttestationType)
 

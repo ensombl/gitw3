@@ -267,6 +267,28 @@ type preparedIdentity struct {
 	EName           string
 }
 
+func deploymentEName(registryEntropy, namespace string) (string, error) {
+	parts := strings.Split(registryEntropy, ".")
+	if len(parts) != 3 {
+		return "", errors.New("registry returned an invalid entropy token")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", errors.New("registry returned an invalid entropy token payload")
+	}
+	var claims struct {
+		Entropy string `json:"entropy"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil || strings.TrimSpace(claims.Entropy) == "" {
+		return "", errors.New("registry entropy token has no entropy")
+	}
+	namespaceUUID, err := uuid.Parse(namespace)
+	if err != nil {
+		return "", errors.New("deployment namespace is not a valid UUID")
+	}
+	return "@" + uuid.NewSHA1(namespaceUUID, []byte(claims.Entropy)).String(), nil
+}
+
 func (c *w3dsClient) prepareIdentity(ctx context.Context) (*preparedIdentity, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.config.RegistryURL+"/entropy", nil)
 	if err != nil {
@@ -287,18 +309,10 @@ func (c *w3dsClient) prepareIdentity(ctx context.Context) (*preparedIdentity, er
 		return nil, errors.New("registry returned invalid entropy")
 	}
 	prepared := &preparedIdentity{RegistryEntropy: entropy.Token, Namespace: uuid.NewString()}
-	payload := map[string]string{"registryEntropy": prepared.RegistryEntropy, "namespace": prepared.Namespace}
-	var preview struct {
-		Success bool   `json:"success"`
-		W3ID    string `json:"w3id"`
+	prepared.EName, err = deploymentEName(prepared.RegistryEntropy, prepared.Namespace)
+	if err != nil {
+		return nil, err
 	}
-	if err := c.postJSON(ctx, c.config.ProvisionerURL+"/provision/preview", payload, &preview, nil); err != nil {
-		return nil, fmt.Errorf("preview deployment eVault: %w", err)
-	}
-	if !preview.Success || strings.TrimSpace(preview.W3ID) == "" {
-		return nil, errors.New("provisioner returned no deployment eName preview")
-	}
-	prepared.EName = strings.TrimSpace(preview.W3ID)
 	return prepared, nil
 }
 
