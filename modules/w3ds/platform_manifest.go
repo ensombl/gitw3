@@ -207,11 +207,16 @@ func (m *PlatformManifest) Validate(allowLocalHTTP bool) error {
 	if m.SubmissionVersion != "" && !semverPattern.MatchString(m.SubmissionVersion) {
 		return errors.New("submissionVersion must be a semantic version")
 	}
-	if err := m.validateSubmissionProof(); err != nil {
-		return err
-	}
-	if err := m.validateSubmissionHistory(); err != nil {
-		return err
+	// Legacy profiles can predate GitW3's durable PPA proof shape. Their exact
+	// raw profile remains in the signed migration block and is retained during
+	// cutover. Any proof created by GitW3 is still validated normally.
+	if m.Migration == nil || m.SubmissionProof != nil {
+		if err := m.validateSubmissionProof(); err != nil {
+			return err
+		}
+		if err := m.validateSubmissionHistory(); err != nil {
+			return err
+		}
 	}
 	if err := validateManifestDomains(m.Domains, m.Category); err != nil {
 		return err

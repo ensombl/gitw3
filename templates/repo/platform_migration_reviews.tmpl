@@ -1,0 +1,21 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content">
+	<div class="ui container">
+		<h1>{{ctx.Locale.Tr "platform.port.review_title"}}</h1>
+		<p>{{ctx.Locale.Tr "platform.port.review_help"}}</p>
+		{{if .MigrationReviews}}
+			<div class="ui divided items">
+				{{range .MigrationReviews}}
+					<div class="item"><div class="content">
+						<div class="header">{{.EName}}</div>
+						<div class="description"><p>{{.RepositoryName}} · {{.ProfileEnvelopeID}}</p></div>
+						<form method="post" action="{{AppSubUrl}}/repo/create/port/reviews/{{PathEscape .ID}}/approve">{{$.CsrfTokenHtml}}<button class="ui primary button" type="submit">{{ctx.Locale.Tr "platform.port.review_approve"}}</button></form>
+					</div></div>
+				{{end}}
+			</div>
+		{{else}}
+			<div class="ui info message">{{ctx.Locale.Tr "platform.port.review_empty"}}</div>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}

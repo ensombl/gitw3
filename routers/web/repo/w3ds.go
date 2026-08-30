@@ -691,7 +691,8 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 	if ontologyErr != nil {
 		log.Warn("Load W3DS domain ontology for repository %d: %v", ctx.Repo.Repository.ID, ontologyErr)
 	}
-	canEdit := ctx.Repo.CanWrite(unit.TypeCode) && !ctx.Repo.Repository.IsArchived
+	migrationStaged := manifest != nil && manifest.Migration != nil && manifest.Migration.Status != "active"
+	canEdit := ctx.Repo.CanWrite(unit.TypeCode) && !ctx.Repo.Repository.IsArchived && !migrationStaged
 	ctx.Data["CanEditW3DS"] = canEdit
 	canAdmin := ctx.Repo.IsAdmin() && !ctx.Repo.Repository.IsArchived
 	walletEName, walletErr := w3dsENameForUser(ctx, ctx.Doer)
@@ -699,6 +700,7 @@ func prepareW3DSPage(ctx *context.Context, manifest *w3ds.PlatformManifest, form
 		log.Warn("Resolve W3DS wallet identity for user on repository %d: %v", ctx.Repo.Repository.ID, walletErr)
 	}
 	ctx.Data["CanAdminW3DS"] = canAdmin
+	ctx.Data["PlatformMigrationStaged"] = migrationStaged
 	ctx.Data["PPAWalletEName"] = walletEName
 	ctx.Data["PPAWalletReady"] = canAdmin && walletEName != ""
 	ctx.Data["PlatformLastCommitID"] = ctx.Repo.CommitID
@@ -834,6 +836,13 @@ func newW3DSPublicationView(ctx *context.Context, status *w3ds.PublicationStatus
 		view.Tone = "info"
 		view.Title = ctx.Locale.TrString("platform.status.awaiting_deployment")
 		view.Message = ctx.Locale.TrString("platform.status.awaiting_deployment_help")
+	case "awaiting_cutover":
+		view.Tone = "warning"
+		view.Title = ctx.Locale.TrString("platform.status.awaiting_cutover")
+		view.Message = ctx.Locale.TrString("platform.status.awaiting_cutover_help")
+	case "activating":
+		view.Title = ctx.Locale.TrString("platform.status.activating_migration")
+		view.Message = ctx.Locale.TrString("platform.status.pending_help")
 	case "unavailable":
 		view.Title = ctx.Locale.TrString("platform.status.unavailable")
 		view.Message = ctx.Locale.TrString("platform.status.unavailable_help")

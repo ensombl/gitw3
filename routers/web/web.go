@@ -710,6 +710,7 @@ func registerRoutes(m *web.Route) {
 
 	m.Any("/user/events", routing.MarkLongPolling, events.Events)
 	m.Methods("POST, OPTIONS", "/w3ds/ppa/callback", ignoreCSRF, repo.W3DSPPACallback)
+	m.Methods("POST, OPTIONS", "/w3ds/migrations/callback", ignoreCSRF, repo.PlatformMigrationCallback)
 	m.Methods("POST, OPTIONS", "/w3ds/deploy/callback", ignoreCSRF, repo.DeploymentCallback)
 
 	m.Group("/login/oauth", func() {
@@ -1180,6 +1181,10 @@ func registerRoutes(m *web.Route) {
 		m.Get("/create/new", repo.CreatePlatform)
 		m.Post("/create/new", web.Bind(forms.CreateRepoForm{}), repo.CreatePlatformPost)
 		m.Get("/create/port", repo.PortPlatform)
+		m.Post("/create/port", repo.PortPlatformStart)
+		m.Get("/create/port/reviews", repo.PlatformMigrationReviews)
+		m.Post("/create/port/reviews/{session}/approve", repo.ApprovePlatformMigration)
+		m.Get("/create/port/{session}", repo.PlatformMigrationStatus)
 		m.Get("/migrate", repo.Migrate)
 		m.Post("/migrate", web.Bind(forms.MigrateRepoForm{}), repo.MigratePost)
 		if !setting.Repository.DisableForks {
@@ -1691,6 +1696,7 @@ func registerRoutes(m *web.Route) {
 			m.Get("/welcome", reqSignIn, repo.W3DSWelcome)
 			m.Get("/welcome/status", reqSignIn, repo.W3DSWelcomeStatus)
 			m.Post("/visibility", context.RepoMustNotBeArchived(), reqSignIn, reqRepoCodeWriter, web.Bind(forms.PlatformManifestActionForm{}), repo.W3DSToggleVisibility)
+			m.Post("/migration/activate", context.RepoMustNotBeArchived(), reqSignIn, reqRepoAdmin, repo.ActivatePlatformMigration)
 			m.Post("/ppa", context.RepoMustNotBeArchived(), reqSignIn, reqRepoAdmin, repo.W3DSCreatePPASigningSession)
 			m.Get("/ppa/{session}", reqSignIn, reqRepoAdmin, repo.W3DSPPASigningStatus)
 			m.Get("/status", repo.W3DSStatus)

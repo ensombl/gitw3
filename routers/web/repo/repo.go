@@ -209,12 +209,6 @@ func CreateChoice(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplCreateChoice)
 }
 
-// PortPlatform explains the reserved meaning of porting until replacement is implemented.
-func PortPlatform(ctx *context.Context) {
-	ctx.Data["Title"] = ctx.Tr("platform.port.title")
-	ctx.HTML(http.StatusOK, tplPortPlatform)
-}
-
 func preparePlatformCreatePage(ctx *context.Context, uid int64, selectedDomains []string) (*user_model.User, *w3ds.DomainCatalog, error) {
 	ctx.Data["Title"] = ctx.Tr("platform.create.title")
 	ctx.Data["Gitignores"] = repo_module.Gitignores

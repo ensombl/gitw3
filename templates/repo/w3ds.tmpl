@@ -32,6 +32,28 @@
 				{{end}}
 			</div>
 
+			{{if .PlatformMigrationStaged}}
+				<section class="w3ds-section" aria-labelledby="w3ds-migration-heading">
+					<h2 id="w3ds-migration-heading">{{ctx.Locale.Tr "platform.port.activation_title"}}</h2>
+					<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.port.activation_help" $manifest.EName}}</p>
+					<div class="ui ordered steps fluid">
+						<div class="completed step"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.port.activation_stage_signed"}}</div></div></div>
+						<div class="step"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.port.activation_push"}}</div><div class="description">{{ctx.Locale.Tr "platform.port.activation_push_help"}}</div></div></div>
+						<div class="step"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.port.activation_release"}}</div><div class="description">{{ctx.Locale.Tr "platform.port.activation_release_help" $manifest.Version}}</div></div></div>
+						<div class="step"><div class="content"><div class="title">{{ctx.Locale.Tr "platform.port.activation_cutover"}}</div></div></div>
+					</div>
+					{{if .CanAdminW3DS}}
+						<form class="ui form tw-mt-4" method="post" action="{{.RepoLink}}/w3ds/migration/activate">
+							{{.CsrfTokenHtml}}
+							<div class="required field"><label>{{ctx.Locale.Tr "platform.port.token"}}</label><input type="password" name="token" required autocomplete="off" maxlength="32768"><span class="help">{{ctx.Locale.Tr "platform.port.activation_token_help"}}</span></div>
+							<button class="ui negative button" type="submit">{{ctx.Locale.Tr "platform.port.activation_button"}}</button>
+						</form>
+					{{else}}
+						<div class="ui info message">{{ctx.Locale.Tr "platform.port.activation_admin"}}</div>
+					{{end}}
+				</section>
+			{{end}}
+
 			<section class="w3ds-section" aria-labelledby="w3ds-live-heading">
 				<h2 id="w3ds-live-heading">{{ctx.Locale.Tr "platform.repo.live_status"}}</h2>
 				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.repo.live_help"}}</p>
