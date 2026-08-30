@@ -137,8 +137,16 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		json.NewEncoder(response).Encode(map[string]string{"uri": f.server.URL})
 	case request.Method == http.MethodPost && request.URL.Path == "/platforms/certification":
 		json.NewEncoder(response).Encode(map[string]any{"token": "platform-token", "expiresAt": time.Now().Add(time.Hour).UnixMilli()})
+	case request.Method == http.MethodPost && request.URL.Path == "/platforms/migrations/inspect-token":
+		assert.Equal(t, "Bearer registry-secret", request.Header.Get("Authorization"))
+		json.NewEncoder(response).Encode(map[string]string{"fingerprint": tokenFingerprint("legacy-token")})
+	case request.Method == http.MethodPost && request.URL.Path == "/platforms/migrations/activate":
+		assert.Equal(t, "Bearer registry-secret", request.Header.Get("Authorization"))
+		json.NewEncoder(response).Encode(map[string]any{"token": "manager-token"})
+	case request.Method == http.MethodPost && request.URL.Path == "/platforms/management/token":
+		assert.Equal(t, "Bearer registry-secret", request.Header.Get("Authorization"))
+		json.NewEncoder(response).Encode(map[string]string{"token": "manager-token"})
 	case request.Method == http.MethodPost && request.URL.Path == "/graphql":
-		assert.Equal(t, "Bearer platform-token", request.Header.Get("Authorization"))
 		f.mu.Lock()
 		expectedEName := "@guided.w3id"
 		if f.manifest.EName != nil {
@@ -148,6 +156,26 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		assert.Equal(t, expectedEName, request.Header.Get("X-ENAME"))
 		var input map[string]any
 		require.NoError(t, json.NewDecoder(request.Body).Decode(&input))
+		if strings.Contains(input["query"].(string), "ExistingPlatformProfiles") {
+			assert.Equal(t, "Bearer legacy-token", request.Header.Get("Authorization"))
+			f.mu.Lock()
+			profile := append([]byte(nil), f.manifest.Migration.SourceProfile...)
+			f.mu.Unlock()
+			var parsed any
+			require.NoError(t, json.Unmarshal(profile, &parsed))
+			json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"metaEnvelopes": map[string]any{"edges": []any{
+				map[string]any{"node": map[string]any{"id": "existing-profile", "parsed": parsed}},
+			}}}})
+			return
+		}
+		f.mu.Lock()
+		migrated := f.manifest.Migration != nil && f.manifest.Migration.Status == "active"
+		f.mu.Unlock()
+		if migrated {
+			assert.Equal(t, "Bearer manager-token", request.Header.Get("Authorization"))
+		} else {
+			assert.Equal(t, "Bearer platform-token", request.Header.Get("Authorization"))
+		}
 		if strings.Contains(input["query"].(string), "PlatformAccreditations") {
 			f.mu.Lock()
 			edges := make([]map[string]any, 0, len(f.accreditations))
@@ -247,7 +275,7 @@ func addMigrationProof(t *testing.T, manifest *w3ds.PlatformManifest, status str
 	require.NoError(t, err)
 	manifest.Migration = &w3ds.PlatformMigration{
 		Status: status, ProfileEnvelopeID: "existing-profile", ProfileDigest: hex.EncodeToString(digest[:]),
-		LegacyTokenFingerprint: strings.Repeat("b", 64), SourceProfile: profile, SourceAuthorENames: []string{"@alice.w3id"},
+		LegacyTokenFingerprint: tokenFingerprint("legacy-token"), SourceProfile: profile, SourceAuthorENames: []string{"@alice.w3id"},
 		Proof: &w3ds.PlatformMigrationProof{Statement: statement, Payload: payload, Signature: "signature", PublicKey: "key", KeyBindingCertificate: "certificate", VerifiedAt: time.Now().UTC().Format(time.RFC3339)},
 	}
 }
@@ -299,6 +327,28 @@ func TestReconcileStagesMigrationWithoutPublishing(t *testing.T) {
 	assert.Equal(t, "@existing-platform", staged.EName)
 	assert.Equal(t, "existing-profile", staged.EnvelopeID)
 	assert.Empty(t, fake.published)
+}
+
+func TestActivateMigrationReusesOriginalProfileEnvelope(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	addMigrationProof(t, fake.manifest, "staged")
+	store := openTestStore(t)
+	require.NoError(t, store.Schedule(42, "alice/platform", "main", "commit-1", false))
+	job, _ := store.Get(42)
+	config := testConfig(fake.server.URL, "")
+	config.RegistrySharedSecret = "registry-secret"
+	processor := NewProcessor(config, store, fake.server.Client())
+	require.NoError(t, processor.Reconcile(context.Background(), job))
+
+	activated, err := processor.ActivatePlatformMigration(context.Background(), ActivatePlatformMigrationRequest{
+		RepositoryID: 42, EName: "@existing-platform", ProfileEnvelopeID: "existing-profile",
+		ProfileDigest: fake.manifest.Migration.ProfileDigest, Token: "legacy-token",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, StatusPublished, activated.Status)
+	assert.Equal(t, "existing-profile", activated.EnvelopeID)
+	require.Len(t, fake.published, 1)
+	assert.Equal(t, "@existing-platform", fake.published[0]["ename"])
 }
 
 func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
