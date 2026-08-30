@@ -1688,6 +1688,8 @@ func registerRoutes(m *web.Route) {
 
 		m.Group("/w3ds", func() {
 			m.Combo("").Get(repo.W3DS).Post(context.RepoMustNotBeArchived(), reqSignIn, reqRepoCodeWriter, web.Bind(forms.UpdatePlatformForm{}), repo.W3DSUpdate)
+			m.Get("/welcome", reqSignIn, repo.W3DSWelcome)
+			m.Get("/welcome/status", reqSignIn, repo.W3DSWelcomeStatus)
 			m.Post("/visibility", context.RepoMustNotBeArchived(), reqSignIn, reqRepoCodeWriter, web.Bind(forms.PlatformManifestActionForm{}), repo.W3DSToggleVisibility)
 			m.Post("/ppa", context.RepoMustNotBeArchived(), reqSignIn, reqRepoAdmin, repo.W3DSCreatePPASigningSession)
 			m.Get("/ppa/{session}", reqSignIn, reqRepoAdmin, repo.W3DSPPASigningStatus)

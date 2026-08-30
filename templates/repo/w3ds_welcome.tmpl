@@ -1,0 +1,72 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository">
+	{{template "repo/header" .}}
+	{{$welcome := .PlatformWelcome}}
+	<div id="w3ds-welcome-page" class="ui container" data-w3ds-welcome-status-url="{{.RepoLink}}/w3ds/welcome/status" data-w3ds-welcome-poll-interval="2500" data-w3ds-welcome-empty-title="{{ctx.Locale.Tr "platform.welcome.no_versions"}}" data-w3ds-welcome-empty-help="{{ctx.Locale.Tr "platform.welcome.no_versions_help"}}" data-copy-label="{{ctx.Locale.Tr "copy"}}">
+		{{template "base/alert" .}}
+		<section class="w3ds-welcome-hero">
+			<div class="w3ds-welcome-check" aria-hidden="true">{{svg "octicon-check" 32}}</div>
+			<p class="w3ds-welcome-eyebrow">{{ctx.Locale.Tr "platform.welcome.complete"}}</p>
+			<h1>{{ctx.Locale.Tr "platform.welcome.heading"}}</h1>
+			<p class="w3ds-welcome-lead">{{ctx.Locale.Tr "platform.welcome.intro"}}</p>
+		</section>
+
+		<section class="w3ds-welcome-identity" aria-labelledby="w3ds-welcome-identity-heading">
+			<div class="w3ds-welcome-section-heading">
+				<div>
+					<p class="w3ds-welcome-kicker">{{ctx.Locale.Tr "platform.welcome.platform_label"}}</p>
+					<h2 id="w3ds-welcome-identity-heading">{{ctx.Locale.Tr "platform.welcome.platform_heading"}}</h2>
+				</div>
+				<span class="ui green label{{if not $welcome.Ready}} tw-hidden{{end}}" data-w3ds-welcome-permanent>{{ctx.Locale.Tr "platform.welcome.permanent"}}</span>
+			</div>
+			<div class="ui info message{{if $welcome.Ready}} tw-hidden{{end}}" data-w3ds-welcome-pending>
+				<div class="header">{{ctx.Locale.Tr "platform.welcome.reserving_title"}}</div>
+				<p data-w3ds-welcome-message>{{$welcome.Message}}</p>
+			</div>
+			<div class="w3ds-welcome-ename{{if not $welcome.Ready}} tw-hidden{{end}}" data-w3ds-welcome-identity>
+				<code data-w3ds-welcome-ename>{{$welcome.EName}}</code>
+				<button type="button" class="ui button" data-w3ds-welcome-copy data-clipboard-text="{{$welcome.EName}}">{{svg "octicon-copy"}} {{ctx.Locale.Tr "copy"}}</button>
+			</div>
+			<p class="w3ds-welcome-explanation">{{ctx.Locale.Tr "platform.welcome.permanent_help"}}</p>
+			<div class="w3ds-welcome-vault-note">{{svg "octicon-lock"}} <span>{{ctx.Locale.Tr "platform.welcome.platform_vault_help"}}</span></div>
+			{{if $welcome.LastError}}<div class="ui warning message" data-w3ds-welcome-error><code>{{$welcome.LastError}}</code></div>{{else}}<div class="ui warning message tw-hidden" data-w3ds-welcome-error><code></code></div>{{end}}
+		</section>
+
+		<section class="w3ds-welcome-versions" aria-labelledby="w3ds-welcome-versions-heading">
+			<div class="w3ds-welcome-section-heading">
+				<div>
+					<p class="w3ds-welcome-kicker">{{ctx.Locale.Tr "platform.welcome.versions_label"}}</p>
+					<h2 id="w3ds-welcome-versions-heading">{{ctx.Locale.Tr "platform.welcome.versions_heading"}}</h2>
+				</div>
+			</div>
+			<p>{{ctx.Locale.Tr "platform.welcome.versions_help"}}</p>
+			<div class="w3ds-welcome-version-list" data-w3ds-welcome-versions>
+				{{range $welcome.Versions}}
+					<article class="w3ds-welcome-version">
+						<div><a href="{{.URL}}"><strong>{{.Tag}}</strong></a><span>{{ctx.Locale.Tr "platform.welcome.version_number" .Version}}</span></div>
+						<div class="w3ds-welcome-version-ename"><code>{{.EName}}</code><button type="button" class="ui icon button" data-clipboard-text="{{.EName}}" aria-label="{{ctx.Locale.Tr "copy"}}">{{svg "octicon-copy"}}</button></div>
+					</article>
+				{{end}}
+			</div>
+			<div class="w3ds-welcome-empty{{if $welcome.Versions}} tw-hidden{{end}}" data-w3ds-welcome-empty>
+				{{svg "octicon-tag" 24}}
+				<div><strong>{{ctx.Locale.Tr "platform.welcome.no_versions"}}</strong><p>{{ctx.Locale.Tr "platform.welcome.no_versions_help"}}</p></div>
+			</div>
+			<div class="w3ds-welcome-record-note">{{svg "octicon-info"}} <span>{{ctx.Locale.Tr "platform.welcome.version_vault_help"}}</span></div>
+		</section>
+
+		{{if .W3DSUseAI}}
+			<section class="w3ds-welcome-ai">
+				<div><h2>{{ctx.Locale.Tr "platform.create.ai_install_title"}}</h2><p>{{ctx.Locale.Tr "platform.create.ai_install_help"}}</p></div>
+				<div class="ui action input fluid"><input readonly value="npx skills add MetaState-Prototype-Project/prototype@w3ds"><button type="button" class="ui button" data-clipboard-text="npx skills add MetaState-Prototype-Project/prototype@w3ds">{{ctx.Locale.Tr "copy"}}</button></div>
+			</section>
+		{{end}}
+
+		<div class="w3ds-welcome-actions">
+			<a class="ui primary button" href="{{.RepoLink}}">{{ctx.Locale.Tr "platform.welcome.open_repo"}}</a>
+			<a class="ui button" href="{{.RepoLink}}/w3ds">{{ctx.Locale.Tr "platform.welcome.open_w3ds"}}</a>
+			{{if .CanCreateRelease}}<a class="ui button" href="{{.RepoLink}}/releases/new">{{ctx.Locale.Tr "platform.repo.create_release"}}</a>{{end}}
+		</div>
+	</div>
+</div>
+{{template "base/footer" .}}
