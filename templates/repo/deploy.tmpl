@@ -152,7 +152,7 @@
 							<article class="deployment-card">
 								<div class="deployment-card-heading">
 									<div><h3>{{.Name}}</h3><span>{{.Environment}} · {{.ReleaseTag}}</span></div>
-									<span class="ui label {{if eq .Status "completed"}}green{{else if eq .Status "failed"}}red{{else if eq .Status "awaiting_signature"}}yellow{{else}}blue{{end}}">{{.Status}}</span>
+									<span class="ui label {{if eq .Status "completed"}}green{{else if eq .Status "failed"}}red{{else if or (eq .Status "awaiting_signature") (eq .Status "waiting_for_w3ds")}}yellow{{else}}blue{{end}}">{{if eq .Status "completed"}}{{ctx.Locale.Tr "platform.deploy.status_completed"}}{{else if eq .Status "failed"}}{{ctx.Locale.Tr "platform.deploy.status_failed"}}{{else if eq .Status "waiting_for_w3ds"}}{{ctx.Locale.Tr "platform.deploy.status_waiting_for_w3ds"}}{{else}}{{ctx.Locale.Tr "platform.deploy.status_publishing"}}{{end}}</span>
 								</div>
 								<dl class="deployment-identifiers">
 									<div><dt>{{ctx.Locale.Tr "platform.deploy.deployment_ename"}}</dt><dd><code>{{.DeploymentEName}}</code></dd></div>

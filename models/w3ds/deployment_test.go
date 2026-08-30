@@ -70,6 +70,6 @@ func TestDeploymentListOnlyIncludesSignedAttempts(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, deployments, 1)
 	assert.Equal(t, "signed-attempt", deployments[0].ID)
-	assert.Equal(t, w3ds_model.DeploymentPublishing, deployments[0].Status)
-	assert.Empty(t, deployments[0].Failure)
+	assert.Equal(t, w3ds_model.DeploymentFailed, deployments[0].Status)
+	assert.Equal(t, "temporary failure", deployments[0].Failure)
 }

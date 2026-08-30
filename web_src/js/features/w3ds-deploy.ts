@@ -186,7 +186,11 @@ export function initW3DSDeploy() {
         status.textContent = result.message || status.dataset.failed || 'Deployment failed.';
         return;
       }
-      status.textContent = result.status === 'publishing' ? 'Signature accepted. Publishing the deployment records…' : status.dataset.waiting || '';
+      if (result.status === 'waiting_for_w3ds') {
+        status.textContent = result.message || 'Signed and queued. Waiting for production W3DS deployment support…';
+      } else {
+        status.textContent = result.status === 'publishing' ? 'Signature accepted. Publishing the deployment records…' : status.dataset.waiting || '';
+      }
     } catch (error) {
       stopped = true;
       setBusy(false);

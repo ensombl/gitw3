@@ -37,6 +37,8 @@ import (
 
 const tplRepoDeploy base.TplName = "repo/deploy"
 
+const deploymentWaitingForW3DSMessage = "Signed and queued. Production W3DS is still rolling out deployment records; GitW3 will finish automatically when they are available."
+
 type deploymentReleaseView struct {
 	ID      int64
 	Tag     string
@@ -90,6 +92,9 @@ func Deploy(ctx *context.Context) {
 	if err != nil {
 		ctx.ServerError("ListDeploymentsForUser", err)
 		return
+	}
+	for _, deployment := range deployments {
+		deployment.Status, deployment.Failure = deploymentPublicationPresentation(deployment.Status, deployment.Failure)
 	}
 	ctx.Data["PlatformManifest"] = manifest
 	ctx.Data["PlatformEName"] = platformEName
@@ -336,7 +341,7 @@ func DeploymentStatus(ctx *context.Context) {
 		deploymentJSONError(ctx, http.StatusNotFound, "Deployment not found.")
 		return
 	}
-	if deployment.Status == w3ds_model.DeploymentPublishing || deployment.Status == w3ds_model.DeploymentFailed {
+	if deployment.Status == w3ds_model.DeploymentPublishing || deployment.Status == w3ds_model.DeploymentWaitingForW3DS || deployment.Status == w3ds_model.DeploymentFailed {
 		published, syncErr := callDeploymentPublisher(ctx, http.MethodGet, "/api/v1/deployments/"+url.PathEscape(deployment.ID), nil)
 		if syncErr == nil {
 			if published.Status == "awaiting_signature" && deployment.WalletSignature != "" {
@@ -347,21 +352,12 @@ func DeploymentStatus(ctx *context.Context) {
 			}
 		}
 		if syncErr == nil {
-			status := string(published.Status)
-			if status == string("completed") {
-				status = w3ds_model.DeploymentCompleted
-			} else {
-				status = w3ds_model.DeploymentPublishing
-			}
-			failure := published.LastError
-			if status == w3ds_model.DeploymentPublishing {
-				failure = ""
-			}
+			status, failure := deploymentPublicationPresentation(published.Status, published.LastError)
 			_ = w3ds_model.UpdateDeploymentPublication(ctx, deployment.ID, status, failure, published.DeploymentKeyDocumentID, published.SoftwareVersionDocumentID)
 			deployment.Status, deployment.Failure = status, failure
 			deployment.DeploymentKeyDocumentID = published.DeploymentKeyDocumentID
 			deployment.SoftwareVersionDocumentID = published.SoftwareVersionDocumentID
-		} else if deployment.WalletSignature != "" {
+		} else if deployment.WalletSignature != "" && deployment.Status != w3ds_model.DeploymentWaitingForW3DS {
 			_ = w3ds_model.UpdateDeploymentPublication(ctx, deployment.ID, w3ds_model.DeploymentPublishing, "", deployment.DeploymentKeyDocumentID, deployment.SoftwareVersionDocumentID)
 			deployment.Status, deployment.Failure = w3ds_model.DeploymentPublishing, ""
 		}
@@ -374,10 +370,31 @@ func DeploymentStatus(ctx *context.Context) {
 	}
 	if deployment.Status == w3ds_model.DeploymentCompleted {
 		response["redirect"] = ctx.Repo.Repository.Link() + "/deploy"
+	} else if deployment.Status == w3ds_model.DeploymentWaitingForW3DS {
+		response["message"] = deploymentWaitingForW3DSMessage
 	} else if deployment.Status == w3ds_model.DeploymentPublishing {
 		response["message"] = "Signature verified. W3DS publication is queued and will retry automatically."
 	}
 	ctx.JSON(http.StatusOK, response)
+}
+
+func deploymentPublicationPresentation(status, failure string) (string, string) {
+	if status == w3ds_model.DeploymentCompleted {
+		return w3ds_model.DeploymentCompleted, ""
+	}
+	if status == w3ds_model.DeploymentWaitingForW3DS || (status == w3ds_model.DeploymentFailed && deploymentInfrastructurePending(failure)) {
+		return w3ds_model.DeploymentWaitingForW3DS, deploymentWaitingForW3DSMessage
+	}
+	if status == w3ds_model.DeploymentFailed {
+		return w3ds_model.DeploymentFailed, failure
+	}
+	return w3ds_model.DeploymentPublishing, ""
+}
+
+func deploymentInfrastructurePending(failure string) bool {
+	failure = strings.ToLower(failure)
+	return (strings.Contains(failure, "/records/software-versions") && (strings.Contains(failure, "404") || strings.Contains(failure, "not found"))) ||
+		(strings.Contains(failure, "bindingdocumenttype") && strings.Contains(failure, "does not exist"))
 }
 
 func platformENameForManifest(ctx *context.Context, manifest *w3ds.PlatformManifest) string {

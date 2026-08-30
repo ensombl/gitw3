@@ -37,3 +37,21 @@ func TestDeploymentSigningURIIncludesMatchingSessionIDs(t *testing.T) {
 	assert.Equal(t, "@deployment", display["deploymentEName"])
 	assert.Equal(t, "@version", display["versionEName"])
 }
+
+func TestDeploymentPublicationPresentationWaitsForProductionW3DS(t *testing.T) {
+	tests := []string{
+		`register software version: POST https://registry.w3ds.metastate.foundation/records/software-versions returned 404: route not found`,
+		`Variable "$type" got invalid value "deployment_key"; Value "deployment_key" does not exist in "BindingDocumentType" enum.`,
+	}
+	for _, failure := range tests {
+		status, message := deploymentPublicationPresentation("failed", failure)
+		assert.Equal(t, "waiting_for_w3ds", status)
+		assert.Equal(t, deploymentWaitingForW3DSMessage, message)
+	}
+}
+
+func TestDeploymentPublicationPresentationKeepsRealFailure(t *testing.T) {
+	status, message := deploymentPublicationPresentation("failed", "wallet signature is invalid")
+	assert.Equal(t, "failed", status)
+	assert.Equal(t, "wallet signature is invalid", message)
+}
