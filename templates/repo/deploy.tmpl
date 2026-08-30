@@ -163,6 +163,38 @@
 									<div><dt>{{ctx.Locale.Tr "platform.deploy.version_ename"}}</dt><dd><code>{{.VersionEName}}</code></dd></div>
 								</dl>
 								{{if .Failure}}<div class="ui warning message">{{.Failure}}</div>{{end}}
+								{{if eq .Status "completed"}}
+									<details class="deployment-ai-helper">
+										<summary>{{svg "octicon-copilot" 18}} <span>{{ctx.Locale.Tr "platform.deploy.ai_title"}}</span></summary>
+										<div class="deployment-ai-helper-content">
+											<p>{{ctx.Locale.Tr "platform.deploy.ai_help"}}</p>
+											<textarea id="deployment-ai-prompt-{{.ID}}" readonly rows="18">You are helping me connect this repository's server deployment to W3DS. Inspect the repository and its existing deployment setup before changing anything.
+
+Verified deployment context:
+- Platform eName: {{.PlatformEName}}
+- Deployment eName: {{.DeploymentEName}}
+- Software-version eName: {{.VersionEName}}
+- Release: {{.ReleaseTag}} (normalized version {{.Version}})
+- Environment: {{.Environment}}
+- Expected public deployment key: {{.PublicKey}}
+
+The matching private key is in a local file named w3ds-deployment-key.json. Never ask me to paste its contents into chat. Never commit it, print it, log it, include it in an image, expose it through an API, or ship it in a browser/mobile bundle.
+
+Please:
+1. Identify the server runtime, current hosting/deployment method, and the smallest safe integration point. Show me the plan before editing files.
+2. Configure the private key only through the hosting provider's secret manager or a read-only server mount. Prefer an environment variable named W3DS_DEPLOYMENT_KEY_FILE that contains a file path, not key material.
+3. Add a server-only loader for the w3ds-deployment-key-v1 JSON format. Validate ECDSA P-256 / SHA-256, decode privateKeyPkcs8, derive its public key, and fail closed unless it matches the expected public key above.
+4. Create a narrow PP-Auth adapter boundary around that signer. The PP-Auth SDK is not published yet, so do not invent a package name, endpoint, token format, or protocol. Leave a clearly documented integration point for the real SDK.
+5. Ensure client code can never import the key loader. Add safe configuration examples containing placeholders only, ignore local key files, and add tests for missing, malformed, mismatched, and accidentally client-exposed keys.
+6. Update the server deployment documentation with exact secret-manager or mount steps for this project's host, file permissions, startup checks, rotation, and rollback.
+7. At the end, list the files changed and the exact commands I should run. Tell me where I must configure the secret, but never request or display the secret value.</textarea>
+											<div class="deployment-ai-helper-actions">
+												<button type="button" class="ui primary button" data-clipboard-target="#deployment-ai-prompt-{{.ID}}">{{svg "octicon-copy" 16}} {{ctx.Locale.Tr "platform.deploy.ai_copy"}}</button>
+												<span>{{svg "octicon-shield-lock" 16}} {{ctx.Locale.Tr "platform.deploy.ai_secret_warning"}}</span>
+											</div>
+										</div>
+									</details>
+								{{end}}
 							</article>
 						{{end}}
 					</div>
