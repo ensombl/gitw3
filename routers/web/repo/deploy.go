@@ -208,19 +208,35 @@ func CreateDeployment(ctx *context.Context) {
 		return
 	}
 	callbackURL := strings.TrimRight(setting.AppURL, "/") + "/w3ds/deploy/callback"
-	display, _ := json.Marshal(map[string]string{
-		"message":         "Deploy " + manifest.DisplayName + " " + version + " as " + form.DeploymentName,
-		"deploymentEName": prepared.DeploymentEName, "versionEName": prepared.VersionEName,
-	})
-	query := url.Values{}
-	query.Set("session", signingPayload)
-	query.Set("data", base64.StdEncoding.EncodeToString(display))
-	query.Set("redirect_uri", callbackURL)
+	walletURI, err := deploymentSigningURI(
+		callbackURL, signingPayload,
+		"Deploy "+manifest.DisplayName+" "+version+" as "+form.DeploymentName,
+		prepared.DeploymentEName, prepared.VersionEName,
+	)
+	if err != nil {
+		deploymentJSONError(ctx, http.StatusInternalServerError, "GitW3 could not create the wallet signing request.")
+		return
+	}
 	ctx.JSON(http.StatusCreated, map[string]any{
-		"id": id, "uri": "w3ds://sign?" + query.Encode(), "expiresAt": expiresAt.Format(time.RFC3339),
+		"id": id, "sessionId": signingPayload, "uri": walletURI, "expiresAt": expiresAt.Format(time.RFC3339),
 		"statusUrl":       ctx.Repo.Repository.Link() + "/deploy/" + id + "/status",
 		"deploymentEName": prepared.DeploymentEName, "versionEName": prepared.VersionEName,
 	})
+}
+
+func deploymentSigningURI(callbackURL, sessionID, message, deploymentEName, versionEName string) (string, error) {
+	display, err := json.Marshal(map[string]string{
+		"message": message, "sessionId": sessionID,
+		"deploymentEName": deploymentEName, "versionEName": versionEName,
+	})
+	if err != nil {
+		return "", err
+	}
+	query := url.Values{}
+	query.Set("session", sessionID)
+	query.Set("data", base64.StdEncoding.EncodeToString(display))
+	query.Set("redirect_uri", callbackURL)
+	return "w3ds://sign?" + query.Encode(), nil
 }
 
 // DeploymentCallback validates the deployer's wallet proof and queues publication.
