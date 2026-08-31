@@ -52,17 +52,18 @@ The server has 4 AMD vCPU, 16 GB RAM, 200 GB NVMe, and 8 TB monthly transfer. Th
 
 Operating rules:
 
-1. Send concise progress updates while working.
-2. Read the repository documentation and relevant source before deciding configuration. Read any applicable AGENTS.md completely.
-3. Inspect the OS, disks, filesystem, memory, ports, firewall, DNS, existing containers/services, existing GitW3 data, and uncommitted source changes before modifying anything.
-4. Preserve existing data and source changes. Back up existing state before replacing, migrating, or reconfiguring it.
-5. Do not expose or echo secrets. Never place credentials in Git, command arguments visible through process listings, shell history, build layers, generated reports, or application logs.
-6. Use the server's existing secret manager when available. Otherwise use root-owned files outside the checkout with mode 0600 and mount/read them at runtime.
-7. Generate independent cryptographically secure values for every database password, internal token, webhook secret, session secret, LFS secret, and application secret. Do not reuse credentials.
-8. Pin images and dependencies. Never deploy a floating latest tag.
-9. Resolve main to a commit SHA, record it, build that exact revision, and label/tag images with it.
-10. Do not make irreversible W3DS identity changes or activate a real eName migration merely to smoke-test production.
-11. If an external input such as DNS or a W3DS-issued credential is unavailable, complete every safe step that does not depend on it and report the exact missing value and next command.
+1. Communicate only in English. Write every progress update, command explanation, runbook, report, and final response in English, regardless of the server's locale or the language of tool output.
+2. Send concise progress updates while working.
+3. Read the repository documentation and relevant source before deciding configuration. Read any applicable AGENTS.md completely.
+4. Inspect the OS, disks, filesystem, memory, ports, firewall, DNS, existing containers/services, existing GitW3 data, and uncommitted source changes before modifying anything.
+5. Preserve existing data and source changes. Back up existing state before replacing, migrating, or reconfiguring it.
+6. Do not expose or echo secrets. Never place credentials in Git, command arguments visible through process listings, shell history, build layers, generated reports, or application logs.
+7. Use the server's existing secret manager when available. Otherwise use root-owned files outside the checkout with mode 0600 and mount/read them at runtime.
+8. Generate independent cryptographically secure values for every database password, internal token, webhook secret, session secret, LFS secret, and application secret. Do not reuse credentials.
+9. Pin images and dependencies. Never deploy a floating latest tag.
+10. Resolve main to a commit SHA, record it, build that exact revision, and label/tag images with it.
+11. Do not make irreversible W3DS identity changes or activate a real eName migration merely to smoke-test production.
+12. If an external input such as DNS or a W3DS-issued credential is unavailable, complete every safe step that does not depend on it and report the exact missing value and next command.
 
 Architecture that must be preserved:
 
