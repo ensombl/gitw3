@@ -3,24 +3,28 @@
 Everything in this directory belongs to us. Nothing here exists upstream, so nothing here can
 conflict when a Forgejo release is merged.
 
-The branding is **applied at build time** by [`apply.sh`](apply.sh) rather
-than committed into upstream files. See the header of that script for why — the short version is
-that the Docker image sets `GITEA_CUSTOM=/data/gitea` on a volume, so Forgejo's runtime `custom/`
-override mechanism never sees the repository's own `custom/` directory, and assets are embedded
-into the binary at build time anyway.
+Most branding is **applied at build time** by [`apply.sh`](apply.sh). See the header of that script
+for why — the short version is that the Docker image sets `GITEA_CUSTOM=/data/gitea` on a volume,
+so Forgejo's runtime `custom/` override mechanism never sees the repository's own `custom/`
+directory, and assets are embedded into the binary at build time anyway.
 
-**A plain `make build` produces an unbranded binary.** Run the script first:
+The purple GitW3 palette is intentionally source-controlled in
+`web_src/css/themes/theme-forgejo-light.css` and `theme-forgejo-dark.css`. This is the one branding
+change that a clean build must retain without an overlay. [`check-theme.sh`](check-theme.sh) checks
+the complete light and dark scales and rejects the old duplicate-`:root` cascade approach.
+
+A plain `make build` therefore keeps the GitW3 colours but does not apply the name, locale, and
+asset substitutions. Run the script first for a fully branded artefact:
 
 ```sh
 ./branding/apply.sh
 EXECUTABLE=gitw3 TAGS="bindata sqlite sqlite_unlock_notify" make build
-git checkout -- cmd/ docker/ modules/ options/ public/ routers/ services/ templates/ web_src/   # restore the tree afterwards
+git checkout -- cmd/ docker/ modules/ options/ public/ routers/ services/ templates/   # restore the tree afterwards
 ```
 
 The script rewrites tracked upstream files in place — around a hundred of them. **Never commit
-those changes**: an empty diff against Forgejo is the entire point, and committing the overlay
-would turn every future upstream merge into a conflict. The script prints the restore command
-when it finishes.
+those generated changes.** The two theme-source changes are the deliberate exception and should
+remain committed. The script prints the restore command when it finishes.
 
 CI does this automatically and asserts on the result, so an unbranded artefact fails the build
 rather than shipping quietly.
@@ -30,6 +34,7 @@ rather than shipping quietly.
 | Path | Purpose |
 | --- | --- |
 | `assets/` | Logo and icons, copied over `public/assets/img/` |
+| `check-theme.sh` | Verifies the source and compiled light/dark GitW3 palettes |
 | `locale-keep.txt` | Locale keys that must keep the Forgejo name, with the reason for each |
 
 ## Assets are placeholders

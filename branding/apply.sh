@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# Applies GitW3 branding onto the working tree, in place, immediately before `make build`.
+# Applies GitW3 branding that cannot live in stable source files onto the working tree, in place,
+# immediately before `make build`.
 #
 # Why a build-time overlay rather than committed changes to upstream files:
 #
@@ -10,10 +11,13 @@
 #   embedded into the binary at build time via the `bindata` tag, so overlaying them just before
 #   the build is the only approach that brands the artefact we actually ship.
 #
-#   Keeping the branding here instead of in tracked upstream files means our diff against Forgejo
-#   stays empty, and merging upstream security releases stays conflict-free.
+#   Most branding stays here instead of in tracked upstream files to keep the patch surface small.
+#   The purple palette is deliberately different: it lives directly in the two source-controlled
+#   Forgejo theme files so every clean build retains GitW3's colours even when this script is not
+#   run. `branding/check-theme.sh` guards that small, intentional upstream delta.
 #
-# Consequence: a plain `make build` produces an UNBRANDED binary. Run this first. CI does.
+# Consequence: a plain `make build` has the GitW3 theme but not the other branding. Run this first
+# for a fully branded binary. CI does.
 #
 # Idempotent — safe to run twice.
 #
@@ -28,7 +32,7 @@ cd "$ROOT"
 
 # Upstream paths this script writes to. Printed at the end so the restore command stays in
 # sync with what is actually modified.
-TOUCHED="cmd/ docker/ modules/ options/ public/ routers/ services/ templates/ web_src/"
+TOUCHED="cmd/ docker/ modules/ options/ public/ routers/ services/ templates/"
 
 log() { printf '  %s\n' "$*"; }
 die() { printf 'apply-branding: %s\n' "$*" >&2; exit 1; }
@@ -138,31 +142,6 @@ patch_literal cmd/serv.go \
 patch_literal modules/setting/ui.go \
     'DefaultTheme:        `forgejo-auto`,' \
     'DefaultTheme:        `forgejo-light`,'
-
-# ---------------------------------------------------------------------------
-# Colour scheme.
-#
-# Appended after upstream's own :root block rather than patched over it. Overriding by cascade
-# means an upstream colour tweak changes values we do not care about and never conflicts with
-# ours — patching 25 individual lines would break on any of them.
-# ---------------------------------------------------------------------------
-append_once() {
-    local target="$1" src="$2"
-    local marker="/* GitW3 palette"
-
-    [ -f "$target" ] || die "no such file: $target (upstream layout changed?)"
-    [ -f "$src" ] || die "missing branding file: $src"
-
-    if grep -qF -- "$marker" "$target"; then
-        log "already applied: $target"
-        return
-    fi
-    { printf '\n'; cat "$src"; } >> "$target"
-    log "palette appended: $target"
-}
-
-append_once web_src/css/themes/theme-forgejo-light.css "$BRANDING/theme-light.css"
-append_once web_src/css/themes/theme-forgejo-dark.css "$BRANDING/theme-dark.css"
 
 # ---------------------------------------------------------------------------
 # Templates. The brand name is passed as a template argument here, not stored in the locale
@@ -329,7 +308,7 @@ log "replaced $count image assets"
 
 echo "$BRAND branding applied."
 echo
-echo "This modified tracked upstream files in place. Do not commit them — the whole point is"
-echo "that our diff against Forgejo stays empty. To restore the tree once you are done:"
+echo "This modified tracked upstream files in place. Do not commit these generated rewrites;"
+echo "the intentional theme palette is already source-controlled. To restore the tree:"
 echo
 echo "    git checkout -- $TOUCHED"

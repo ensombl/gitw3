@@ -36,6 +36,9 @@ jobs:
       - name: Install frontend dependencies
         run: make deps-frontend
 
+      - name: Verify source-controlled GitW3 theme
+        run: ./branding/check-theme.sh
+
       # Must run before the build: options/ and public/ are embedded into the binary by the
       # `bindata` tag, so branding applied afterwards would not reach the artefact.
       - name: Apply GitW3 branding
@@ -54,3 +57,6 @@ jobs:
           # would still pass while silently shipping Forgejo's name.
           ./gitw3 --version | grep -q '^gitw3 version' \
             || { echo "::error::branding did not apply to the CLI name"; exit 1; }
+          ./branding/check-theme.sh \
+            public/assets/css/theme-forgejo-light.css \
+            public/assets/css/theme-forgejo-dark.css
