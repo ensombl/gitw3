@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"forgejo.org/models/unittest"
+	"forgejo.org/modules/setting"
 )
 
 func TestMain(m *testing.M) {
+	setting.IsInTesting = true
 	unittest.MainTest(m)
 }

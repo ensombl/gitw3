@@ -63,7 +63,7 @@ func autoSignIn(ctx *context.Context) (bool, error) {
 		return false, nil
 	}
 
-	if !setting.W3DSIdentity.OnlyAuthentication {
+	if !setting.W3DSOnlyAuthenticationEnabled() {
 		u, _, _, err := user_model.VerifyUserAuthorizationToken(ctx, authCookie, auth.LongTermAuthorization)
 		if err != nil {
 			return false, fmt.Errorf("VerifyUserAuthorizationToken: %w", err)
@@ -100,7 +100,7 @@ func autoSignIn(ctx *context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("GetSourceByID: %w", err)
 	}
-	if !source.IsActive || !source.IsOAuth2() || (setting.W3DSIdentity.OnlyAuthentication && source.Name != w3dsAuthSourceName) {
+	if !source.IsActive || !source.IsOAuth2() || (setting.W3DSOnlyAuthenticationEnabled() && source.Name != w3dsAuthSourceName) {
 		return false, nil
 	}
 
@@ -175,7 +175,7 @@ func CheckAutoLogin(ctx *context.Context) bool {
 // SignIn render sign in page
 func SignIn(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("sign_in")
-	if setting.W3DSIdentity.OnlyAuthentication {
+	if setting.W3DSOnlyAuthenticationEnabled() {
 		if CheckAutoLogin(ctx) {
 			return
 		}
@@ -221,7 +221,7 @@ func SignIn(ctx *context.Context) {
 // SignInPost response for sign in request
 func SignInPost(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("sign_in")
-	if setting.W3DSIdentity.OnlyAuthentication {
+	if setting.W3DSOnlyAuthenticationEnabled() {
 		ctx.Error(http.StatusForbidden)
 		return
 	}
@@ -467,7 +467,7 @@ func registrationDisabled(ctx *context.Context) bool {
 
 // SignUp render the register page
 func SignUp(ctx *context.Context) {
-	if setting.W3DSIdentity.OnlyAuthentication {
+	if setting.W3DSOnlyAuthenticationEnabled() {
 		redirectToW3DSSignIn(ctx)
 		return
 	}
@@ -498,7 +498,7 @@ func SignUp(ctx *context.Context) {
 
 // SignUpPost response for sign up information submission
 func SignUpPost(ctx *context.Context) {
-	if setting.W3DSIdentity.OnlyAuthentication {
+	if setting.W3DSOnlyAuthenticationEnabled() {
 		ctx.Error(http.StatusForbidden)
 		return
 	}

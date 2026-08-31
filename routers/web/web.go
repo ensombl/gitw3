@@ -106,7 +106,7 @@ func optionsCorsHandler() func(next http.Handler) http.Handler {
 // earlier authentication success would prevent later authentication methods from being attempted.
 func buildAuthGroup() *auth_method.Group {
 	group := auth_method.NewGroup()
-	if setting.Service.EnableReverseProxyAuth && !setting.W3DSIdentity.OnlyAuthentication {
+	if setting.Service.EnableReverseProxyAuth && !setting.W3DSOnlyAuthenticationEnabled() {
 		// reverseproxy should before Session, otherwise the header will be ignored if user has login
 		group.Add(&auth_method.ReverseProxy{
 			CreateSession: true,

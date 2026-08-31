@@ -13,12 +13,19 @@ var W3DSIdentity = struct {
 	AwarenessAPIKey       string
 	AvatarAllowedHostList string
 	Timeout               time.Duration
-	OnlyAuthentication    bool
 }{
 	AwarenessURL:          productionAwarenessURL,
 	AvatarAllowedHostList: "external",
 	Timeout:               5 * time.Second,
-	OnlyAuthentication:    true,
+}
+
+// W3DSAllowAlternativeAuthenticationForTests keeps Forgejo's upstream login
+// flows available to the test suite. Real GitW3 processes always enforce W3DS
+// as the sole interactive web authentication method.
+var W3DSAllowAlternativeAuthenticationForTests bool
+
+func W3DSOnlyAuthenticationEnabled() bool {
+	return !IsInTesting || !W3DSAllowAlternativeAuthenticationForTests
 }
 
 func loadW3DSIdentityFrom(rootCfg ConfigProvider) {
@@ -27,5 +34,4 @@ func loadW3DSIdentityFrom(rootCfg ConfigProvider) {
 	W3DSIdentity.AwarenessAPIKey = section.Key("AWARENESS_API_KEY").MustString("")
 	W3DSIdentity.AvatarAllowedHostList = section.Key("AVATAR_ALLOWED_HOST_LIST").MustString("external")
 	W3DSIdentity.Timeout = section.Key("TIMEOUT").MustDuration(5 * time.Second)
-	W3DSIdentity.OnlyAuthentication = section.Key("ONLY_AUTHENTICATION").MustBool(true)
 }

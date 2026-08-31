@@ -129,7 +129,7 @@ func TestEnrichW3DSUserFromAAASFailurePreservesOIDCProfile(t *testing.T) {
 }
 
 func TestW3DSOnlyAuthenticationRejectsOtherOAuthProviders(t *testing.T) {
-	defer test.MockVariableValue(&setting.W3DSIdentity.OnlyAuthentication, true)()
+	defer test.MockVariableValue(&setting.W3DSAllowAlternativeAuthenticationForTests, false)()
 
 	ctx, resp := contexttest.MockContext(t, "/user/oauth2/GitHub")
 	ctx.SetParams(":provider", "GitHub")
