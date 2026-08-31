@@ -146,6 +146,7 @@ Set and validate all required values documented by this repository:
 - PLATFORM_SYNC_INTERNAL_TOKEN
 - PLATFORM_SYNC_REGISTRY_URL
 - PLATFORM_SYNC_REGISTRY_SHARED_SECRET
+- PLATFORM_SYNC_PLATFORM_TOKEN (optional pre-issued token; disables the legacy runtime mint request)
 - PLATFORM_SYNC_PROVISIONER_URL
 - PLATFORM_SYNC_VERIFICATION_ID
 - PLATFORM_SYNC_PUBLISHER_URL
