@@ -3,8 +3,8 @@
   "platformName": "gitw3",
   "displayName": "GitW3",
   "description": "The self-hosted Git forge for the W3DS ecosystem, providing repositories, collaboration, releases, and platform publication.",
-  "version": "16.0.2",
-  "ename": null,
+  "version": "0.1.0",
+  "ename": "@49d127ea-88b7-5a5b-95f3-ce2414d40f5a",
   "url": "https://git.w3ds.metastate.foundation",
   "logoUrl": "https://git.w3ds.metastate.foundation/assets/img/logo.png",
   "domains": [
