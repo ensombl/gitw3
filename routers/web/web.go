@@ -1179,7 +1179,7 @@ func registerRoutes(m *web.Route) {
 		m.Get("/create", repo.CreateChoice)
 		m.Post("/create", web.Bind(forms.CreateRepoForm{}), repo.CreatePost)
 		m.Get("/create/new", repo.CreatePlatform)
-		m.Post("/create/new", web.Bind(forms.CreateRepoForm{}), repo.CreatePlatformPost)
+		m.Post("/create/new", web.Bind(forms.CreatePlatformForm{}), repo.CreatePlatformPost)
 		m.Get("/create/port", repo.PortPlatform)
 		m.Post("/create/port", web.Bind(forms.PortApplicationForm{}), repo.PortPlatformStart)
 		m.Get("/create/port/reviews", repo.PlatformMigrationReviews)

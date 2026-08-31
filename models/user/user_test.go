@@ -334,6 +334,20 @@ func TestDisplayName(t *testing.T) {
 	}
 }
 
+func TestDisplayUsername(t *testing.T) {
+	t.Parallel()
+
+	user := &user_model.User{ID: 1, Name: "person-1", FullName: "Person One"}
+	assert.Equal(t, "@person-1", user.DisplayUsername())
+	assert.Equal(t, "Person One", user.GetUIDisplayName())
+	assert.Equal(t, "Person One (person-1)", user.GetCompleteName())
+	user.FullName = ""
+	assert.Equal(t, "@person-1", user.GetUIDisplayName())
+
+	user.Name = "@already-prefixed"
+	assert.Equal(t, "@already-prefixed", user.DisplayUsername())
+}
+
 func TestCreateUserInvalidEmail(t *testing.T) {
 	user := &user_model.User{
 		Name:               "GiteaBot",

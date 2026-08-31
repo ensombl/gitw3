@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	asymkey_model "forgejo.org/models/asymkey"
 	"forgejo.org/models/auth"
@@ -24,13 +25,16 @@ import (
 	auth_module "forgejo.org/modules/auth"
 	"forgejo.org/modules/base"
 	"forgejo.org/modules/container"
+	"forgejo.org/modules/hostmatcher"
 	"forgejo.org/modules/json"
 	"forgejo.org/modules/jwtx"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/optional"
+	"forgejo.org/modules/proxy"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/timeutil"
 	"forgejo.org/modules/util"
+	w3ds_module "forgejo.org/modules/w3ds"
 	"forgejo.org/modules/web"
 	"forgejo.org/modules/web/middleware"
 	source_service "forgejo.org/services/auth/source"
@@ -1278,9 +1282,21 @@ func showLinkingLogin(ctx *context.Context, gothUser goth.User) {
 	ctx.Redirect(setting.AppSubURL + "/user/link_account")
 }
 
-func updateAvatarIfNeed(ctx *context.Context, url string, u *user_model.User) {
-	if setting.OAuth2Client.UpdateAvatar && len(url) > 0 {
-		resp, err := http.Get(url)
+func updateAvatarIfNeed(ctx *context.Context, avatarURL string, u *user_model.User, force bool) {
+	if (setting.OAuth2Client.UpdateAvatar || force) && len(avatarURL) > 0 {
+		client := &http.Client{Timeout: 15 * time.Second}
+		if force {
+			allowedHosts := hostmatcher.ParseHostMatchList("w3ds_identity.AVATAR_ALLOWED_HOST_LIST", setting.W3DSIdentity.AvatarAllowedHostList)
+			client.Transport = &http.Transport{
+				Proxy:       proxy.Proxy(),
+				DialContext: hostmatcher.NewDialContext("W3DS avatar", allowedHosts, nil, setting.Proxy.ProxyURLFixed),
+			}
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, avatarURL, nil)
+		if err != nil {
+			return
+		}
+		resp, err := client.Do(req)
 		if err == nil {
 			defer func() {
 				_ = resp.Body.Close()
@@ -1346,7 +1362,8 @@ func updateSSHPubIfNeed(
 }
 
 func handleOAuth2SignIn(ctx *context.Context, source *auth.Source, u *user_model.User, gothUser goth.User) {
-	updateAvatarIfNeed(ctx, gothUser.AvatarURL, u)
+	isW3DS := source.Name == w3dsAuthSourceName
+	updateAvatarIfNeed(ctx, gothUser.AvatarURL, u, isW3DS)
 	err := updateSSHPubIfNeed(ctx, source, &gothUser, u)
 	if err != nil {
 		ctx.ServerError("updateSSHPubIfNeed", err)
@@ -1403,6 +1420,9 @@ func handleOAuth2SignIn(ctx *context.Context, source *auth.Source, u *user_model
 
 		opts := &user_service.UpdateOptions{
 			SetLastLogin: true,
+		}
+		if isW3DS && strings.TrimSpace(gothUser.Name) != "" {
+			opts.FullName = optional.Some(strings.TrimSpace(gothUser.Name))
 		}
 		opts.IsAdmin, opts.IsRestricted = getUserAdminAndRestrictedFromGroupClaims(oauth2Source, &gothUser)
 		if err := user_service.UpdateUser(ctx, u, opts); err != nil {
@@ -1537,6 +1557,7 @@ func oAuth2UserLoginCallback(ctx *context.Context, authSource *auth.Source, requ
 	if err != nil {
 		return nil, goth.User{}, err
 	}
+	enrichW3DSUserFromAAAS(request.Context(), authSource, &gothUser)
 
 	if _, _, err := remote_service.MaybePromoteRemoteUser(ctx, authSource, gothUser.UserID, gothUser.Email); err != nil {
 		return nil, goth.User{}, err
@@ -1544,6 +1565,41 @@ func oAuth2UserLoginCallback(ctx *context.Context, authSource *auth.Source, requ
 
 	u, err := oAuth2GothUserToUser(request.Context(), authSource, gothUser)
 	return u, gothUser, err
+}
+
+func enrichW3DSUserFromAAAS(ctx go_context.Context, authSource *auth.Source, gothUser *goth.User) {
+	if authSource.Name != w3dsAuthSourceName || setting.W3DSIdentity.AwarenessAPIKey == "" {
+		return
+	}
+
+	client := &http.Client{Timeout: setting.W3DSIdentity.Timeout}
+	profile, err := w3ds_module.FetchPersonProfile(
+		ctx,
+		client,
+		setting.W3DSIdentity.AwarenessURL,
+		setting.W3DSIdentity.AwarenessAPIKey,
+		gothUser.UserID,
+	)
+	if err != nil {
+		log.Warn("Could not enrich W3DS user %q from AaaS: %v", gothUser.UserID, err)
+		return
+	}
+	if profile == nil {
+		return
+	}
+	if profile.DisplayName != "" {
+		displayName := []rune(profile.DisplayName)
+		if len(displayName) > 100 {
+			displayName = displayName[:100]
+		}
+		gothUser.Name = string(displayName)
+	}
+	if profile.AvatarURL != "" && len(profile.AvatarURL) <= 2048 {
+		avatarURL, err := url.Parse(profile.AvatarURL)
+		if err == nil && (avatarURL.Scheme == "http" || avatarURL.Scheme == "https") && avatarURL.Host != "" {
+			gothUser.AvatarURL = avatarURL.String()
+		}
+	}
 }
 
 func oAuth2FetchUser(ctx *context.Context, authSource *auth.Source, request *http.Request, response http.ResponseWriter) (goth.User, error) {

@@ -12,14 +12,14 @@
 						<label>{{ctx.Locale.Tr "repo.owner"}}</label>
 						<div class="ui selection owner dropdown">
 							<input type="hidden" id="uid" name="uid" value="{{.ContextUser.ID}}" required>
-							<span class="text truncated-item-container" title="{{.ContextUser.Name}}">
+							<span class="text truncated-item-container" title="{{.ContextUser.DisplayUsername}}">
 								{{ctx.AvatarUtils.Avatar .ContextUser 28 "mini"}}
 								<span class="truncated-item-name">{{.ContextUser.ShortName 40}}</span>
 							</span>
 							{{svg "octicon-triangle-down" 14 "dropdown icon"}}
 							<div class="menu">
 								{{if .CanForkToUser}}
-									<div class="item truncated-item-container" data-value="{{.SignedUser.ID}}" title="{{.SignedUser.Name}}">
+									<div class="item truncated-item-container" data-value="{{.SignedUser.ID}}" title="{{.SignedUser.DisplayUsername}}">
 										{{ctx.AvatarUtils.Avatar .SignedUser 28 "mini"}}
 										<span class="truncated-item-name">{{.SignedUser.ShortName 40}}</span>
 									</div>

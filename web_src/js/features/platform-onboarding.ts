@@ -147,14 +147,6 @@ export function initPlatformOnboarding() {
     showStep();
   });
 
-  const repoName = form.querySelector<HTMLInputElement>('#platform-repo-name')!;
-  const platformName = form.querySelector<HTMLInputElement>('#platform-name')!;
-  repoName.addEventListener('input', () => {
-    if (platformName.dataset.edited === 'true') return;
-    platformName.value = repoName.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  });
-  platformName.addEventListener('input', () => platformName.dataset.edited = 'true');
-
   const aiInstall = form.querySelector<HTMLElement>('[data-platform-ai-install]')!;
   for (const radio of form.querySelectorAll<HTMLInputElement>('input[name="use_ai_tooling"]')) {
     radio.addEventListener('change', () => setHidden(aiInstall, radio.checked && radio.value === 'false'));

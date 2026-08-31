@@ -19,9 +19,7 @@
 		<div class="author">
 			{{$userName := .Author.Name}}
 			{{if .User}}
-				{{if and .User.FullName DefaultShowFullName}}
-					{{$userName = .User.FullName}}
-				{{end}}
+				{{$userName = .User.GetUIDisplayName}}
 				{{ctx.AvatarUtils.Avatar .User 28}}<a class="muted author-name" href="{{.User.HomeLink}}">{{$userName}}</a>
 			{{else}}
 				{{ctx.AvatarUtils.AvatarByEmail .Author.Email .Author.Name 28}}

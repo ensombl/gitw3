@@ -257,9 +257,9 @@ func TestRenderUser(t *testing.T) {
 	ghost := user_model.NewGhostUser()
 
 	assert.Contains(t, RenderUser(db.DefaultContext, *user),
-		"<a href='/user2' rel='nofollow'><strong>user2</strong></a>")
+		"<a href='/user2' rel='nofollow'><strong>&lt; U&lt;se&gt;r Tw&lt;o &gt; &gt;&lt;</strong></a>")
 	assert.Contains(t, RenderUser(db.DefaultContext, *org),
-		"<a href='/org3' rel='nofollow'><strong>org3</strong></a>")
+		"<a href='/org3' rel='nofollow'><strong>&lt;&lt;&lt;&lt; &gt;&gt; &gt;&gt; &gt; &gt;&gt; &gt; &gt;&gt;&gt; &gt;&gt;</strong></a>")
 	assert.Contains(t, RenderUser(db.DefaultContext, *ghost),
 		"<strong>Ghost</strong>")
 
@@ -279,7 +279,7 @@ func TestRenderReviewRequest(t *testing.T) {
 	target2 := issues_model.RequestReviewTarget{Team: &org_model.Team{ID: 2, Name: "Team2", OrgID: 3}}
 	target3 := issues_model.RequestReviewTarget{Team: org_model.NewGhostTeam()}
 	assert.Contains(t, RenderReviewRequest(db.DefaultContext, []issues_model.RequestReviewTarget{target1, target2, target3}),
-		"<a href='/user1' rel='nofollow'><strong>user1</strong></a>, "+
+		"<a href='/user1' rel='nofollow'><strong>User &lt;One&gt;</strong></a>, "+
 			"<a href='/org/org3/teams/Team2' rel='nofollow'><strong>Team2</strong></a>, "+
 			"<strong>Ghost team</strong>")
 

@@ -32,7 +32,9 @@ Version 1 contains:
 }
 ```
 
-`platformName` and the provisioned `ename` are immutable. `ename` is initially `null`; the publisher
+The creation form derives the repository slug and initial `platformName` from `displayName`, adding a
+numeric suffix when the owner already has that repository name. `platformName` and the provisioned
+`ename` are immutable. `ename` is initially `null`; the publisher
 provisions the platform eVault keylessly and commits the assigned value with its bot account. Platform
 publication does not wait for a deployment and does not require an application key. Changes merged to
 the default branch update the same public User-profile MetaEnvelope. Deleting the manifest or repository

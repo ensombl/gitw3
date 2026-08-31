@@ -43,7 +43,7 @@
 		{{if (and .Repository.IsPrivate .Repository.Owner.Visibility.IsPublic)}}
 			<span class="ui yellow label warning">
 				{{svg "octicon-alert"}}
-				{{ctx.Locale.Tr "repo.packages.visibility_warning" .Repository.OwnerName}}
+				{{ctx.Locale.Tr "repo.packages.visibility_warning" (printf "@%s" .Repository.OwnerName)}}
 			</span>
 		{{end}}
 	</div>

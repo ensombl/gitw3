@@ -16,12 +16,12 @@
 					{{svg "gitea-lock" 16 "tw-mr-2"}}
 					<span class="ui text tw-mr-2">{{ctx.Locale.Tr "repo.commits.signed_by"}}</span>
 					{{ctx.AvatarUtils.Avatar $v.SigningUser 28 "tw-mr-2"}}
-					<a href="{{$v.SigningUser.HomeLink}}"><strong>{{$v.SigningUser.GetDisplayName}}</strong></a>
+					<a href="{{$v.SigningUser.HomeLink}}"><strong>{{$v.SigningUser.GetUIDisplayName}}</strong></a>
 				{{else}}
 					<span title="{{ctx.Locale.Tr "gpg.default_key"}}">{{svg "gitea-lock-cog" 16 "tw-mr-2"}}</span>
 					<span class="ui text tw-mr-2">{{ctx.Locale.Tr "repo.commits.signed_by"}}:</span>
 					{{ctx.AvatarUtils.AvatarByEmail $v.SigningEmail "" 28 "tw-mr-2"}}
-					<strong>{{$v.SigningUser.GetDisplayName}}</strong>
+					<strong>{{$v.SigningUser.GetUIDisplayName}}</strong>
 				{{end}}
 			{{else}}
 				{{svg "gitea-unlock" 16 "tw-mr-2"}}

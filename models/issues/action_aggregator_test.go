@@ -19,7 +19,7 @@ func TestRequestReviewTarget(t *testing.T) {
 
 	target := RequestReviewTarget{User: &user_model.User{ID: 1, Name: "user1"}}
 	assert.Equal(t, int64(1), target.ID())
-	assert.Equal(t, "user1", target.Name())
+	assert.Equal(t, "@user1", target.Name())
 	assert.Equal(t, "user", target.Type())
 	assert.Equal(t, "/user1", target.Link(db.DefaultContext))
 

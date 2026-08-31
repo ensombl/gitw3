@@ -5,10 +5,10 @@
 		<div class="invite-content">
 			<hgroup>
 				<div>{{ctx.AvatarUtils.Avatar .Organization 140}}</div>
-				<h2>{{ctx.Locale.Tr "org.teams.invite.title" .Team.Name .Organization.Name}}</h2>
+				<h2>{{ctx.Locale.Tr "org.teams.invite.title" .Team.Name .Organization.GetUIDisplayName}}</h2>
 			</hgroup>
 
-			<p>{{ctx.Locale.Tr "org.teams.invite.by" .Inviter.Name}}</p>
+			<p>{{ctx.Locale.Tr "org.teams.invite.by" .Inviter.GetUIDisplayName}}</p>
 
 			<form class="ui form" action="" method="post">
 				<button class="ui primary button">{{ctx.Locale.Tr "org.teams.join"}}</button>

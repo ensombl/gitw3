@@ -246,6 +246,16 @@ func (org *Organization) DisplayName() string {
 	return org.AsUser().DisplayName()
 }
 
+// DisplayUsername returns the organization's eName-style UI username.
+func (org *Organization) DisplayUsername() string {
+	return org.AsUser().DisplayUsername()
+}
+
+// GetUIDisplayName returns the organization's profile name or eName fallback.
+func (org *Organization) GetUIDisplayName() string {
+	return org.AsUser().GetUIDisplayName()
+}
+
 // CustomAvatarRelativePath returns user custom avatar relative path.
 func (org *Organization) CustomAvatarRelativePath() string {
 	return org.Avatar

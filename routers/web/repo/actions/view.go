@@ -288,10 +288,10 @@ func getViewResponse(ctx *app_context.Context, req *ViewRequest, runIndex, jobIn
 			base.ShortSha(run.CommitSHA))
 	} else if run.IsDispatchedRun() {
 		runDescription = ctx.Locale.TrString("actions.runs.workflow_dispatch_description", run.CommitLink(),
-			base.ShortSha(run.CommitSHA), run.TriggerUser.HomeLink(), html.EscapeString(run.TriggerUser.GetDisplayName()))
+			base.ShortSha(run.CommitSHA), run.TriggerUser.HomeLink(), html.EscapeString(run.TriggerUser.GetUIDisplayName()))
 	} else {
 		runDescription = ctx.Locale.TrString("actions.runs.on_push_description", run.CommitLink(),
-			base.ShortSha(run.CommitSHA), run.TriggerUser.HomeLink(), html.EscapeString(run.TriggerUser.GetDisplayName()))
+			base.ShortSha(run.CommitSHA), run.TriggerUser.HomeLink(), html.EscapeString(run.TriggerUser.GetUIDisplayName()))
 	}
 
 	resp.State.Run.Title = run.Title
@@ -335,7 +335,7 @@ func getViewResponse(ctx *app_context.Context, req *ViewRequest, runIndex, jobIn
 	resp.State.Run.CanCancel = !done && ctx.Repo.CanWrite(unit.TypeActions)
 
 	pusher := ViewUser{
-		DisplayName: run.TriggerUser.GetDisplayName(),
+		DisplayName: run.TriggerUser.GetUIDisplayName(),
 		Link:        run.TriggerUser.HomeLink(),
 	}
 	branch := ViewBranch{

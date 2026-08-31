@@ -364,7 +364,7 @@ func (t *RequestReviewTarget) ID() int64 {
 
 func (t *RequestReviewTarget) Name() string {
 	if t.User != nil {
-		return t.User.GetDisplayName()
+		return t.User.GetUIDisplayName()
 	}
 	return t.Team.Name
 }

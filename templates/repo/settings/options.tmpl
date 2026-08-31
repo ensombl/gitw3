@@ -482,7 +482,7 @@
 						<div class="flex-item-title">{{ctx.Locale.Tr "repo.settings.transfer.title"}}</div>
 						<div class="flex-item-body">
 							{{if .RepoTransfer}}
-								{{ctx.Locale.Tr "repo.settings.transfer_started" .RepoTransfer.Recipient.DisplayName}}
+								{{ctx.Locale.Tr "repo.settings.transfer_started" .RepoTransfer.Recipient.GetUIDisplayName}}
 							{{else}}
 								{{ctx.Locale.Tr "repo.settings.transfer_desc"}}
 							{{end}}

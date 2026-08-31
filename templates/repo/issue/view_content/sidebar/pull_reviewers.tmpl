@@ -5,9 +5,9 @@
 					<div class="item tw-flex tw-items-center tw-py-2">
 						<div class="tw-flex tw-items-center tw-flex-1">
 							{{if .User}}
-								<a class="muted sidebar-item-link" href="{{.User.HomeLink}}">{{ctx.AvatarUtils.Avatar .User 20 "tw-mr-2"}}{{.User.GetDisplayName}}</a>
+								<a class="muted sidebar-item-link" href="{{.User.HomeLink}}">{{ctx.AvatarUtils.Avatar .User 20 "tw-mr-2"}}{{.User.GetUIDisplayName}}</a>
 							{{else if .Team}}
-								<span class="text">{{svg "octicon-people" 20 "tw-mr-2"}}{{$.Issue.Repo.OwnerName}}/{{.Team.Name}}</span>
+								<span class="text">{{svg "octicon-people" 20 "tw-mr-2"}}@{{$.Issue.Repo.OwnerName}}/{{.Team.Name}}</span>
 							{{end}}
 						</div>
 						<div class="tw-flex tw-items-center tw-gap-2">

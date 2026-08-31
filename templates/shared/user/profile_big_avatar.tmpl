@@ -19,7 +19,7 @@
 	</div>
 	<div class="content tw-break-anywhere profile-avatar-name">
 		{{if .ContextUser.FullName}}<span class="header text center">{{.ContextUser.FullName}}</span>{{end}}
-		<span class="username">{{.ContextUser.Name}} {{if .ContextUser.GetPronouns .IsSigned}} · {{.ContextUser.GetPronouns .IsSigned}}{{end}}</span>
+		<span class="username">{{.ContextUser.DisplayUsername}} {{if .ContextUser.GetPronouns .IsSigned}} · {{.ContextUser.GetPronouns .IsSigned}}{{end}}</span>
 		<div class="tw-mt-2 tw-flex tw-items-center tw-gap-2 tw-justify-center">
 			<span>
 				<a class="muted" href="{{.ContextUser.HomeLink}}?tab=followers">{{svg "octicon-people" 18 "tw-mr-1"}}{{ctx.Locale.TrN .NumFollowers "user.followers_one" "user.followers_few" .NumFollowers}}</a> · <a class="muted" href="{{.ContextUser.HomeLink}}?tab=following">{{ctx.Locale.TrN .NumFollowing "user.following_one" "user.following_few" .NumFollowing}}</a>
@@ -100,7 +100,7 @@
 				{{range .Orgs}}
 					{{if (or .Visibility.IsPublic (and ($.SignedUser) (or .Visibility.IsLimited (and (.HasMemberWithUserID ctx $.SignedUserID) .Visibility.IsPrivate) ($.IsAdmin))))}}
 					<li>
-						<a href="{{.HomeLink}}" data-tooltip-content="{{.Name}}">
+						<a href="{{.HomeLink}}" data-tooltip-content="{{.DisplayUsername}}">
 							{{ctx.AvatarUtils.Avatar .}}
 						</a>
 					</li>

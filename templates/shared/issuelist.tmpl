@@ -36,7 +36,7 @@
 						{{if .Assignees}}
 						<div class="text grey">
 							{{range .Assignees}}
-								<a class="ui assignee tw-no-underline" href="{{.HomeLink}}" data-tooltip-content="{{.GetDisplayName}}">
+								<a class="ui assignee tw-no-underline" href="{{.HomeLink}}" data-tooltip-content="{{.GetUIDisplayName}}">
 									{{ctx.AvatarUtils.Avatar . 20}}
 								</a>
 							{{end}}
@@ -65,9 +65,9 @@
 						{{if .OriginalAuthor}}
 							{{ctx.Locale.Tr .GetLastEventLabelFake $timeStr .OriginalAuthor}}
 						{{else if gt .Poster.ID 0}}
-							{{ctx.Locale.Tr .GetLastEventLabel $timeStr .Poster.HomeLink .Poster.GetDisplayName}}
+							{{ctx.Locale.Tr .GetLastEventLabel $timeStr .Poster.HomeLink .Poster.GetUIDisplayName}}
 						{{else}}
-							{{ctx.Locale.Tr .GetLastEventLabelFake $timeStr .Poster.GetDisplayName}}
+							{{ctx.Locale.Tr .GetLastEventLabelFake $timeStr .Poster.GetUIDisplayName}}
 						{{end}}
 					</span>
 					{{if .IsPull}}

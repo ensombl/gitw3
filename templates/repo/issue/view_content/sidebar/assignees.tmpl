@@ -47,14 +47,14 @@
 			{{range .Issue.Assignees}}
 				<div class="item">
 					<a class="muted sidebar-item-link" href="{{$.RepoLink}}/{{if $.Issue.IsPull}}pulls{{else}}issues{{end}}?assignee={{.ID}}">
-						{{ctx.AvatarUtils.Avatar . 28 "tw-mr-2"}}{{.GetDisplayName}}
+						{{ctx.AvatarUtils.Avatar . 28 "tw-mr-2"}}{{.GetUIDisplayName}}
 					</a>
 				</div>
 			{{end}}
 		{{else}}
 			{{range .Assignees}}
 				<a class="item tw-p-1 muted tw-hidden" id="assignee_{{.ID}}" href="{{$.RepoLink}}/{{if $.Issue.IsPull}}pulls{{else}}issues{{end}}?assignee={{.ID}}">
-					{{ctx.AvatarUtils.Avatar . 28 "tw-mr-2"}}{{.GetDisplayName}}
+					{{ctx.AvatarUtils.Avatar . 28 "tw-mr-2"}}{{.GetUIDisplayName}}
 				</a>
 			{{end}}
 		{{end}}

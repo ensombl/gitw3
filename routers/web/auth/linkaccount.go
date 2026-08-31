@@ -13,6 +13,7 @@ import (
 	user_model "forgejo.org/models/user"
 	"forgejo.org/modules/base"
 	"forgejo.org/modules/log"
+	"forgejo.org/modules/optional"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/util"
 	"forgejo.org/modules/web"
@@ -20,6 +21,7 @@ import (
 	"forgejo.org/services/context"
 	"forgejo.org/services/externalaccount"
 	"forgejo.org/services/forms"
+	user_service "forgejo.org/services/user"
 
 	"github.com/markbates/goth"
 )
@@ -137,7 +139,14 @@ func LinkAccountPostSignIn(ctx *context.Context) {
 }
 
 func linkAccount(ctx *context.Context, u *user_model.User, gothUser goth.User, remember bool) {
-	updateAvatarIfNeed(ctx, gothUser.AvatarURL, u)
+	isW3DS := gothUser.Provider == w3dsAuthSourceName
+	updateAvatarIfNeed(ctx, gothUser.AvatarURL, u, isW3DS)
+	if isW3DS && strings.TrimSpace(gothUser.Name) != "" {
+		if err := user_service.UpdateUser(ctx, u, &user_service.UpdateOptions{FullName: optional.Some(strings.TrimSpace(gothUser.Name))}); err != nil {
+			ctx.ServerError("UpdateUser", err)
+			return
+		}
+	}
 
 	// If this user is enrolled in 2FA, we can't sign the user in just yet.
 	// Instead, redirect them to the 2FA authentication page.
@@ -261,6 +270,7 @@ func LinkAccountPostRegister(ctx *context.Context) {
 
 	u := &user_model.User{
 		Name:        form.UserName,
+		FullName:    gothUser.Name,
 		Email:       form.Email,
 		Passwd:      form.Password,
 		LoginType:   auth.OAuth2,

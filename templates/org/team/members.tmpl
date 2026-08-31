@@ -43,7 +43,7 @@
 										<form>
 											<button class="ui red button delete-button" data-modal-id="remove-team-member"
 												data-url="{{$.OrgLink}}/teams/{{$.Team.LowerName | PathEscape}}/action/remove" data-datauid="{{.ID}}"
-												data-name="{{.DisplayName}}"
+												data-name="{{.GetUIDisplayName}}"
 												data-data-team-name="{{$.Team.Name}}">{{ctx.Locale.Tr "org.members.remove"}}</button>
 										</form>
 									{{end}}

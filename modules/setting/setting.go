@@ -228,6 +228,7 @@ func LoadSettings() {
 	loadF3From(CfgProvider)
 	loadAuthorizedIntegrationFrom(CfgProvider)
 	loadPlatformManifestSyncFrom(CfgProvider)
+	loadW3DSIdentityFrom(CfgProvider)
 }
 
 // LoadSettingsForInstall initializes the settings for install
