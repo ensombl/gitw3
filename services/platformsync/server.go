@@ -303,7 +303,11 @@ func (s *Server) handleWebhook(response http.ResponseWriter, request *http.Reque
 		response.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if err := s.store.Schedule(payload.Repository.ID, payload.Repository.FullName, payload.Repository.DefaultBranch, payload.After, archive); err != nil {
+	// Hash the signed event payload itself so a redelivery still coalesces even
+	// if Forgejo assigns it a new delivery identifier.
+	digest := sha256.Sum256(append([]byte(event+":"), body...))
+	eventKey := hex.EncodeToString(digest[:])
+	if err := s.store.ScheduleEvent(payload.Repository.ID, payload.Repository.FullName, payload.Repository.DefaultBranch, payload.After, archive, eventKey); err != nil {
 		http.Error(response, "could not schedule publication", http.StatusInternalServerError)
 		return
 	}
@@ -337,6 +341,9 @@ func (s *Server) handleStatus(response http.ResponseWriter, request *http.Reques
 		"releaseTag":        job.ReleaseTag,
 		"releaseVersion":    job.ReleaseVersion,
 		"lastError":         job.LastError,
+		"lastErrorStage":    job.LastErrorStage,
+		"lastErrorCode":     job.LastErrorCode,
+		"lastErrorPath":     job.LastErrorPath,
 		"attempts":          job.Attempts,
 		"decision":          job.Decision,
 		"decisions":         job.Decisions,

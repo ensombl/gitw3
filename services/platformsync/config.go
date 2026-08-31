@@ -25,6 +25,7 @@ type Config struct {
 	InternalToken        string
 	RegistryURL          string
 	RegistrySharedSecret string
+	PlatformToken        string
 	ProvisionerURL       string
 	VerificationID       string
 	PublisherURL         string
@@ -44,6 +45,7 @@ func ConfigFromEnv() (Config, error) {
 		InternalToken:        os.Getenv("PLATFORM_SYNC_INTERNAL_TOKEN"),
 		RegistryURL:          strings.TrimRight(envOr("PLATFORM_SYNC_REGISTRY_URL", ProductionRegistryURL), "/"),
 		RegistrySharedSecret: os.Getenv("PLATFORM_SYNC_REGISTRY_SHARED_SECRET"),
+		PlatformToken:        os.Getenv("PLATFORM_SYNC_PLATFORM_TOKEN"),
 		ProvisionerURL:       strings.TrimRight(envOr("PLATFORM_SYNC_PROVISIONER_URL", ProductionProvisionerURL), "/"),
 		VerificationID:       os.Getenv("PLATFORM_SYNC_VERIFICATION_ID"),
 		PublisherURL:         os.Getenv("PLATFORM_SYNC_PUBLISHER_URL"),

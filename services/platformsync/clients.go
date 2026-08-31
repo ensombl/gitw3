@@ -161,94 +161,45 @@ func (c *forgejoClient) updateManifest(ctx context.Context, fullName, branch, sh
 	return nil
 }
 
-func (c *forgejoClient) authorENames(ctx context.Context, fullName, ref string) ([]string, error) {
+// authorENames returns the W3DS-linked repository maintainers. Forgejo's
+// assignees endpoint is backed by repository permissions and includes the
+// owner, direct collaborators, and organization team members with write
+// access. This deliberately avoids deriving ownership by walking Git history.
+func (c *forgejoClient) authorENames(ctx context.Context, fullName string) ([]string, error) {
 	owner, repo, ok := strings.Cut(fullName, "/")
 	if !ok || owner == "" || repo == "" {
 		return nil, errors.New("invalid repository full name")
 	}
 
-	const pageSize = 50
-	usernames := make(map[string]struct{})
-	for page := 1; ; page++ {
-		endpoint := fmt.Sprintf("%s/api/v1/repos/%s/%s/commits?sha=%s&page=%d&limit=%d&stat=false&files=false&verification=false",
-			c.baseURL, url.PathEscape(owner), url.PathEscape(repo), url.QueryEscape(ref), page, pageSize)
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, err
-		}
-		request.Header.Set("Authorization", "token "+c.token)
-		response, err := c.http.Do(request)
-		if err != nil {
-			return nil, err
-		}
-		if response.StatusCode != http.StatusOK {
-			err := responseError("fetch platform committers", response)
-			response.Body.Close()
-			return nil, err
-		}
-		var commits []*structs.Commit
-		decodeErr := json.NewDecoder(response.Body).Decode(&commits)
-		response.Body.Close()
-		if decodeErr != nil {
-			return nil, fmt.Errorf("decode platform committers: %w", decodeErr)
-		}
-		for _, commit := range commits {
-			if commit.Author != nil && commit.Author.UserName != "" {
-				usernames[commit.Author.UserName] = struct{}{}
-			}
-			if commit.Committer != nil && commit.Committer.UserName != "" {
-				usernames[commit.Committer.UserName] = struct{}{}
-			}
-		}
-		if len(commits) < pageSize {
-			break
-		}
+	endpoint := fmt.Sprintf("%s/api/v1/repos/%s/%s/assignees", c.baseURL, url.PathEscape(owner), url.PathEscape(repo))
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
 	}
-
-	orderedUsers := make([]string, 0, len(usernames))
-	for username := range usernames {
-		orderedUsers = append(orderedUsers, username)
+	request.Header.Set("Authorization", "token "+c.token)
+	response, err := c.http.Do(request)
+	if err != nil {
+		return nil, err
 	}
-	sort.Strings(orderedUsers)
-	authorENames := make([]string, 0, len(orderedUsers))
-	seenENames := make(map[string]struct{}, len(orderedUsers))
-	for _, username := range orderedUsers {
-		endpoint := fmt.Sprintf("%s/api/v1/users/%s", c.baseURL, url.PathEscape(username))
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, err
-		}
-		request.Header.Set("Authorization", "token "+c.token)
-		response, err := c.http.Do(request)
-		if err != nil {
-			return nil, err
-		}
-		if response.StatusCode == http.StatusNotFound {
-			response.Body.Close()
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, responseError("list platform maintainers", response)
+	}
+	var maintainers []*structs.User
+	if err := json.NewDecoder(response.Body).Decode(&maintainers); err != nil {
+		return nil, fmt.Errorf("decode platform maintainers: %w", err)
+	}
+	authorENames := make([]string, 0, len(maintainers))
+	for _, maintainer := range maintainers {
+		if maintainer == nil {
 			continue
 		}
-		if response.StatusCode != http.StatusOK {
-			err := responseError("resolve platform committer identity", response)
-			response.Body.Close()
-			return nil, err
+		ename := strings.TrimSpace(maintainer.LoginName)
+		if strings.HasPrefix(ename, "@") && len(ename) > 1 {
+			authorENames = append(authorENames, ename)
 		}
-		var user structs.User
-		decodeErr := json.NewDecoder(response.Body).Decode(&user)
-		response.Body.Close()
-		if decodeErr != nil {
-			return nil, fmt.Errorf("decode platform committer identity: %w", decodeErr)
-		}
-		eName := strings.TrimSpace(user.LoginName)
-		if !strings.HasPrefix(eName, "@") || len(eName) < 2 {
-			continue
-		}
-		if _, seen := seenENames[eName]; seen {
-			continue
-		}
-		seenENames[eName] = struct{}{}
-		authorENames = append(authorENames, eName)
 	}
-	return authorENames, nil
+	return mergeENames(authorENames), nil
 }
 
 type w3dsClient struct {
@@ -309,15 +260,13 @@ func (c *w3dsClient) legacyPlatformProfile(ctx context.Context, ename, token str
 				} `json:"edges"`
 			} `json:"metaEnvelopes"`
 		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
+		Errors []graphQLError `json:"errors"`
 	}
 	if err := c.postJSON(ctx, endpoint, graphql, &result, map[string]string{"Authorization": "Bearer " + token, "X-ENAME": ename}); err != nil {
 		return nil, fmt.Errorf("read existing PlatformProfile: %w", err)
 	}
-	if len(result.Errors) > 0 {
-		return nil, errors.New(result.Errors[0].Message)
+	if err := graphQLErrors("eVault profile read", result.Errors); err != nil {
+		return nil, err
 	}
 	matches := make([]legacyPlatformProfile, 0, 1)
 	for _, edge := range result.Data.MetaEnvelopes.Edges {
@@ -614,15 +563,13 @@ func (c *w3dsClient) publishDeployment(ctx context.Context, job *DeploymentJob) 
 				} `json:"metaEnvelope"`
 			} `json:"updateMetaEnvelopeById"`
 		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
+		Errors []graphQLError `json:"errors"`
 	}
 	if err := c.postJSON(ctx, endpoint, graphql, &result, headers); err != nil {
 		return fmt.Errorf("publish deployment profile: %w", err)
 	}
-	if len(result.Errors) > 0 {
-		return errors.New(result.Errors[0].Message)
+	if err := graphQLErrors("deployment profile mutation", result.Errors); err != nil {
+		return err
 	}
 	if result.Data.Update.MetaEnvelope == nil {
 		return errors.New("eVault returned no deployment profile")
@@ -654,9 +601,13 @@ func (c *w3dsClient) ensureDeploymentBinding(ctx context.Context, endpoint strin
 				} `json:"edges"`
 			} `json:"bindingDocuments"`
 		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
 	}
 	if err := c.postJSON(ctx, endpoint, graphql, &existing, headers); err != nil {
 		return "", fmt.Errorf("find deployment binding: %w", err)
+	}
+	if err := graphQLErrors("deployment binding read", existing.Errors); err != nil {
+		return "", err
 	}
 	for _, edge := range existing.Data.Documents.Edges {
 		if edge.Node.Parsed.Subject != document.Subject {
@@ -683,18 +634,20 @@ func (c *w3dsClient) ensureDeploymentBinding(ctx context.Context, endpoint strin
 	var created struct {
 		Data struct {
 			Create struct {
-				ID     string `json:"metaEnvelopeId"`
-				Errors []struct {
-					Message string `json:"message"`
-				} `json:"errors"`
+				ID     string                 `json:"metaEnvelopeId"`
+				Errors []mutationPayloadError `json:"errors"`
 			} `json:"createBindingDocument"`
 		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
 	}
 	if err := c.postJSON(ctx, endpoint, mutation, &created, headers); err != nil {
 		return "", fmt.Errorf("create deployment binding: %w", err)
 	}
-	if len(created.Data.Create.Errors) > 0 {
-		return "", errors.New(created.Data.Create.Errors[0].Message)
+	if err := graphQLErrors("deployment binding mutation", created.Errors); err != nil {
+		return "", err
+	}
+	if err := mutationPayloadErrors("deployment binding mutation", created.Data.Create.Errors); err != nil {
+		return "", err
 	}
 	if created.Data.Create.ID == "" {
 		return "", errors.New("eVault returned no deployment binding document")
@@ -743,15 +696,13 @@ func (c *w3dsClient) accreditations(ctx context.Context, ename, version string) 
 					} `json:"pageInfo"`
 				} `json:"metaEnvelopes"`
 			} `json:"data"`
-			Errors []struct {
-				Message string `json:"message"`
-			} `json:"errors"`
+			Errors []graphQLError `json:"errors"`
 		}
 		if err := c.postJSON(ctx, endpoint, graphql, &result, headers); err != nil {
 			return nil, fmt.Errorf("read PPA decisions: %w", err)
 		}
-		if len(result.Errors) > 0 {
-			return nil, errors.New(result.Errors[0].Message)
+		if err := graphQLErrors("PPA decision read", result.Errors); err != nil {
+			return nil, err
 		}
 		for _, edge := range result.Data.MetaEnvelopes.Edges {
 			decision := edge.Node.Parsed
@@ -781,7 +732,7 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 	ename := *manifest.EName
 	endpoint, err := c.resolve(ctx, ename)
 	if err != nil {
-		return err
+		return atStage("Registry resolve", err)
 	}
 	var token string
 	if manifest.Migration != nil && (manifest.Migration.Status == "active" || manifest.Migration.Status == "activating") {
@@ -790,8 +741,43 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 		token, err = c.platformToken(ctx)
 	}
 	if err != nil {
+		return atStage("certification token request", err)
+	}
+	payload, err := platformProfilePayload(manifest, createdAt, archived, authorENames)
+	if err != nil {
 		return err
 	}
+	headers := map[string]string{"Authorization": "Bearer " + token, "X-ENAME": ename}
+	matches, exists, err := c.platformProfileMatches(ctx, endpoint, headers, envelopeID, w3ds.UserProfileOntology, payload)
+	if err != nil {
+		return atStage("eVault verification", err)
+	}
+	if matches {
+		return nil
+	}
+
+	mutationErr := c.writePlatformProfile(ctx, endpoint, headers, envelopeID, w3ds.UserProfileOntology, payload, exists)
+	// An eVault can commit a write and still lose or mask the response. Always
+	// read the deterministic envelope after the mutation; matching state is the
+	// authoritative success signal for retries and ambiguous responses.
+	matches, _, verifyErr := c.platformProfileMatches(ctx, endpoint, headers, envelopeID, w3ds.UserProfileOntology, payload)
+	if verifyErr == nil && matches {
+		return nil
+	}
+	if mutationErr != nil {
+		return mutationErr
+	}
+	if verifyErr != nil {
+		return atStage("eVault verification", verifyErr)
+	}
+	return &publicationError{Stage: "eVault verification", Err: errors.New("PlatformProfile did not match the requested state after mutation")}
+}
+
+func platformProfilePayload(manifest *w3ds.PlatformManifest, createdAt time.Time, archived bool, authorENames []string) (map[string]any, error) {
+	if manifest == nil || manifest.EName == nil {
+		return nil, errors.New("cannot build a platform profile without an eName")
+	}
+	ename := *manifest.EName
 	now := time.Now().UTC()
 	domains := manifest.Domains
 	if domains == nil {
@@ -800,7 +786,7 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 	payload := map[string]any{}
 	if manifest.Migration != nil && len(manifest.Migration.SourceProfile) > 0 {
 		if err := json.Unmarshal(manifest.Migration.SourceProfile, &payload); err != nil {
-			return fmt.Errorf("decode migrated source profile: %w", err)
+			return nil, fmt.Errorf("decode migrated source profile: %w", err)
 		}
 	}
 	updates := map[string]any{
@@ -835,41 +821,119 @@ func (c *w3dsClient) publish(ctx context.Context, envelopeID string, manifest *w
 	if manifest.Category != "" {
 		payload["category"] = manifest.Category
 	}
+	return payload, nil
+}
+
+func (c *w3dsClient) platformProfileMatches(ctx context.Context, endpoint string, headers map[string]string, envelopeID, ontology string, desired map[string]any) (matches, exists bool, err error) {
+	graphql := map[string]any{
+		"query": `query ExistingPlatformProfile($id: ID!) {
+	profile: metaEnvelope(id: $id) { id ontology parsed }
+}`,
+		"variables": map[string]any{"id": envelopeID},
+	}
+	var result struct {
+		Data struct {
+			Profile *struct {
+				ID       string         `json:"id"`
+				Ontology string         `json:"ontology"`
+				Parsed   map[string]any `json:"parsed"`
+			} `json:"profile"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := c.postJSON(ctx, endpoint, graphql, &result, headers); err != nil {
+		return false, false, err
+	}
+	if err := graphQLErrors("eVault verification", result.Errors); err != nil {
+		return false, false, err
+	}
+	if result.Data.Profile == nil {
+		return false, false, nil
+	}
+	if result.Data.Profile.ID != envelopeID || result.Data.Profile.Ontology != ontology {
+		return false, true, nil
+	}
+	return relevantPayloadMatches(result.Data.Profile.Parsed, desired), true, nil
+}
+
+func relevantPayloadMatches(existing, desired map[string]any) bool {
+	for key, expected := range desired {
+		// updatedAt records the actual write time. It is deliberately excluded
+		// from idempotency so a retry does not manufacture another semantic
+		// change solely because its wall clock advanced.
+		if key == "updatedAt" {
+			continue
+		}
+		actual, ok := existing[key]
+		if !ok {
+			return false
+		}
+		actualJSON, actualErr := normalizedJSON(actual)
+		expectedJSON, expectedErr := normalizedJSON(expected)
+		if actualErr != nil || expectedErr != nil || !bytes.Equal(actualJSON, expectedJSON) {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizedJSON(value any) ([]byte, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var normalized any
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	if err := decoder.Decode(&normalized); err != nil {
+		return nil, err
+	}
+	return json.Marshal(normalized)
+}
+
+func (c *w3dsClient) writePlatformProfile(ctx context.Context, endpoint string, headers map[string]string, envelopeID, ontology string, payload map[string]any, exists bool) error {
 	variables := map[string]any{
 		"id": envelopeID,
 		"input": map[string]any{
-			"ontology": w3ds.UserProfileOntology,
+			"ontology": ontology,
 			"payload":  payload,
 			"acl":      []string{"*"},
 		},
 	}
-	graphql := map[string]any{
-		"query": `mutation UpdatePlatformProfile($id: String!, $input: MetaEnvelopeInput!) {
-	updateMetaEnvelopeById(id: $id, input: $input) { metaEnvelope { id } }
-}`,
-		"variables": variables,
+	mutation := `mutation UpsertPlatformProfile($id: String!, $input: MetaEnvelopeInput!) {
+	update: updateMetaEnvelopeById(id: $id, input: $input) { metaEnvelope { id } }
+}`
+	if exists {
+		mutation = `mutation UpdatePlatformProfile($id: ID!, $input: MetaEnvelopeInput!) {
+	update: updateMetaEnvelope(id: $id, input: $input) {
+		metaEnvelope { id }
+		errors { field message code }
 	}
+}`
+	}
+	graphql := map[string]any{"query": mutation, "variables": variables}
 	var result struct {
 		Data struct {
 			Update struct {
 				MetaEnvelope *struct {
 					ID string `json:"id"`
 				} `json:"metaEnvelope"`
-			} `json:"updateMetaEnvelopeById"`
+				Errors []mutationPayloadError `json:"errors"`
+			} `json:"update"`
 		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
+		Errors []graphQLError `json:"errors"`
 	}
-	headers := map[string]string{"Authorization": "Bearer " + token, "X-ENAME": ename}
 	if err := c.postJSON(ctx, endpoint, graphql, &result, headers); err != nil {
-		return fmt.Errorf("publish PlatformProfile: %w", err)
+		return atStage("eVault mutation", err)
 	}
-	if len(result.Errors) > 0 {
-		return errors.New(result.Errors[0].Message)
+	if err := graphQLErrors("eVault mutation", result.Errors); err != nil {
+		return err
+	}
+	if err := mutationPayloadErrors("eVault mutation", result.Data.Update.Errors); err != nil {
+		return err
 	}
 	if result.Data.Update.MetaEnvelope == nil {
-		return errors.New("eVault returned no PlatformProfile")
+		return &publicationError{Stage: "eVault mutation", Err: errors.New("eVault returned no PlatformProfile")}
 	}
 	return nil
 }
@@ -900,6 +964,9 @@ func (c *w3dsClient) resolve(ctx context.Context, ename string) (string, error) 
 func (c *w3dsClient) platformToken(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if token := strings.TrimSpace(c.config.PlatformToken); token != "" {
+		return token, nil
+	}
 	if c.token != "" && time.Until(c.expiry) > time.Minute {
 		return c.token, nil
 	}
@@ -952,5 +1019,5 @@ func (c *w3dsClient) postJSON(ctx context.Context, endpoint string, input, outpu
 
 func responseError(operation string, response *http.Response) error {
 	data, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-	return fmt.Errorf("%s returned %d: %s", operation, response.StatusCode, strings.TrimSpace(string(data)))
+	return fmt.Errorf("%s returned %d: %s", operation, response.StatusCode, safeResponseBody(data))
 }

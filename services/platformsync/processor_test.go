@@ -37,6 +37,7 @@ type fakePlatformInfrastructure struct {
 	successfulProvisions   int
 	resolveMissing         bool
 	published              []map[string]any
+	profiles               map[string]map[string]any
 	accreditations         []w3ds.AccreditationDecision
 	server                 *httptest.Server
 }
@@ -52,6 +53,7 @@ func newFakePlatformInfrastructure(t *testing.T) *fakePlatformInfrastructure {
 		manifest:       manifest,
 		manifestExists: true,
 		release:        &platformRelease{TagName: "v0.1.0", Version: "0.1.0"},
+		profiles:       make(map[string]map[string]any),
 	}
 	fake.server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		fake.handle(t, response, request)
@@ -95,22 +97,12 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		f.manifest = &manifest
 		f.mu.Unlock()
 		json.NewEncoder(response).Encode(map[string]any{"content": map[string]string{"sha": "updated"}})
-	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/repos/alice/platform/commits":
-		assert.Contains(t, []string{"commit-1", "commit-2"}, request.URL.Query().Get("sha"))
-		if request.URL.Query().Get("page") == "1" {
-			json.NewEncoder(response).Encode([]map[string]any{
-				{"author": map[string]string{"login": "alice"}, "committer": map[string]string{"login": "alice"}},
-				{"author": map[string]string{"login": "bob"}, "committer": map[string]string{"login": "platform-sync"}},
-			})
-		} else {
-			json.NewEncoder(response).Encode([]any{})
-		}
-	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/alice":
-		json.NewEncoder(response).Encode(map[string]any{"login": "alice", "login_name": "@alice.w3id"})
-	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/bob":
-		json.NewEncoder(response).Encode(map[string]any{"login": "bob", "login_name": "@bob.w3id"})
-	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/platform-sync":
-		json.NewEncoder(response).Encode(map[string]any{"login": "platform-sync", "login_name": ""})
+	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/repos/alice/platform/assignees":
+		json.NewEncoder(response).Encode([]map[string]any{
+			{"login": "alice", "login_name": "@alice.w3id"},
+			{"login": "bob", "login_name": "@bob.w3id"},
+			{"login": "platform-sync", "login_name": ""},
+		})
 	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/repos/alice/platform/releases/latest":
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -217,13 +209,30 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 			}}})
 			return
 		}
+		if strings.Contains(input["query"].(string), "ExistingPlatformProfile") {
+			variables := input["variables"].(map[string]any)
+			id := variables["id"].(string)
+			f.mu.Lock()
+			profile := f.profiles[id]
+			f.mu.Unlock()
+			if profile == nil {
+				json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"profile": nil}})
+				return
+			}
+			json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"profile": map[string]any{
+				"id": id, "ontology": w3ds.UserProfileOntology, "parsed": profile,
+			}}})
+			return
+		}
 		assert.NotContains(t, input["query"], "errors { message }")
 		variables := input["variables"].(map[string]any)
 		profile := variables["input"].(map[string]any)["payload"].(map[string]any)
+		id := variables["id"].(string)
 		f.mu.Lock()
 		f.published = append(f.published, profile)
+		f.profiles[id] = profile
 		f.mu.Unlock()
-		json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"updateMetaEnvelopeById": map[string]any{"metaEnvelope": map[string]string{"id": variables["id"].(string)}}}})
+		json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"update": map[string]any{"metaEnvelope": map[string]string{"id": id}, "errors": []any{}}}})
 	default:
 		http.Error(response, request.Method+" "+request.URL.Path, http.StatusNotFound)
 	}
