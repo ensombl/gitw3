@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "platformName": "gitw3",
+  "displayName": "GitW3",
+  "description": "The self-hosted Git forge for the W3DS ecosystem, providing repositories, collaboration, releases, and platform publication.",
+  "version": "16.0.2",
+  "ename": null,
+  "url": "https://git.w3ds.metastate.foundation",
+  "logoUrl": "https://git.w3ds.metastate.foundation/assets/img/logo.png",
+  "domains": [
+    "work",
+    "productivity",
+    "storage"
+  ],
+  "category": "Productivity",
+  "inSubmission": false,
+  "submissionVersion": "",
+  "isDraft": false
+}
