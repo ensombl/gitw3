@@ -130,7 +130,7 @@ Perform the following work:
 - Configure SMTP only when working credentials are supplied.
 - Configure structured production logs with rotation and ensure credentials, migration tokens, wallet payloads, and authorization headers are redacted.
 - Configure [platform_manifest_sync] with ENABLED=true, the private publisher URL, the shared internal token, the production ontology URL, the production Registry URL, and bounded request/signature timeouts.
-- Obtain a dedicated AaaS consumer key without printing it. Configure [w3ds_identity] with the production AWARENESS_URL, that AWARENESS_API_KEY through the secret mechanism, a bounded TIMEOUT, and ONLY_AUTHENTICATION=true. Never expose the key to the browser or logs. W3DS must be the only interactive web sign-in method in production.
+- Obtain a dedicated AaaS consumer key without printing it. Configure [w3ds_identity] with the production AWARENESS_URL, that AWARENESS_API_KEY through the secret mechanism, and a bounded TIMEOUT. Never expose the key to the browser or logs. GitW3 enforces W3DS as its only interactive web sign-in method; there is no production setting that enables password login.
 - Disable reverse-proxy web authentication and configure OAuth2 client auto-registration so a first W3DS login can create its local GitW3 account without falling back to a password/account-linking form.
 - Configure the W3DS authentication source through the supported administrative interface or CLI/API. Make this step idempotent and ensure the source name is exactly `W3DS`.
 
@@ -221,7 +221,7 @@ Run and record these checks:
 - An invalid Forgejo webhook signature is rejected.
 - One valid signed test webhook is accepted without duplicate processing.
 - W3DS login starts through the intended OIDC bridge and returns to the canonical GitW3 URL.
-- Password sign-in, local registration, password recovery, OpenID, account-linking forms, and every non-W3DS OAuth source are rejected while [w3ds_identity] ONLY_AUTHENTICATION=true.
+- Password sign-in, local registration, password recovery, OpenID, account-linking forms, and every non-W3DS OAuth source are rejected. Confirm `/user/login` redirects straight to W3DS and never renders username or password fields.
 - A test W3DS login maps the newest non-platform AaaS User profile to the local display name and avatar. Confirm a simulated AaaS timeout leaves login functional and preserves the existing profile.
 - New-platform and existing-application forms ask for a display name but no repository slug; the resulting collision-safe repository slug is generated server-side.
 - Creating an existing-application destination creates an empty repository.

@@ -21,13 +21,13 @@ const w3dsAuthSourceName = "W3DS"
 // authentication mechanism other than W3DS while the GitW3 production policy
 // is enabled. API tokens and Git transport authentication are unaffected.
 func RejectAlternativeAuthentication(ctx *context.Context) {
-	if setting.W3DSIdentity.OnlyAuthentication {
+	if setting.W3DSOnlyAuthenticationEnabled() {
 		ctx.Error(http.StatusForbidden)
 	}
 }
 
 func w3dsAuthenticationProviderAllowed(provider string) bool {
-	return !setting.W3DSIdentity.OnlyAuthentication || provider == w3dsAuthSourceName
+	return !setting.W3DSOnlyAuthenticationEnabled() || provider == w3dsAuthSourceName
 }
 
 func redirectToW3DSSignIn(ctx *context.Context) {
@@ -49,7 +49,7 @@ func SignInW3DS(ctx *context.Context) {
 	}
 	if _, err := auth_model.GetActiveOAuth2SourceByName(ctx, w3dsAuthSourceName); err != nil {
 		log.Warn("W3DS login requested without an active W3DS authentication source: %v", err)
-		if setting.W3DSIdentity.OnlyAuthentication {
+		if setting.W3DSOnlyAuthenticationEnabled() {
 			ctx.Error(http.StatusServiceUnavailable, ctx.Locale.TrString("auth.w3ds_login_unavailable"))
 		} else {
 			ctx.Flash.Error(ctx.Tr("auth.w3ds_login_unavailable"))
@@ -59,7 +59,7 @@ func SignInW3DS(ctx *context.Context) {
 	}
 	if !oauth2.IsProviderRegistered(w3dsAuthSourceName) {
 		log.Warn("W3DS login requested while its authentication provider is unavailable")
-		if setting.W3DSIdentity.OnlyAuthentication {
+		if setting.W3DSOnlyAuthenticationEnabled() {
 			ctx.Error(http.StatusServiceUnavailable, ctx.Locale.TrString("auth.w3ds_login_unavailable"))
 		} else {
 			ctx.Flash.Error(ctx.Tr("auth.w3ds_login_unavailable"))

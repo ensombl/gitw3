@@ -16,10 +16,12 @@ import (
 
 func TestW3DSOnlyAuthenticationRoutes(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
-	defer test.MockVariableValue(&setting.W3DSIdentity.OnlyAuthentication, true)()
+	defer test.MockVariableValue(&setting.W3DSAllowAlternativeAuthenticationForTests, false)()
 
 	response := MakeRequest(t, NewRequest(t, "GET", "/user/login?redirect_to=/platforms"), http.StatusSeeOther)
 	assert.Equal(t, "/user/login/w3ds", test.RedirectURL(response))
+	assert.NotContains(t, response.Body.String(), `name="user_name"`)
+	assert.NotContains(t, response.Body.String(), `name="password"`)
 
 	for _, request := range []*RequestWrapper{
 		NewRequestWithValues(t, "POST", "/user/login", map[string]string{}),

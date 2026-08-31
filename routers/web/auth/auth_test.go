@@ -17,7 +17,7 @@ import (
 )
 
 func TestUserLogin(t *testing.T) {
-	defer test.MockVariableValue(&setting.W3DSIdentity.OnlyAuthentication, false)()
+	defer test.MockVariableValue(&setting.W3DSAllowAlternativeAuthenticationForTests, true)()
 
 	ctx, resp := contexttest.MockContext(t, "/user/login")
 	SignIn(ctx)
@@ -47,7 +47,7 @@ func TestUserLogin(t *testing.T) {
 }
 
 func TestW3DSOnlyUserLogin(t *testing.T) {
-	defer test.MockVariableValue(&setting.W3DSIdentity.OnlyAuthentication, true)()
+	defer test.MockVariableValue(&setting.W3DSAllowAlternativeAuthenticationForTests, false)()
 
 	ctx, resp := contexttest.MockContext(t, "/user/login?redirect_to=/platforms")
 	SignIn(ctx)
@@ -76,7 +76,7 @@ func TestW3DSOnlyUserLogin(t *testing.T) {
 // NB: Full signup test is in tests/integration/signup_test.go
 // this is to test disabled signup
 func TestSignUpDefault(t *testing.T) {
-	defer test.MockVariableValue(&setting.W3DSIdentity.OnlyAuthentication, false)()
+	defer test.MockVariableValue(&setting.W3DSAllowAlternativeAuthenticationForTests, true)()
 
 	ctx, resp := contexttest.MockContext(t, "/user/sign_up",
 		contexttest.MockContextOption{Render: templates.HTMLRenderer()})
@@ -89,7 +89,7 @@ func TestSignUpDisabled(t *testing.T) {
 	ctx, resp := contexttest.MockContext(t, "/user/sign_up",
 		contexttest.MockContextOption{Render: templates.HTMLRenderer()})
 	defer test.MockVariableValue(&setting.Service.DisableRegistration, true)()
-	defer test.MockVariableValue(&setting.W3DSIdentity.OnlyAuthentication, false)()
+	defer test.MockVariableValue(&setting.W3DSAllowAlternativeAuthenticationForTests, true)()
 	SignUp(ctx)
 	assert.Equal(t, http.StatusOK, resp.Code)
 	assert.Contains(t, resp.Body.String(), ctx.Locale.Tr("auth.disable_register_prompt"))
@@ -98,7 +98,7 @@ func TestSignUpDisabled(t *testing.T) {
 func TestSignUpPostDisabled(t *testing.T) {
 	ctx, resp := contexttest.MockContext(t, "/user/sign_up")
 	defer test.MockVariableValue(&setting.Service.DisableRegistration, true)()
-	defer test.MockVariableValue(&setting.W3DSIdentity.OnlyAuthentication, false)()
+	defer test.MockVariableValue(&setting.W3DSAllowAlternativeAuthenticationForTests, true)()
 	SignUpPost(ctx)
 	assert.Equal(t, http.StatusForbidden, resp.Code)
 }
