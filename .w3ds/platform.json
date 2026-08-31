@@ -13,34 +13,7 @@
     "storage"
   ],
   "category": "Productivity",
-  "inSubmission": true,
-  "submissionVersion": "0.1.0",
-  "submissionProof": {
-    "statement": {
-      "type": "w3ds.ppa.release-submission",
-      "schemaVersion": 1,
-      "repositoryId": 1,
-      "repository": "849c0221-6f3f-55f9-95f0-f3b0d2b3092f/gitw3",
-      "platformEName": "@49d127ea-88b7-5a5b-95f3-ce2414d40f5a",
-      "platformName": "gitw3",
-      "releaseTag": "v0.1.0",
-      "version": "0.1.0",
-      "manifestCommitId": "813295e6afdb45f5aadb5983ec1fb3768503d9d4",
-      "domains": [
-        "work",
-        "productivity",
-        "storage"
-      ],
-      "signerEName": "@849c0221-6f3f-55f9-95f0-f3b0d2b3092f",
-      "issuedAt": "2026-08-31T14:15:20Z",
-      "nonce": "qw6wL2v5qm_-WjeHcA3Bng"
-    },
-    "payload": "gitw3:ppa:v1:i8GAA4cL8gPiHem_ImoaY1oo11jJWI2mm0IV_VbUO0g",
-    "signature": "zAN1rKvtaCKnihZsFguSduFKfwAxTbJFCk1PeeBN7NBDZSVxJbhq3Xfi7ttHGn9zj4S89q2Kc6F49mu2qzbPukrP4grxcJhG68",
-    "publicKey": "0x3059301306072a8648ce3d020106082a8648ce3d03010703420004736c601b6337eaa5fc54fe80b6dd15c1921712daeb7a446e0d7f3a2ab1102f531e3350d1f4f989d2ddf87c8bf71dee5573d7ce56ed4ec91b30afe4fe7f39b2fd",
-    "keyBindingCertificate": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImVudHJvcHkta2V5LTEifQ.eyJlbmFtZSI6IkA4NDljMDIyMS02ZjNmLTU1ZjktOTVmMC1mM2IwZDJiMzA5MmYiLCJwdWJsaWNLZXkiOiIweDMwNTkzMDEzMDYwNzJhODY0OGNlM2QwMjAxMDYwODJhODY0OGNlM2QwMzAxMDcwMzQyMDAwNDczNmM2MDFiNjMzN2VhYTVmYzU0ZmU4MGI2ZGQxNWMxOTIxNzEyZGFlYjdhNDQ2ZTBkN2YzYTJhYjExMDJmNTMxZTMzNTBkMWY0Zjk4OWQyZGRmODdjOGJmNzFkZWU1NTczZDdjZTU2ZWQ0ZWM5MWIzMGFmZTRmZTdmMzliMmZkIiwiaWF0IjoxNzg4MTg1NzI1LCJleHAiOjE3ODgxODkzMjV9.-Q6LDgye4pR2ZNdqZBifMqZ1ivpMfYr0OpqOhafxL8e2kyQRrJPmun_ioqqE9TOdjbIFicsxO2InRuBevab_xQ",
-    "verifiedAt": "2026-08-31T14:15:25Z"
-  },
+  "inSubmission": false,
   "submissionHistory": [
     {
       "statement": {
