@@ -228,11 +228,11 @@
 			<div class="w3ds-empty-state">
 				{{svg "octicon-shield-check" 48}}
 				<h1>{{ctx.Locale.Tr "platform.repo.setup_title"}}</h1>
-				<p>{{ctx.Locale.Tr "platform.repo.setup_help"}}</p>
+				<p>{{ctx.Locale.Tr "platform.repo.setup_existing_help"}}</p>
 				<div class="tw-flex tw-gap-2 tw-flex-wrap tw-justify-center">
-					<a class="ui primary button" href="{{AppSubUrl}}/repo/create/new">{{ctx.Locale.Tr "platform.new.make"}}</a>
-					<a class="ui basic button" href="{{AppSubUrl}}/repo/create/port">{{ctx.Locale.Tr "platform.new.port"}}</a>
+					<a class="ui primary button" href="{{.RepoLink}}/onboarding/port#port-agent-heading">{{ctx.Locale.Tr "platform.repo.setup_prompt"}}</a>
 				</div>
+				<p class="w3ds-section-help">{{ctx.Locale.Tr "platform.repo.setup_identity_help"}}</p>
 			</div>
 		{{end}}
 	</div>

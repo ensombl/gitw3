@@ -19,6 +19,10 @@
 							{{ctx.Locale.Tr "repo.broken_message"}}
 						</div>
 				{{else if .CanWriteCode}}
+					<div class="ui info message tw-flex tw-items-center tw-justify-between tw-gap-3 tw-flex-wrap">
+						<div><strong>{{ctx.Locale.Tr "platform.port.empty_title"}}</strong> {{ctx.Locale.Tr "platform.port.empty_help"}}</div>
+						<a class="ui small primary button" href="{{.RepoLink}}/onboarding/port">{{ctx.Locale.Tr "platform.port.empty_action"}}</a>
+					</div>
 					<h4 class="ui top attached header">
 						{{ctx.Locale.Tr "repo.quick_guide"}}
 					</h4>

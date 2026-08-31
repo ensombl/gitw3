@@ -1,0 +1,159 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content repository">
+	{{template "repo/header" .}}
+	<div id="port-application-handoff" class="ui container">
+		{{template "base/alert" .}}
+		<section class="port-handoff-hero">
+			<div class="port-handoff-check" aria-hidden="true">{{svg "octicon-git-branch" 28}}</div>
+			<div>
+				<p class="port-handoff-eyebrow">{{ctx.Locale.Tr "platform.port.handoff_complete"}}</p>
+				<h1>{{ctx.Locale.Tr "platform.port.handoff_heading"}}</h1>
+				<p>{{ctx.Locale.Tr "platform.port.handoff_intro"}}</p>
+			</div>
+		</section>
+
+		<ol class="port-handoff-stepper" aria-label="{{ctx.Locale.Tr "platform.port.flow_label"}}">
+			<li class="{{if .PortPushComplete}}completed{{else}}active{{end}}">
+				<span class="port-step-number">{{if .PortPushComplete}}{{svg "octicon-check" 16}}{{else}}1{{end}}</span>
+				<span><strong>{{ctx.Locale.Tr "platform.port.flow_push"}}</strong><small>{{if .PortPushComplete}}{{ctx.Locale.Tr "platform.port.flow_done"}}{{else}}{{ctx.Locale.Tr "platform.port.flow_current"}}{{end}}</small></span>
+			</li>
+			<li class="{{if or .PortMigrationStaged .PortMigrationActive}}completed{{else if .PortPushComplete}}active{{else}}locked{{end}}">
+				<span class="port-step-number">{{if or .PortMigrationStaged .PortMigrationActive}}{{svg "octicon-check" 16}}{{else}}2{{end}}</span>
+				<span><strong>{{ctx.Locale.Tr "platform.port.flow_identity"}}</strong><small>{{if or .PortMigrationStaged .PortMigrationActive}}{{ctx.Locale.Tr "platform.port.flow_done"}}{{else if .PortPushComplete}}{{ctx.Locale.Tr "platform.port.flow_current"}}{{else}}{{ctx.Locale.Tr "platform.port.flow_locked"}}{{end}}</small></span>
+			</li>
+			<li class="{{if .PortMigrationActive}}completed{{else if .PortMigrationStaged}}active{{else}}locked{{end}}">
+				<span class="port-step-number">{{if .PortMigrationActive}}{{svg "octicon-check" 16}}{{else}}3{{end}}</span>
+				<span><strong>{{ctx.Locale.Tr "platform.port.flow_activate"}}</strong><small>{{if .PortMigrationActive}}{{ctx.Locale.Tr "platform.port.flow_done"}}{{else if .PortMigrationStaged}}{{ctx.Locale.Tr "platform.port.flow_current"}}{{else}}{{ctx.Locale.Tr "platform.port.flow_locked"}}{{end}}</small></span>
+			</li>
+		</ol>
+
+		{{if not .PortPushComplete}}
+			<section class="port-handoff-section port-current-step" aria-labelledby="port-agent-heading">
+				<p class="port-handoff-kicker">{{ctx.Locale.Tr "platform.port.step_one"}}</p>
+				<h2 id="port-agent-heading">{{ctx.Locale.Tr "platform.port.handoff_agent_title"}}</h2>
+				<p>{{ctx.Locale.Tr "platform.port.handoff_agent_help"}}</p>
+				<div class="clone-panel ui action small input port-clone-panel">
+					{{template "repo/clone_buttons" .}}
+				</div>
+				<div class="port-agent-prompt-box">
+					<div class="port-agent-prompt-toolbar">
+						<span>{{svg "octicon-copilot" 16}} {{ctx.Locale.Tr "platform.port.handoff_prompt_label"}}</span>
+						<button type="button" class="ui small primary button" data-clipboard-target="#port-agent-prompt">{{svg "octicon-copy" 16}} {{ctx.Locale.Tr "platform.port.handoff_copy_prompt"}}</button>
+					</div>
+					<pre id="port-agent-prompt" tabindex="0"><code>You are migrating an existing application into its new GitW3 repository. Work in the application's existing local Git checkout and preserve its code and commit history.
+
+Destination:
+- GitW3 remote: <span class="js-clone-url">{{.CloneButtonOriginLink.HTTPS}}</span>
+- GitW3 default branch: {{.Repository.DefaultBranch}}
+- W3DS manifest path: .w3ds/platform.json
+
+Before editing anything:
+1. Inspect the repository, its current branch and remotes, and any existing .w3ds directory or W3DS eName.
+2. Install and use the W3DS skill with `npx skills add MetaState-Prototype-Project/prototype@w3ds` so the integration follows the current W3DS protocol, ontology identifiers, mapping rules, and eVault APIs.
+3. Show me a concise plan and report whether this application is new to W3DS, already has an unclaimed manifest, or already has an eName.
+
+Then complete the migration safely:
+1. Preserve existing application behavior and Git history. Make only the W3DS integration changes the application actually needs.
+2. If no W3DS manifest exists and the application has no existing W3DS identity, create a valid .w3ds/platform.json for this application with `ename` set to null. Infer metadata from the application, but ask me before guessing any product-facing name, description, URL, or domain selection.
+3. If .w3ds already exists, preserve valid configuration and update it only where required. If an existing eName is present, do not remove, replace, or claim it and do not create a second identity. Keep it intact; GitW3 will transfer it in the next step after this push.
+4. Never invent migration proofs, W3DS tokens, eNames, ontology identifiers, API endpoints, or credentials. Never commit secrets.
+5. Make GitW3 the new `origin`. If `origin` already exists, preserve it by renaming it to the first available upstream-style name (`upstream`, `upstream-2`, and so on). If no `origin` exists, add GitW3 directly as `origin`.
+6. Configure `origin` as <span class="js-clone-url">{{.CloneButtonOriginLink.HTTPS}}</span> and push the current HEAD to `{{.Repository.DefaultBranch}}` with upstream tracking.
+7. Run the relevant tests or checks before pushing. Do not force-push or rewrite history unless I explicitly approve it.
+
+At the end, report:
+- the W3DS state you found;
+- files changed;
+- remotes before and after;
+- checks run;
+- the exact branch and commit pushed;
+- anything still requiring my action.
+
+Stop and ask me before proceeding if authentication fails, the destination is not empty, histories conflict, an existing W3DS identity would be replaced, or a safe push requires rewriting history.</code></pre>
+				</div>
+				<div class="port-handoff-note">
+					{{svg "octicon-shield-lock" 16}} <span>{{ctx.Locale.Tr "platform.port.handoff_prompt_safety"}}</span>
+				</div>
+			</section>
+
+			<details class="port-handoff-section port-manual-details">
+				<summary>{{ctx.Locale.Tr "platform.port.handoff_manual_title"}}</summary>
+				<p>{{ctx.Locale.Tr "platform.port.handoff_manual_help"}}</p>
+				<div class="port-manual-command">
+					<div class="port-agent-prompt-toolbar">
+						<span>{{svg "octicon-terminal" 16}} {{ctx.Locale.Tr "platform.port.handoff_commands_label"}}</span>
+						<button type="button" class="ui small button" data-clipboard-target="#port-manual-commands">{{svg "octicon-copy" 16}} {{ctx.Locale.Tr "copy"}}</button>
+					</div>
+					<pre id="port-manual-commands" tabindex="0"><code># Run inside the existing application's Git checkout.
+# If origin already exists, preserve it first (use upstream-2 if upstream is taken):
+git remote rename origin upstream
+
+git remote add origin <span class="js-clone-url">{{.CloneButtonOriginLink.HTTPS}}</span>
+git push -u origin HEAD:{{.Repository.DefaultBranch}}</code></pre>
+				</div>
+				<p class="port-manual-caveat">{{ctx.Locale.Tr "platform.port.handoff_manual_caveat"}}</p>
+			</details>
+
+			<div class="port-step-actions">
+				<a class="ui button" href="{{.RepoLink}}">{{svg "octicon-repo"}} {{ctx.Locale.Tr "platform.port.handoff_open_repo"}}</a>
+				<a class="ui primary button" href="{{.RepoLink}}/onboarding/port">{{svg "octicon-sync"}} {{ctx.Locale.Tr "platform.port.check_push"}}</a>
+			</div>
+		{{else if not (or .PortMigrationStaged .PortMigrationActive)}}
+			<section class="port-step-complete" aria-label="{{ctx.Locale.Tr "platform.port.step_one_complete"}}">
+				{{svg "octicon-check-circle-fill" 20}} <span><strong>{{ctx.Locale.Tr "platform.port.step_one_complete"}}</strong> {{ctx.Locale.Tr "platform.port.step_one_complete_help"}}</span>
+			</section>
+			<section class="port-handoff-section port-current-step port-identity-section" aria-labelledby="port-identity-heading">
+				<p class="port-handoff-kicker">{{ctx.Locale.Tr "platform.port.step_two"}}</p>
+				<h2 id="port-identity-heading">{{ctx.Locale.Tr "platform.port.identity_title"}}</h2>
+				<p>{{ctx.Locale.Tr "platform.port.identity_help_ready"}}</p>
+				{{if .PortManifestInvalid}}
+					<div class="ui negative message">
+						<div class="header">{{ctx.Locale.Tr "platform.port.identity_manifest_invalid_title"}}</div>
+						<p>{{ctx.Locale.Tr "platform.port.identity_manifest_invalid"}}</p>
+					</div>
+				{{else}}
+					<form id="platform-identity-migration-form" class="ui form" action="{{.RepoLink}}/onboarding/port/migrate" method="post" data-platform-port>
+						{{.CsrfTokenHtml}}
+						<div class="two fields">
+							<div class="required field"><label for="port-platform-ename">{{ctx.Locale.Tr "platform.port.ename"}}</label><input id="port-platform-ename" name="ename" required maxlength="255" placeholder="@your-platform"></div>
+							<div class="required field"><label for="port-platform-token">{{ctx.Locale.Tr "platform.port.token"}}</label><input id="port-platform-token" name="token" type="password" required maxlength="32768" autocomplete="off"></div>
+						</div>
+						<div class="port-identity-footer">
+							<p>{{svg "octicon-shield-lock" 16}} {{ctx.Locale.Tr "platform.port.token_privacy"}}</p>
+							<button class="ui primary button" type="submit" data-platform-port-submit>{{ctx.Locale.Tr "platform.port.authorize"}}</button>
+						</div>
+					</form>
+					<dialog id="platform-port-signing-modal">
+						<div class="header">{{ctx.Locale.Tr "platform.port.signing_title"}}</div>
+						<div class="content w3ds-ppa-signing-content">
+							<p>{{ctx.Locale.Tr "platform.port.signing_help"}}</p>
+							<div class="w3ds-ppa-signing-qr"><canvas data-platform-port-qr aria-label="{{ctx.Locale.Tr "platform.ppa.signing_qr"}}"></canvas></div>
+							<a class="ui primary button" data-platform-port-open href="#">{{ctx.Locale.Tr "platform.ppa.signing_open"}}</a>
+							<p class="w3ds-ppa-signing-status" data-platform-port-status data-starting="{{ctx.Locale.Tr "platform.ppa.signing_starting"}}" data-waiting="{{ctx.Locale.Tr "platform.port.signing_waiting"}}" data-complete="{{ctx.Locale.Tr "platform.port.signing_complete"}}" data-failed="{{ctx.Locale.Tr "platform.port.signing_failed"}}" aria-live="polite"></p>
+						</div>
+						<div class="actions"><button class="ui button" data-modal-close>{{ctx.Locale.Tr "cancel"}}</button></div>
+					</dialog>
+				{{end}}
+			</section>
+			<section class="port-identity-alternatives">
+				<div><strong>{{ctx.Locale.Tr "platform.port.identity_none_title"}}</strong><span>{{ctx.Locale.Tr "platform.port.identity_none_help"}}</span><a href="{{.RepoLink}}/w3ds">{{ctx.Locale.Tr "platform.port.identity_none_action"}} {{svg "octicon-arrow-right" 14}}</a></div>
+				<div><strong>{{ctx.Locale.Tr "platform.port.identity_later_title"}}</strong><span>{{ctx.Locale.Tr "platform.port.identity_later"}}</span><a href="{{.RepoLink}}">{{ctx.Locale.Tr "platform.port.handoff_open_repo"}} {{svg "octicon-arrow-right" 14}}</a></div>
+			</section>
+		{{else}}
+			<section class="port-step-complete" aria-label="{{ctx.Locale.Tr "platform.port.identity_complete"}}">
+				{{svg "octicon-check-circle-fill" 20}} <span><strong>{{ctx.Locale.Tr "platform.port.identity_complete"}}</strong> {{ctx.Locale.Tr "platform.port.identity_complete_help"}}</span>
+			</section>
+			<section class="port-handoff-section port-current-step" aria-labelledby="port-activate-heading">
+				<p class="port-handoff-kicker">{{ctx.Locale.Tr "platform.port.step_three"}}</p>
+				<h2 id="port-activate-heading">{{if .PortMigrationActive}}{{ctx.Locale.Tr "platform.port.cutover_complete_title"}}{{else}}{{ctx.Locale.Tr "platform.port.cutover_title"}}{{end}}</h2>
+				<p>{{if .PortMigrationActive}}{{ctx.Locale.Tr "platform.port.cutover_complete_help"}}{{else}}{{ctx.Locale.Tr "platform.port.cutover_help"}}{{end}}</p>
+				<div class="port-step-actions">
+					<a class="ui button" href="{{.RepoLink}}">{{svg "octicon-repo"}} {{ctx.Locale.Tr "platform.port.handoff_open_repo"}}</a>
+					{{if not .PortMigrationActive}}<a class="ui primary button" href="{{.RepoLink}}/w3ds">{{svg "octicon-shield-check"}} {{ctx.Locale.Tr "platform.port.cutover_action"}}</a>{{end}}
+				</div>
+			</section>
+		{{end}}
+		{{template "repo/clone_script" .}}
+	</div>
+</div>
+{{template "base/footer" .}}

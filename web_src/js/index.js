@@ -94,8 +94,8 @@ import {initAuthorizedIntegrationClaimRuleEditor} from './features/authorized-in
 import {initPlatformOnboarding} from './features/platform-onboarding.ts';
 import {initW3DSPlatformStatus} from './features/w3ds-platform-status.ts';
 import {initW3DSDeploy} from './features/w3ds-deploy.ts';
-import {initW3DSPlatformPort} from './features/w3ds-platform-port.ts';
 import {initW3DSWelcome} from './features/w3ds-welcome.ts';
+import {initW3DSPlatformPort} from './features/w3ds-platform-port.ts';
 
 // Init Gitea's Fomantic settings
 initGiteaFomantic();
@@ -205,8 +205,8 @@ onDomReady(() => {
   initPlatformOnboarding();
   initW3DSPlatformStatus();
   initW3DSDeploy();
-  initW3DSPlatformPort();
   initW3DSWelcome();
+  initW3DSPlatformPort();
 
   // Deactivate CSS-only noJS usability supplements
   document.body.classList.remove('no-js');

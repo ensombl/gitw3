@@ -124,6 +124,353 @@
   border-top: 1px solid var(--color-secondary);
 }
 
+.platform-port-deferred-note {
+  margin-top: 1.5rem !important;
+}
+
+#port-application-handoff {
+  width: min(100%, 960px);
+  max-width: 960px;
+  box-sizing: border-box;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.port-handoff-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--color-green);
+  border-radius: calc(var(--border-radius) + 3px);
+  background: var(--color-green-badge-bg);
+}
+
+.port-handoff-check {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9999px;
+  background: var(--color-green);
+  color: var(--color-primary-contrast);
+}
+
+.port-handoff-stepper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.port-handoff-stepper > li {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.8rem 1rem 0.8rem 0;
+  color: var(--color-text);
+}
+
+.port-handoff-stepper > li:not(:last-child)::after {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  inset-inline: 2.4rem 0.75rem;
+  height: 2px;
+  background: var(--color-secondary);
+  content: "";
+}
+
+.port-handoff-stepper > li > span {
+  position: relative;
+  z-index: 1;
+}
+
+.port-handoff-stepper > li > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding-inline-end: 0.5rem;
+  background: var(--color-body);
+}
+
+.port-handoff-stepper small {
+  color: var(--color-text-light-2);
+  font-size: 0.75rem;
+}
+
+.port-handoff-stepper .port-step-number {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 2px solid var(--color-secondary-dark-2);
+  border-radius: 9999px;
+  background: var(--color-body);
+  color: var(--color-text-light-2);
+  font-weight: var(--font-weight-semibold);
+}
+
+.port-handoff-stepper > li.active .port-step-number {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.port-handoff-stepper > li.completed .port-step-number {
+  border-color: var(--color-green);
+  background: var(--color-green);
+  color: var(--color-primary-contrast);
+}
+
+.port-handoff-stepper > li.completed:not(:last-child)::after {
+  background: var(--color-green);
+}
+
+.port-handoff-stepper > li.locked {
+  color: var(--color-text-light-2);
+}
+
+.port-handoff-eyebrow,
+.port-handoff-kicker {
+  margin: 0 0 0.3rem;
+  color: var(--color-text-light-2);
+  font-size: 0.78rem;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.port-handoff-hero h1,
+.port-handoff-section h2 {
+  margin: 0;
+}
+
+.port-handoff-hero p:last-child,
+.port-handoff-section-heading p:last-child,
+.port-handoff-section > p {
+  margin: 0.45rem 0 0;
+  color: var(--color-text-light-1);
+}
+
+.port-handoff-section {
+  min-width: 0;
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: calc(var(--border-radius) + 3px);
+  background: var(--color-box-body);
+}
+
+.port-current-step {
+  border-top: 3px solid var(--color-primary);
+}
+
+.port-handoff-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.port-clone-panel {
+  display: flex !important;
+  width: 100%;
+  min-width: 0;
+  margin: 1rem 0;
+}
+
+#port-application-handoff .port-clone-panel #repo-clone-url {
+  width: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.port-identity-section .ui.form {
+  margin-top: 1.25rem;
+}
+
+.port-identity-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.port-identity-footer > p {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  max-width: 42rem;
+  margin: 0;
+  color: var(--color-text-light-1);
+  font-size: 0.9rem;
+}
+
+.port-identity-footer > p .svg {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+.port-identity-footer > .button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.port-identity-later {
+  margin-top: 1rem !important;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-secondary);
+  font-size: 0.9rem;
+}
+
+.port-step-complete {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-green);
+  border-radius: var(--border-radius);
+  background: var(--color-green-badge-bg);
+}
+
+.port-step-complete > .svg {
+  flex: 0 0 auto;
+  color: var(--color-green);
+}
+
+.port-identity-alternatives {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.port-identity-alternatives > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  background: var(--color-box-body);
+}
+
+.port-identity-alternatives span {
+  flex: 1;
+  color: var(--color-text-light-1);
+  font-size: 0.9rem;
+}
+
+.port-identity-alternatives a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.port-agent-prompt-box,
+.port-manual-command {
+  overflow: hidden;
+  border: 1px solid var(--color-secondary);
+  border-radius: calc(var(--border-radius) + 2px);
+  background: var(--color-input-background);
+  box-shadow: 0 1px 2px var(--color-shadow);
+}
+
+.port-agent-prompt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--color-secondary);
+  background: var(--color-menu);
+}
+
+.port-agent-prompt-toolbar > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-text-light-1);
+  font-size: 0.85rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.port-agent-prompt-toolbar .button {
+  margin: 0;
+}
+
+.port-agent-prompt-box pre,
+.port-manual-command pre {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 1rem;
+  overflow: auto;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--fonts-monospace);
+  font-size: 0.85rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  white-space: pre-wrap;
+}
+
+.port-agent-prompt-box pre {
+  max-height: 35rem;
+}
+
+.port-agent-prompt-box code,
+.port-manual-command code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.port-handoff-note {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  color: var(--color-text-light-1);
+  font-size: 0.9rem;
+}
+
+.port-manual-command {
+  margin-top: 1rem;
+}
+
+.port-manual-details > summary {
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: 1.05rem;
+  font-weight: var(--font-weight-semibold);
+}
+
+.port-manual-caveat {
+  font-size: 0.9rem;
+}
+
+.port-handoff-actions,
+.port-step-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
 @media (max-width: 600px) {
   .platform-wizard-step {
     font-size: 0.85rem;
@@ -131,5 +478,32 @@
 
   .platform-wizard-step:not(:last-child)::after {
     inset-inline: calc(50% + 1.25rem) calc(-50% + 1.25rem);
+  }
+
+  .port-handoff-hero,
+  .port-identity-footer,
+  .port-handoff-section-heading,
+  .port-agent-prompt-toolbar,
+  .port-handoff-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .port-handoff-stepper,
+  .port-identity-alternatives {
+    grid-template-columns: 1fr;
+  }
+
+  .port-handoff-stepper > li:not(:last-child)::after {
+    top: 2.4rem;
+    bottom: -0.8rem;
+    inset-inline: 0.9rem auto;
+    width: 2px;
+    height: auto;
+  }
+
+  .port-step-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
   }
 }

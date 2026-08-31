@@ -107,23 +107,39 @@ PLATFORM_SYNC_PUBLISHER_URL=http://localhost:8090 \
 go run ./cmd/platform-manifest-sync
 ```
 
-## Port an existing platform
+## Port an existing application
 
-The Port an existing platform wizard creates a fresh, staged GitW3 repository while preserving the
-existing platform eName, PlatformProfile envelope, eVault records, and per-version PPA history. The
-applicant provides the existing eName and platform token, then signs a canonical migration statement
-with the eID wallet connected to GitW3. The raw token is never persisted; only its SHA-256 fingerprint
-is stored in the repository manifest. A profile with explicit authors may only be ported by one of
-those author eNames. Authorless legacy profiles enter the site-admin review queue at
-`/repo/create/port/reviews`.
+The **Port an existing app** choice creates an empty GitW3 repository first. It does not import code or
+create an initial commit. The resulting handoff page provides the destination's HTTPS/SSH remote,
+minimal manual Git commands, and a copyable prompt for the coding agent already working in the
+application.
 
-Staging does not write to W3DS. The repository administrator pushes the existing code and publishes a
-stable Git release matching the preserved profile version. The W3DS tab then asks for the original
-token again before its explicit Activate migration operation. Activation re-fetches the source
-profile and rejects drift, checks that no other GitW3 repository manages the eName, atomically records
-GitW3 as the Registry manager, revokes the legacy token for PlatformProfile writes, and publishes to
-the original envelope ID. An interrupted activation stays retryable and never creates a second
-Marketplace listing.
+The handoff is a server-enforced three-step flow:
+
+1. **Push application.** Only the coding-agent prompt, destination remote, and optional manual Git
+   commands are shown while the repository is empty. The prompt tells the agent to preserve the existing
+   history and remote, install the W3DS skill, inspect any existing `.w3ds` state, integrate a new manifest
+   only when the application has no W3DS identity, and make GitW3 the new `origin` before pushing. Existing
+   eNames must be preserved rather than claimed through new-platform onboarding.
+2. **Migrate eName.** GitW3 unlocks the eName and token form only after a pushed commit is present. It sends
+   the raw token to the publisher for one-time inspection, stores only its fingerprint, checks that the
+   connected W3DS wallet is an author of the source profile, and asks that wallet to sign a statement bound
+   to the already-created repository. Once verified, GitW3 commits the staged migration proof into
+   `.w3ds/platform.json`; it preserves a compatible manifest already pushed by the application. A
+   conflicting eName or invalid manifest stops the migration instead of being replaced.
+3. **Activate cutover.** Only a staged migration unlocks the activation link. The public listing remains
+   under its existing management until an administrator reviews the staged result, publishes the required
+   stable release, enters the original token again, and explicitly activates the cutover from the
+   repository's W3DS page.
+
+The migration endpoint also rejects attempts to start step 2 while the repository is empty. A browser
+submission that misses the JavaScript signing client redirects back to the handoff with an error instead
+of exposing an API response or processing the token.
+
+The handoff stays available at `/<owner>/<repository>/onboarding/port`, including after the application
+has been pushed, so the signed eName migration can happen immediately or later. The ordinary Forgejo
+server-side importer at `/repo/migrate` remains available for advanced imports, but it is not the guided
+GitW3 application-porting flow.
 
 ## Register the system webhook
 

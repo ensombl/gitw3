@@ -66,6 +66,22 @@ func (f *CreateRepoForm) Validate(req *http.Request, errs binding.Errors) bindin
 	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
 }
 
+// PortApplicationForm contains only the destination fields needed to create
+// an empty repository for an existing application.
+type PortApplicationForm struct {
+	UID              int64  `binding:"Required"`
+	RepoName         string `binding:"Required;AlphaDashDot;MaxSize(100)" preprocess:"TrimSpace"`
+	Private          bool
+	DefaultBranch    string `binding:"GitRefName;MaxSize(100)"`
+	ObjectFormatName string
+}
+
+// Validate validates an existing application's empty GitW3 destination.
+func (f *PortApplicationForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
+	ctx := context.GetValidateContext(req)
+	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
+}
+
 // UpdatePlatformForm contains the editable W3DS platform profile fields.
 type UpdatePlatformForm struct {
 	PlatformDisplayName string   `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`

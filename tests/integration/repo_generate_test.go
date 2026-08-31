@@ -202,6 +202,91 @@ func TestPlatformCreateChoice(t *testing.T) {
 	htmlDoc.AssertElement(t, "a[href='/repo/create/port']", true)
 }
 
+func TestPortExistingApplicationCreatesEmptyDestination(t *testing.T) {
+	defer tests.PrepareTestEnv(t)()
+	session := loginUser(t, "user1")
+	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{Name: "user1"})
+
+	formResp := session.MakeRequest(t, NewRequest(t, "GET", "/repo/create/port"), http.StatusOK)
+	formPage := NewHTMLParser(t, formResp.Body)
+	form := formPage.doc.Find("form#platform-port-form[action='/repo/create/port']")
+	assert.Equal(t, 1, form.Length())
+	formPage.AssertDropdownHasSelectedOption(t, "uid", strconv.FormatInt(user.ID, 10))
+	assert.Equal(t, 1, form.Find("input[name='repo_name']").Length())
+	assert.Equal(t, 1, form.Find("input[name='default_branch']").Length())
+	assert.Equal(t, 0, form.Find("input[name='ename'], input[name='token']").Length())
+	assert.Equal(t, 0, formPage.doc.Find("#platform-port-signing-modal").Length())
+
+	repoName := "ported-application"
+	create := NewRequestWithValues(t, "POST", "/repo/create/port", map[string]string{
+		"uid":                strconv.FormatInt(user.ID, 10),
+		"repo_name":          repoName,
+		"default_branch":     "main",
+		"object_format_name": "sha1",
+	})
+	createResp := session.MakeRequest(t, create, http.StatusSeeOther)
+	redirect := "/" + user.Name + "/" + repoName + "/onboarding/port"
+	assert.Equal(t, redirect, test.RedirectURL(createResp))
+
+	repository := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{OwnerID: user.ID, Name: repoName})
+	assert.True(t, repository.IsEmpty)
+	assert.Equal(t, "main", repository.DefaultBranch)
+
+	handoffResp := session.MakeRequest(t, NewRequest(t, "GET", redirect), http.StatusOK)
+	handoff := NewHTMLParser(t, handoffResp.Body)
+	handoff.AssertElement(t, "#port-application-handoff", true)
+	handoff.AssertElement(t, "button[data-clipboard-target='#port-agent-prompt']", true)
+	handoff.AssertElement(t, "#repo-clone-https", true)
+	handoff.AssertElement(t, ".port-handoff-stepper li.active:nth-child(1)", true)
+	handoff.AssertElement(t, ".port-handoff-stepper li.locked:nth-child(2)", true)
+	handoff.AssertElement(t, "form#platform-identity-migration-form", false)
+	handoff.AssertElement(t, "#platform-port-signing-modal", false)
+	prompt := handoff.doc.Find("#port-agent-prompt").Text()
+	assert.Contains(t, prompt, setting.AppURL+user.Name+"/"+repoName+".git")
+	assert.Contains(t, prompt, "GitW3 default branch: main")
+	assert.Contains(t, prompt, ".w3ds/platform.json")
+	assert.Contains(t, prompt, "ename` set to null")
+	assert.Contains(t, prompt, "first available upstream-style name")
+	assert.NotContains(t, strings.ToLower(prompt), "legacy-token")
+	emptyResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s", user.Name, repoName), http.StatusOK)
+	empty := NewHTMLParser(t, emptyResp.Body)
+	empty.AssertElement(t, "a[href='"+redirect+"']", true)
+
+	migrateBeforePush := NewRequestWithValues(t, "POST", redirect+"/migrate", map[string]string{
+		"ename": "@existing-platform",
+		"token": "legacy-token",
+	}).SetHeader("Accept", "application/json")
+	migrateResp := session.MakeRequest(t, migrateBeforePush, http.StatusConflict)
+	assert.Contains(t, migrateResp.Body.String(), "Push the existing application")
+
+	nativeSubmit := NewRequestWithValues(t, "POST", redirect+"/migrate", map[string]string{
+		"ename": "@existing-platform",
+		"token": "legacy-token",
+	})
+	nativeResp := session.MakeRequest(t, nativeSubmit, http.StatusSeeOther)
+	assert.Equal(t, redirect, test.RedirectURL(nativeResp))
+	assert.NotContains(t, nativeResp.Body.String(), "identity_push_required")
+
+	applicationCheckout := t.TempDir()
+	doGitInitTestRepository(applicationCheckout, git.Sha1ObjectFormat)(t)
+	_, _, err := git.NewCommand(t.Context(), "fetch").AddDynamicArguments(applicationCheckout, "master:main").RunStdString(&git.RunOpts{Dir: repository.RepoPath()})
+	require.NoError(t, err)
+	repository.IsEmpty = false
+	require.NoError(t, repo_model.UpdateRepositoryCols(t.Context(), repository, "is_empty"))
+
+	readyResp := session.MakeRequest(t, NewRequest(t, "GET", redirect), http.StatusOK)
+	ready := NewHTMLParser(t, readyResp.Body)
+	ready.AssertElement(t, "#port-agent-prompt", false)
+	ready.AssertElement(t, ".port-handoff-stepper li.completed:nth-child(1)", true)
+	ready.AssertElement(t, ".port-handoff-stepper li.active:nth-child(2)", true)
+	identityForm := ready.doc.Find("form#platform-identity-migration-form[action='" + redirect + "/migrate'][data-platform-port]")
+	assert.Equal(t, 1, identityForm.Length())
+	assert.Equal(t, 1, identityForm.Find("input[name='ename']").Length())
+	assert.Equal(t, 1, identityForm.Find("input[name='token'][type='password']").Length())
+	ready.AssertElement(t, "#platform-port-signing-modal", true)
+
+}
+
 func TestPlatformCreateCommitsManifest(t *testing.T) {
 	defer tests.PrepareTestEnv(t)()
 	useTestDomainOntology(t)

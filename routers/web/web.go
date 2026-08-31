@@ -1181,7 +1181,7 @@ func registerRoutes(m *web.Route) {
 		m.Get("/create/new", repo.CreatePlatform)
 		m.Post("/create/new", web.Bind(forms.CreateRepoForm{}), repo.CreatePlatformPost)
 		m.Get("/create/port", repo.PortPlatform)
-		m.Post("/create/port", repo.PortPlatformStart)
+		m.Post("/create/port", web.Bind(forms.PortApplicationForm{}), repo.PortPlatformStart)
 		m.Get("/create/port/reviews", repo.PlatformMigrationReviews)
 		m.Post("/create/port/reviews/{session}/approve", repo.ApprovePlatformMigration)
 		m.Get("/create/port/{session}", repo.PlatformMigrationStatus)
@@ -1382,6 +1382,8 @@ func registerRoutes(m *web.Route) {
 
 	// Grouping for those endpoints that do require authentication
 	m.Group("/{username}/{reponame}", func() {
+		m.Get("/onboarding/port", reqRepoCodeWriter, repo.PortApplicationHandoff)
+		m.Post("/onboarding/port/migrate", reqRepoCodeWriter, repo.StartPlatformIdentityMigration)
 		if !setting.Repository.DisableForks {
 			m.Combo("/fork", reqRepoCodeReader).Get(repo.Fork).
 				Post(web.Bind(forms.CreateRepoForm{}), repo.ForkPost)

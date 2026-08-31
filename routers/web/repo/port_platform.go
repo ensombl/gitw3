@@ -16,20 +16,29 @@ import (
 	"time"
 
 	"forgejo.org/models/organization"
+	perm_model "forgejo.org/models/perm"
+	access_model "forgejo.org/models/perm/access"
 	quota_model "forgejo.org/models/quota"
 	repo_model "forgejo.org/models/repo"
+	unit_model "forgejo.org/models/unit"
 	user_model "forgejo.org/models/user"
 	w3ds_model "forgejo.org/models/w3ds"
+	"forgejo.org/modules/base"
 	"forgejo.org/modules/git"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/timeutil"
 	"forgejo.org/modules/w3ds"
+	"forgejo.org/modules/web"
 	"forgejo.org/services/context"
+	"forgejo.org/services/forms"
 	repo_service "forgejo.org/services/repository"
+	files_service "forgejo.org/services/repository/files"
 )
 
 const platformMigrationSigningLifetime = 15 * time.Minute
+
+const tplPortApplicationHandoff base.TplName = "repo/port_application_handoff"
 
 type migrationInspection struct {
 	EName             string          `json:"ename"`
@@ -64,6 +73,8 @@ func preparePortPlatformPage(ctx *context.Context, ownerID int64) *user_model.Us
 	ctx.Data["default_branch"] = setting.Repository.DefaultBranch
 	ctx.Data["CanCreateRepo"] = ctx.Doer.CanCreateRepo()
 	ctx.Data["MaxCreationLimit"] = ctx.Doer.MaxCreationLimit()
+	ctx.Data["SupportedObjectFormats"] = git.SupportedObjectFormats
+	ctx.Data["DefaultObjectFormat"] = git.Sha1ObjectFormat
 	owner := checkContextUser(ctx, ownerID)
 	if !ctx.Written() {
 		ctx.Data["ContextUser"] = owner
@@ -79,77 +90,137 @@ func PortPlatform(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplPortPlatform)
 }
 
+// PortPlatformStart creates an empty GitW3 destination for an existing
+// application. Moving the Git history and adding W3DS metadata are deliberately
+// deferred to the post-creation handoff page.
 func PortPlatformStart(ctx *context.Context) {
-	ownerID := ctx.FormInt64("uid")
-	owner := preparePortPlatformPage(ctx, ownerID)
+	form := web.GetForm(ctx).(*forms.PortApplicationForm)
+	owner := preparePortPlatformPage(ctx, form.UID)
 	if ctx.Written() {
 		return
 	}
 	if owner == nil || !ctx.CheckQuota(quota_model.LimitSubjectSizeReposAll, owner.ID, owner.Name) {
 		return
 	}
+	if ctx.HasError() {
+		ctx.HTML(http.StatusOK, tplPortPlatform)
+		return
+	}
+
+	repository, err := repo_service.CreateRepository(ctx, ctx.Doer, owner, repo_service.CreateRepoOptions{
+		Name:             form.RepoName,
+		IsPrivate:        form.Private || setting.Repository.ForcePrivate,
+		DefaultBranch:    form.DefaultBranch,
+		AutoInit:         false,
+		TrustModel:       repo_model.DefaultTrustModel,
+		ObjectFormatName: form.ObjectFormatName,
+	})
+	if err != nil {
+		handleCreateError(ctx, owner, err, "PortPlatformStart", tplPortPlatform, form)
+		return
+	}
+
+	log.Trace("Empty repository created for existing application [%d]: %s/%s", repository.ID, owner.Name, repository.Name)
+	ctx.Redirect(repository.Link() + "/onboarding/port")
+}
+
+// PortApplicationHandoff renders the reusable instructions for moving an
+// existing application into its GitW3 destination.
+func PortApplicationHandoff(ctx *context.Context) {
+	ctx.Data["Title"] = ctx.Tr("platform.port.handoff_title")
+	ctx.Data["PageIsViewCode"] = true
+	ctx.Data["PortPushComplete"] = !ctx.Repo.Repository.IsEmpty
+	if !ctx.Repo.Repository.IsEmpty {
+		manifest, _, err := loadPlatformManifestForRepository(ctx, ctx.Repo.Repository)
+		if err != nil {
+			log.Warn("Load port handoff manifest for repository %d: %v", ctx.Repo.Repository.ID, err)
+			ctx.Data["PortManifestInvalid"] = true
+		} else if manifest != nil && manifest.Migration != nil {
+			ctx.Data["PortMigrationStaged"] = manifest.Migration.Status == "staged" || manifest.Migration.Status == "activating"
+			ctx.Data["PortMigrationActive"] = manifest.Migration.Status == "active"
+		}
+	}
+	ctx.HTML(http.StatusOK, tplPortApplicationHandoff)
+}
+
+// StartPlatformIdentityMigration starts the signed transfer of an existing
+// W3DS identity into the repository that was already created for the app.
+func StartPlatformIdentityMigration(ctx *context.Context) {
+	repository := ctx.Repo.Repository
+	if !strings.Contains(ctx.Req.Header.Get("Accept"), "application/json") {
+		portIdentityMigrationError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.port.javascript_required"))
+		return
+	}
+	if repository.IsEmpty {
+		portIdentityMigrationError(ctx, http.StatusConflict, ctx.Locale.TrString("platform.port.identity_push_required"))
+		return
+	}
 	signerEName, err := w3dsENameForUser(ctx, ctx.Doer)
 	if err != nil || signerEName == "" {
-		migrationJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.port.wallet_required"))
+		portIdentityMigrationError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.port.wallet_required"))
 		return
 	}
 	ename := strings.TrimSpace(ctx.FormString("ename"))
 	token := strings.TrimSpace(ctx.FormString("token"))
-	repositoryName := strings.TrimSpace(ctx.FormString("repo_name"))
-	defaultBranch := strings.TrimSpace(ctx.FormString("default_branch"))
-	if ename == "" || token == "" || repositoryName == "" || defaultBranch == "" {
-		migrationJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.port.required"))
-		return
-	}
-	if len(repositoryName) > 100 || repo_model.IsUsableRepoName(repositoryName) != nil {
-		migrationJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("form.enterred_invalid_repo_name"))
+	if ename == "" || token == "" {
+		portIdentityMigrationError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.port.required"))
 		return
 	}
 	var inspection migrationInspection
 	if err := callPlatformPublisher(ctx, http.MethodPost, "/api/v1/platforms/migrations/inspect", map[string]string{"ename": ename, "token": token}, &inspection); err != nil {
 		log.Warn("Inspect platform migration for %s: %v", ename, err)
-		migrationJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.port.authorization_failed"))
+		portIdentityMigrationError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.port.authorization_failed"))
 		return
 	}
 	if len(inspection.AuthorENames) > 0 && !slices.Contains(inspection.AuthorENames, signerEName) {
-		migrationJSONError(ctx, http.StatusForbidden, ctx.Locale.TrString("platform.port.not_author"))
+		portIdentityMigrationError(ctx, http.StatusForbidden, ctx.Locale.TrString("platform.port.not_author"))
 		return
 	}
 	var source sourcePlatformProfile
 	if err := json.Unmarshal(inspection.Profile, &source); err != nil || source.EName != inspection.EName {
-		migrationJSONError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.port.profile_invalid"))
+		portIdentityMigrationError(ctx, http.StatusBadRequest, ctx.Locale.TrString("platform.port.profile_invalid"))
+		return
+	}
+	existingManifest, _, err := loadPlatformManifestForRepository(ctx, repository)
+	if err != nil {
+		log.Warn("Load existing platform manifest for repository %d: %v", repository.ID, err)
+		portIdentityMigrationError(ctx, http.StatusConflict, ctx.Locale.TrString("platform.port.identity_manifest_invalid"))
+		return
+	}
+	if existingManifest != nil && existingManifest.EName != nil && strings.TrimSpace(*existingManifest.EName) != "" && strings.TrimSpace(*existingManifest.EName) != inspection.EName {
+		portIdentityMigrationError(ctx, http.StatusConflict, ctx.Locale.TrString("platform.port.identity_conflict"))
 		return
 	}
 
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
-		migrationJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.port.signing_failed"))
+		portIdentityMigrationError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.port.signing_failed"))
 		return
 	}
 	now := time.Now().UTC()
 	statement := w3ds.PlatformMigrationStatement{
 		Type: w3ds.PlatformMigrationStatementType, SchemaVersion: 1,
 		PlatformEName: inspection.EName, ProfileEnvelopeID: inspection.ProfileEnvelopeID, ProfileDigest: inspection.ProfileDigest,
-		TargetInstance: strings.TrimRight(setting.AppURL, "/"), TargetOwner: owner.Name, TargetRepository: repositoryName,
+		TargetInstance: strings.TrimRight(setting.AppURL, "/"), TargetOwner: repository.OwnerName, TargetRepository: repository.Name,
 		SignerEName: signerEName, IssuedAt: now.Format(time.RFC3339), Nonce: base64.RawURLEncoding.EncodeToString(nonce),
 	}
 	payload, err := statement.SigningPayload()
 	if err != nil {
-		migrationJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.port.signing_failed"))
+		portIdentityMigrationError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.port.signing_failed"))
 		return
 	}
 	statementJSON, _ := json.Marshal(statement)
 	authorsJSON, _ := json.Marshal(inspection.AuthorENames)
 	expiresAt := now.Add(platformMigrationSigningLifetime)
 	if err := w3ds_model.CreatePlatformMigrationSession(ctx, &w3ds_model.PlatformMigrationSession{
-		ID: payload, UserID: ctx.Doer.ID, OwnerID: owner.ID, RepositoryName: repositoryName,
-		DefaultBranch: defaultBranch, IsPrivate: ctx.FormBool("private") || setting.Repository.ForcePrivate,
+		ID: payload, UserID: ctx.Doer.ID, OwnerID: repository.OwnerID, RepositoryID: repository.ID, RepositoryName: repository.Name,
+		DefaultBranch: repository.DefaultBranch, IsPrivate: repository.IsPrivate,
 		EName: inspection.EName, ProfileEnvelopeID: inspection.ProfileEnvelopeID, ProfileDigest: inspection.ProfileDigest,
 		TokenFingerprint: inspection.TokenFingerprint, Profile: string(inspection.Profile), AuthorENames: string(authorsJSON),
 		Statement: string(statementJSON), Status: w3ds_model.MigrationSigningPending, ExpiresUnix: timeutil.TimeStamp(expiresAt.Unix()),
 	}); err != nil {
 		log.Error("Create platform migration signing session: %v", err)
-		migrationJSONError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.port.signing_failed"))
+		portIdentityMigrationError(ctx, http.StatusInternalServerError, ctx.Locale.TrString("platform.port.signing_failed"))
 		return
 	}
 	callbackURL := strings.TrimRight(setting.AppURL, "/") + "/w3ds/migrations/callback"
@@ -222,7 +293,7 @@ func PlatformMigrationCallback(ctx *context.Context) {
 		session.Status = w3ds_model.MigrationSigningRejected
 		session.Failure = err.Error()
 		_ = w3ds_model.UpdatePlatformMigrationSession(ctx, session, "proof", "status", "failure")
-		migrationJSONError(ctx, http.StatusConflict, "GitW3 could not create the staged repository.")
+		migrationJSONError(ctx, http.StatusConflict, ctx.Locale.TrString("platform.port.staging_failed"))
 		return
 	}
 	ctx.JSON(http.StatusOK, map[string]bool{"ok": true})
@@ -237,7 +308,7 @@ func PlatformMigrationStatus(ctx *context.Context) {
 	response := map[string]any{"status": session.Status}
 	if session.Status == w3ds_model.MigrationSigningCompleted && session.RepositoryID > 0 {
 		if repository, err := repo_model.GetRepositoryByID(ctx, session.RepositoryID); err == nil {
-			response["redirect"] = repository.Link() + "/w3ds"
+			response["redirect"] = repository.Link() + "/onboarding/port"
 		}
 	}
 	if session.Status == w3ds_model.MigrationSigningReview {
@@ -315,6 +386,12 @@ func completePlatformMigration(ctx gocontext.Context, session *w3ds_model.Platfo
 	if err != nil {
 		return err
 	}
+	if session.RepositoryID > 0 {
+		return completeRepositoryPlatformMigration(ctx, session, user)
+	}
+
+	// Keep compatibility with migration sessions created before the port flow
+	// became destination-first. Those sessions still create their repository.
 	owner, err := user_model.GetUserByID(ctx, session.OwnerID)
 	if err != nil {
 		return err
@@ -367,6 +444,106 @@ func completePlatformMigration(ctx gocontext.Context, session *w3ds_model.Platfo
 	return w3ds_model.UpdatePlatformMigrationSession(ctx, session, "repository_id", "status", "failure")
 }
 
+func completeRepositoryPlatformMigration(ctx gocontext.Context, session *w3ds_model.PlatformMigrationSession, user *user_model.User) error {
+	repository, err := repo_model.GetRepositoryByID(ctx, session.RepositoryID)
+	if err != nil {
+		return err
+	}
+	if repository.OwnerID != session.OwnerID || repository.Name != session.RepositoryName {
+		return errors.New("migration destination no longer matches the signed repository")
+	}
+	canWrite, err := access_model.HasAccessUnit(ctx, user, repository, unit_model.TypeCode, perm_model.AccessModeWrite)
+	if err != nil {
+		return err
+	}
+	if !canWrite {
+		return errors.New("the applicant can no longer write to the migration repository")
+	}
+	if repository.IsEmpty {
+		return errors.New("push the application before staging its platform identity")
+	}
+
+	existing, commitID, err := loadPlatformManifestForRepository(ctx, repository)
+	if err != nil {
+		return err
+	}
+	var source sourcePlatformProfile
+	var proof w3ds.PlatformMigrationProof
+	var authors []string
+	if err := json.Unmarshal([]byte(session.Profile), &source); err != nil {
+		return err
+	}
+	if err := json.Unmarshal([]byte(session.Proof), &proof); err != nil {
+		return err
+	}
+	_ = json.Unmarshal([]byte(session.AuthorENames), &authors)
+
+	manifest := migratedPlatformManifest(source, session, authors, &proof)
+	operation := "create"
+	if existing != nil {
+		if existing.EName != nil && strings.TrimSpace(*existing.EName) != "" && strings.TrimSpace(*existing.EName) != session.EName {
+			return errors.New("the repository manifest belongs to a different W3DS identity")
+		}
+		manifest = existing
+		ename := session.EName
+		manifest.EName = &ename
+		manifest.Migration = platformMigrationMetadata(session, authors, &proof)
+		operation = "update"
+	}
+	if err := manifest.Validate(!setting.IsProd); err != nil {
+		return err
+	}
+	content, err := manifest.Marshal()
+	if err != nil {
+		return err
+	}
+	if _, err := files_service.ChangeRepoFiles(ctx, repository, user, &files_service.ChangeRepoFilesOptions{
+		LastCommitID: commitID,
+		OldBranch:    repository.DefaultBranch,
+		NewBranch:    repository.DefaultBranch,
+		Message:      "chore: stage W3DS platform migration",
+		Files: []*files_service.ChangeRepoFile{{
+			Operation:     operation,
+			TreePath:      w3ds.PlatformManifestPath,
+			ContentReader: strings.NewReader(string(content)),
+		}},
+	}); err != nil {
+		return err
+	}
+
+	session.Status = w3ds_model.MigrationSigningCompleted
+	session.Failure = ""
+	return w3ds_model.UpdatePlatformMigrationSession(ctx, session, "status", "failure")
+}
+
+func migratedPlatformManifest(source sourcePlatformProfile, session *w3ds_model.PlatformMigrationSession, authors []string, proof *w3ds.PlatformMigrationProof) *w3ds.PlatformManifest {
+	ename := session.EName
+	return &w3ds.PlatformManifest{
+		SchemaVersion: w3ds.PlatformManifestVersion, PlatformName: source.PlatformName, DisplayName: source.DisplayName,
+		Description: source.Description, Version: source.Version, EName: &ename, URL: source.URL, LogoURL: source.LogoURL,
+		Domains: source.Domains, Category: source.Category, InSubmission: source.InSubmission, SubmissionVersion: source.SubmissionVersion,
+		SubmissionProof: source.SubmissionProof, SubmissionHistory: source.SubmissionHistory, IsDraft: source.IsDraft,
+		Migration: platformMigrationMetadata(session, authors, proof),
+	}
+}
+
+func platformMigrationMetadata(session *w3ds_model.PlatformMigrationSession, authors []string, proof *w3ds.PlatformMigrationProof) *w3ds.PlatformMigration {
+	return &w3ds.PlatformMigration{
+		Status: "staged", ProfileEnvelopeID: session.ProfileEnvelopeID, ProfileDigest: session.ProfileDigest,
+		LegacyTokenFingerprint: session.TokenFingerprint, SourceProfile: json.RawMessage(session.Profile),
+		SourceAuthorENames: authors, Proof: proof,
+	}
+}
+
 func migrationJSONError(ctx *context.Context, status int, message string) {
 	ctx.JSON(status, map[string]string{"message": message})
+}
+
+func portIdentityMigrationError(ctx *context.Context, status int, message string) {
+	if strings.Contains(ctx.Req.Header.Get("Accept"), "application/json") {
+		migrationJSONError(ctx, status, message)
+		return
+	}
+	ctx.Flash.Error(message)
+	ctx.Redirect(ctx.Repo.Repository.Link() + "/onboarding/port")
 }
