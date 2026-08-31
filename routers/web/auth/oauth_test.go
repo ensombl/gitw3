@@ -128,6 +128,20 @@ func TestEnrichW3DSUserFromAAASFailurePreservesOIDCProfile(t *testing.T) {
 	assert.Equal(t, "https://oidc.example/avatar.png", user.AvatarURL)
 }
 
+func TestW3DSOnlyAuthenticationRejectsOtherOAuthProviders(t *testing.T) {
+	defer test.MockVariableValue(&setting.W3DSIdentity.OnlyAuthentication, true)()
+
+	ctx, resp := contexttest.MockContext(t, "/user/oauth2/GitHub")
+	ctx.SetParams(":provider", "GitHub")
+	SignInOAuth(ctx)
+	assert.Equal(t, http.StatusForbidden, resp.Code)
+
+	ctx, resp = contexttest.MockContext(t, "/user/oauth2/GitHub/callback")
+	ctx.SetParams(":provider", "GitHub")
+	SignInOAuthCallback(ctx)
+	assert.Equal(t, http.StatusForbidden, resp.Code)
+}
+
 func TestOIDCWellKnownDisabled(t *testing.T) {
 	ctx, resp := contexttest.MockContext(t, "/openid-configuration")
 	defer test.MockVariableValue(&setting.OAuth2.Enabled, false)()

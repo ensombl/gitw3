@@ -13,10 +13,12 @@ var W3DSIdentity = struct {
 	AwarenessAPIKey       string
 	AvatarAllowedHostList string
 	Timeout               time.Duration
+	OnlyAuthentication    bool
 }{
 	AwarenessURL:          productionAwarenessURL,
 	AvatarAllowedHostList: "external",
 	Timeout:               5 * time.Second,
+	OnlyAuthentication:    true,
 }
 
 func loadW3DSIdentityFrom(rootCfg ConfigProvider) {
@@ -25,4 +27,5 @@ func loadW3DSIdentityFrom(rootCfg ConfigProvider) {
 	W3DSIdentity.AwarenessAPIKey = section.Key("AWARENESS_API_KEY").MustString("")
 	W3DSIdentity.AvatarAllowedHostList = section.Key("AVATAR_ALLOWED_HOST_LIST").MustString("external")
 	W3DSIdentity.Timeout = section.Key("TIMEOUT").MustDuration(5 * time.Second)
+	W3DSIdentity.OnlyAuthentication = section.Key("ONLY_AUTHENTICATION").MustBool(true)
 }

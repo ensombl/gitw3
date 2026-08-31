@@ -106,7 +106,7 @@ func optionsCorsHandler() func(next http.Handler) http.Handler {
 // earlier authentication success would prevent later authentication methods from being attempted.
 func buildAuthGroup() *auth_method.Group {
 	group := auth_method.NewGroup()
-	if setting.Service.EnableReverseProxyAuth {
+	if setting.Service.EnableReverseProxyAuth && !setting.W3DSIdentity.OnlyAuthentication {
 		// reverseproxy should before Session, otherwise the header will be ignored if user has login
 		group.Add(&auth_method.ReverseProxy{
 			CreateSession: true,
@@ -679,7 +679,7 @@ func registerRoutes(m *web.Route) {
 			m.Combo("/login/openid").
 				Get(auth.SignInOpenID).
 				Post(web.Bind(forms.SignInOpenIDForm{}), auth.SignInOpenIDPost)
-		}, openIDSignInEnabled)
+		}, auth.RejectAlternativeAuthentication, openIDSignInEnabled)
 		m.Group("/openid", func() {
 			m.Combo("/connect").
 				Get(auth.ConnectOpenID).
@@ -689,12 +689,12 @@ func registerRoutes(m *web.Route) {
 					Get(auth.RegisterOpenID, openIDSignUpEnabled).
 					Post(web.Bind(forms.SignUpOpenIDForm{}), auth.RegisterOpenIDPost)
 			}, openIDSignUpEnabled)
-		}, openIDSignInEnabled)
+		}, auth.RejectAlternativeAuthentication, openIDSignInEnabled)
 		m.Get("/sign_up", auth.SignUp)
 		m.Post("/sign_up", web.Bind(forms.RegisterForm{}), auth.SignUpPost)
-		m.Get("/link_account", linkAccountEnabled, auth.LinkAccount)
-		m.Post("/link_account_signin", linkAccountEnabled, web.Bind(forms.SignInForm{}), auth.LinkAccountPostSignIn)
-		m.Post("/link_account_signup", linkAccountEnabled, web.Bind(forms.RegisterForm{}), auth.LinkAccountPostRegister)
+		m.Get("/link_account", auth.RejectAlternativeAuthentication, linkAccountEnabled, auth.LinkAccount)
+		m.Post("/link_account_signin", auth.RejectAlternativeAuthentication, linkAccountEnabled, web.Bind(forms.SignInForm{}), auth.LinkAccountPostSignIn)
+		m.Post("/link_account_signup", auth.RejectAlternativeAuthentication, linkAccountEnabled, web.Bind(forms.RegisterForm{}), auth.LinkAccountPostRegister)
 		m.Group("/two_factor", func() {
 			m.Get("", auth.TwoFactor)
 			m.Post("", web.Bind(forms.TwoFactorAuthForm{}), auth.TwoFactorPost)
@@ -767,8 +767,8 @@ func registerRoutes(m *web.Route) {
 				m.Post("", web.Bind(forms.AddOpenIDForm{}), security.OpenIDPost)
 				m.Post("/delete", security.DeleteOpenID)
 				m.Post("/toggle_visibility", security.ToggleOpenIDVisibility)
-			}, openIDSignInEnabled)
-			m.Post("/account_link", linkAccountEnabled, security.DeleteAccountLink)
+			}, auth.RejectAlternativeAuthentication, openIDSignInEnabled)
+			m.Post("/account_link", auth.RejectAlternativeAuthentication, linkAccountEnabled, security.DeleteAccountLink)
 		}, requiredTwoFactor)
 
 		m.Group("/applications", func() {
@@ -865,10 +865,10 @@ func registerRoutes(m *web.Route) {
 		m.Post("/activate", auth.ActivatePost)
 		m.Any("/activate_email", auth.ActivateEmail)
 		m.Get("/avatar/{username}/{size}", user.AvatarByUserName)
-		m.Get("/recover_account", auth.ResetPasswd)
-		m.Post("/recover_account", auth.ResetPasswdPost)
-		m.Get("/forgot_password", auth.ForgotPasswd)
-		m.Post("/forgot_password", auth.ForgotPasswdPost)
+		m.Get("/recover_account", auth.RejectAlternativeAuthentication, auth.ResetPasswd)
+		m.Post("/recover_account", auth.RejectAlternativeAuthentication, auth.ResetPasswdPost)
+		m.Get("/forgot_password", auth.RejectAlternativeAuthentication, auth.ForgotPasswd)
+		m.Post("/forgot_password", auth.RejectAlternativeAuthentication, auth.ForgotPasswdPost)
 		m.Post("/logout", auth.SignOut)
 		m.Get("/task/{task}", reqSignIn, user.TaskStatus)
 		m.Get("/stopwatches", reqSignIn, user.GetStopwatches)

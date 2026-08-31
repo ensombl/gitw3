@@ -131,6 +131,10 @@ func InitTest() {
 	setting.AppPath = executablePath
 
 	unittest.InitSettings()
+	// Integration helpers authenticate fixture users with local passwords. Keep
+	// that test-only mechanism available unless a test explicitly enables the
+	// production W3DS-only policy.
+	setting.W3DSIdentity.OnlyAuthentication = false
 	setting.Repository.DefaultBranch = "master" // many test code still assume that default branch is called "master"
 	_ = util.RemoveAll(repo_module.LocalCopyPath())
 

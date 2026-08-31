@@ -956,6 +956,10 @@ func handleAuthorizeError(ctx *context.Context, authErr AuthorizeError, redirect
 // SignInOAuth handles the OAuth2 login buttons
 func SignInOAuth(ctx *context.Context) {
 	provider := ctx.Params(":provider")
+	if !w3dsAuthenticationProviderAllowed(provider) {
+		ctx.Error(http.StatusForbidden)
+		return
+	}
 
 	authSource, err := auth.GetActiveOAuth2SourceByName(ctx, provider)
 	if err != nil {
@@ -1012,6 +1016,10 @@ func SignInOAuth(ctx *context.Context) {
 // SignInOAuthCallback handles the callback from the given provider
 func SignInOAuthCallback(ctx *context.Context) {
 	provider := ctx.Params(":provider")
+	if !w3dsAuthenticationProviderAllowed(provider) {
+		ctx.Error(http.StatusForbidden)
+		return
+	}
 
 	// If the IdP refused our prompt=none silent re-auth, retry interactively rather than surfacing the error.
 	if isOIDCSilentAuthFailure(ctx.Req.FormValue("error")) {
