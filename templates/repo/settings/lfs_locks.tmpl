@@ -31,7 +31,7 @@
 							<td>
 								<a href="{{$lock.Owner.HomeLink}}">
 									{{ctx.AvatarUtils.Avatar $lock.Owner}}
-									{{$lock.Owner.DisplayName}}
+									{{$lock.Owner.GetUIDisplayName}}
 								</a>
 							</td>
 							<td>{{DateUtils.TimeSince .Created}}</td>

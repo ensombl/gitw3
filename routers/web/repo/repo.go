@@ -243,7 +243,7 @@ func CreatePlatform(ctx *context.Context) {
 
 // CreatePlatformPost creates an initialized repository with a W3DS platform manifest.
 func CreatePlatformPost(ctx *context.Context) {
-	form := web.GetForm(ctx).(*forms.CreateRepoForm)
+	form := web.GetForm(ctx).(*forms.CreatePlatformForm)
 	ctxUser, catalog, ontologyErr := preparePlatformCreatePage(ctx, form.UID, form.PlatformDomains)
 	if ctx.Written() {
 		return
@@ -265,8 +265,14 @@ func CreatePlatformPost(ctx *context.Context) {
 		return
 	}
 
+	repoName, err := availablePlatformRepositoryName(ctx, ctxUser, form.PlatformDisplayName)
+	if err != nil {
+		ctx.ServerError("availablePlatformRepositoryName", err)
+		return
+	}
+
 	manifest := w3ds.NewPlatformManifest(
-		form.PlatformName,
+		repoName,
 		form.PlatformDisplayName,
 		form.PlatformDescription,
 		w3ds.DefaultPlatformVersion,
@@ -284,7 +290,7 @@ func CreatePlatformPost(ctx *context.Context) {
 		readme = "Default"
 	}
 	repo, err := repo_service.CreateRepository(ctx, ctx.Doer, ctxUser, repo_service.CreateRepoOptions{
-		Name:             form.RepoName,
+		Name:             repoName,
 		Description:      form.PlatformDescription,
 		Gitignores:       form.Gitignores,
 		License:          form.License,
@@ -307,6 +313,25 @@ func CreatePlatformPost(ctx *context.Context) {
 		redirect += "?ai=1"
 	}
 	ctx.Redirect(redirect)
+}
+
+func availablePlatformRepositoryName(ctx *context.Context, owner *user_model.User, displayName string) (string, error) {
+	baseName := w3ds.SlugFromDisplayName(displayName)
+	for suffix := 1; suffix <= 10000; suffix++ {
+		candidate := baseName
+		if suffix > 1 {
+			suffixText := fmt.Sprintf("-%d", suffix)
+			candidate = strings.TrimRight(baseName[:min(len(baseName), 100-len(suffixText))], "-") + suffixText
+		}
+		exists, err := repo_model.IsRepositoryModelOrDirExist(ctx, owner, candidate)
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return candidate, nil
+		}
+	}
+	return "", errors.New("could not allocate a repository name from the display name")
 }
 
 func handleCreateError(ctx *context.Context, owner *user_model.User, err error, name string, tpl base.TplName, form any) {

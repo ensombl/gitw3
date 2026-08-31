@@ -35,7 +35,7 @@
 						{{else if .ManualActivationOnly}}
 							<p class="center">{{ctx.Locale.Tr "auth.manual_activation_only"}}</p>
 						{{else}}
-							<p>{{ctx.Locale.Tr "auth.has_unconfirmed_mail" .SignedUser.Name .SignedUser.Email}}</p>
+							<p>{{ctx.Locale.Tr "auth.has_unconfirmed_mail" .SignedUser.DisplayUsername .SignedUser.Email}}</p>
 							<div class="divider"></div>
 							<details class="inline field">
 								<summary>{{ctx.Locale.Tr "auth.change_unconfirmed_email_summary"}}</summary>

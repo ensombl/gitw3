@@ -644,7 +644,7 @@
 						{{template "shared/user/authorlink" .Poster}}
 						{{$reviewerName := ""}}
 						{{if eq .Review.OriginalAuthor ""}}
-							{{$reviewerName = .Review.Reviewer.Name}}
+							{{$reviewerName = .Review.Reviewer.GetUIDisplayName}}
 						{{else}}
 							{{$reviewerName = .Review.OriginalAuthor}}
 						{{end}}

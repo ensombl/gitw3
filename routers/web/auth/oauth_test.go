@@ -5,6 +5,7 @@ package auth
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -22,6 +23,7 @@ import (
 	"forgejo.org/services/contexttest"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/markbates/goth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -92,6 +94,52 @@ func TestEncodeCodeChallenge(t *testing.T) {
 	codeChallenge, err := encodeCodeChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
 	require.NoError(t, err)
 	assert.Equal(t, "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", codeChallenge)
+}
+
+func TestEnrichW3DSUserFromAAAS(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "Bearer aaas_test", r.Header.Get("Authorization"))
+		assert.Equal(t, "@person-1", r.URL.Query().Get("evault"))
+		_, _ = w.Write([]byte(`{"packets":[{"data":{"displayName":"AaaS Person","avatarUrl":"https://cdn.example/avatar.png"}}],"hasMore":false,"nextCursor":null}`))
+	}))
+	t.Cleanup(server.Close)
+	defer test.MockVariableValue(&setting.W3DSIdentity.AwarenessURL, server.URL)()
+	defer test.MockVariableValue(&setting.W3DSIdentity.AwarenessAPIKey, "aaas_test")()
+
+	user := goth.User{UserID: "person-1", Name: "OIDC Person", AvatarURL: "https://oidc.example/avatar.png"}
+	enrichW3DSUserFromAAAS(t.Context(), &auth.Source{Name: w3dsAuthSourceName}, &user)
+
+	assert.Equal(t, "AaaS Person", user.Name)
+	assert.Equal(t, "https://cdn.example/avatar.png", user.AvatarURL)
+}
+
+func TestEnrichW3DSUserFromAAASFailurePreservesOIDCProfile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+	defer test.MockVariableValue(&setting.W3DSIdentity.AwarenessURL, server.URL)()
+	defer test.MockVariableValue(&setting.W3DSIdentity.AwarenessAPIKey, "aaas_test")()
+
+	user := goth.User{UserID: "person-1", Name: "OIDC Person", AvatarURL: "https://oidc.example/avatar.png"}
+	enrichW3DSUserFromAAAS(t.Context(), &auth.Source{Name: w3dsAuthSourceName}, &user)
+
+	assert.Equal(t, "OIDC Person", user.Name)
+	assert.Equal(t, "https://oidc.example/avatar.png", user.AvatarURL)
+}
+
+func TestW3DSOnlyAuthenticationRejectsOtherOAuthProviders(t *testing.T) {
+	defer test.MockVariableValue(&setting.W3DSIdentity.OnlyAuthentication, true)()
+
+	ctx, resp := contexttest.MockContext(t, "/user/oauth2/GitHub")
+	ctx.SetParams(":provider", "GitHub")
+	SignInOAuth(ctx)
+	assert.Equal(t, http.StatusForbidden, resp.Code)
+
+	ctx, resp = contexttest.MockContext(t, "/user/oauth2/GitHub/callback")
+	ctx.SetParams(":provider", "GitHub")
+	SignInOAuthCallback(ctx)
+	assert.Equal(t, http.StatusForbidden, resp.Code)
 }
 
 func TestOIDCWellKnownDisabled(t *testing.T) {

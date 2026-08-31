@@ -5,7 +5,7 @@
 		{{if (and .Repository.IsPrivate .Repository.Owner.Visibility.IsPublic)}}
 			<div class="ui warning message flash-message flash-warning">
 				{{svg "octicon-alert"}}
-				{{ctx.Locale.Tr "repo.packages.visibility_warning" .Repository.OwnerName}}
+				{{ctx.Locale.Tr "repo.packages.visibility_warning" (printf "@%s" .Repository.OwnerName)}}
 			</div>
 		{{end}}
 		{{template "package/shared/list" .}}

@@ -25,7 +25,7 @@
 							</span>
 						</a>
 						{{range .Orgs}}
-							<a class="{{if eq $.ContextUser.ID .ID}}active selected{{end}} item truncated-item-container" title="{{.Name}}" href="{{.OrganisationLink}}/{{if $.PageIsIssues}}issues{{else if $.PageIsPulls}}pulls{{else if $.PageIsMilestonesDashboard}}milestones{{else}}dashboard{{end}}">
+							<a class="{{if eq $.ContextUser.ID .ID}}active selected{{end}} item truncated-item-container" title="{{.DisplayUsername}}" href="{{.OrganisationLink}}/{{if $.PageIsIssues}}issues{{else if $.PageIsPulls}}pulls{{else if $.PageIsMilestonesDashboard}}milestones{{else}}dashboard{{end}}">
 								{{ctx.AvatarUtils.Avatar .}}
 								<span class="truncated-item-name">{{.ShortName 40}}</span>
 								<span class="org-visibility">
@@ -92,7 +92,7 @@
 			</a>
 			{{end}}
 			<div class="item">
-				<a class="ui basic button" href="{{.ContextUser.HomeLink}}" title="{{ctx.Locale.Tr "home.view_home" .ContextUser.Name}}">
+				<a class="ui basic button" href="{{.ContextUser.HomeLink}}" title="{{ctx.Locale.Tr "home.view_home" .ContextUser.DisplayUsername}}">
 					{{ctx.Locale.Tr "home.view_home" (.ContextUser.ShortName 40)}}
 				</a>
 			</div>

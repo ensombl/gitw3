@@ -55,7 +55,7 @@
 						<tr>
 							<td>{{.Version.ID}}</td>
 							<td>
-								<a href="{{.Owner.HomeLink}}">{{.Owner.Name}}</a>
+								<a href="{{.Owner.HomeLink}}">{{.Owner.DisplayUsername}}</a>
 								{{if .Owner.Visibility.IsPrivate}}
 									<span class="text gold">{{svg "octicon-lock"}}</span>
 								{{end}}

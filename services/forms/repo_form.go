@@ -50,14 +50,6 @@ type CreateRepoForm struct {
 
 	ForkSingleBranch string
 	ObjectFormatName string
-
-	PlatformName        string   `binding:"MaxSize(100)" preprocess:"TrimSpace"`
-	PlatformDisplayName string   `binding:"MaxSize(100)" preprocess:"TrimSpace"`
-	PlatformDescription string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
-	PlatformURL         string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
-	PlatformLogoURL     string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
-	PlatformDomains     []string `binding:"platform_domains;Required;"`
-	UseAITooling        bool
 }
 
 // Validate validates the fields
@@ -66,11 +58,34 @@ func (f *CreateRepoForm) Validate(req *http.Request, errs binding.Errors) bindin
 	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
 }
 
-// PortApplicationForm contains only the destination fields needed to create
-// an empty repository for an existing application.
+// CreatePlatformForm contains the human-facing fields for a new W3DS platform.
+// Repository and platform slugs are derived server-side from the display name.
+type CreatePlatformForm struct {
+	UID                 int64 `binding:"Required"`
+	Private             bool
+	DefaultBranch       string `binding:"GitRefName;MaxSize(100)"`
+	ObjectFormatName    string
+	Gitignores          string
+	License             string
+	Readme              string
+	PlatformDisplayName string   `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
+	PlatformDescription string   `binding:"Required;MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformURL         string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformLogoURL     string   `binding:"MaxSize(2048)" preprocess:"TrimSpace"`
+	PlatformDomains     []string `binding:"platform_domains;Required;"`
+	UseAITooling        bool
+}
+
+func (f *CreatePlatformForm) Validate(req *http.Request, errs binding.Errors) binding.Errors {
+	ctx := context.GetValidateContext(req)
+	return middleware.Validate(errs, ctx.Data, f, ctx.Locale)
+}
+
+// PortApplicationForm contains only the human-facing destination fields needed
+// to create an empty repository for an existing application.
 type PortApplicationForm struct {
 	UID              int64  `binding:"Required"`
-	RepoName         string `binding:"Required;AlphaDashDot;MaxSize(100)" preprocess:"TrimSpace"`
+	DisplayName      string `binding:"Required;MaxSize(100)" preprocess:"TrimSpace"`
 	Private          bool
 	DefaultBranch    string `binding:"GitRefName;MaxSize(100)"`
 	ObjectFormatName string

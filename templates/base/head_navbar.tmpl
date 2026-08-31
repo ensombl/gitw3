@@ -58,12 +58,12 @@
 			<details class="dropdown dir-rtl">
 				<summary data-tooltip-content="{{ctx.Locale.Tr "user_profile_and_more"}}">
 					{{ctx.AvatarUtils.Avatar .SignedUser 24}}
-					<span class="only-mobile tw-ml-2">{{.SignedUser.Name}}</span>
+					<span class="only-mobile tw-ml-2">{{.SignedUser.DisplayUsername}}</span>
 					<span class="not-mobile dropdown-icon">{{svg "octicon-triangle-down"}}</span>
 				</summary>
 				<div class="content">
 					<span class="header">
-						<span>{{ctx.Locale.Tr "signed_in_as"}} <strong>{{.SignedUser.Name}}</strong></span>
+						<span>{{ctx.Locale.Tr "signed_in_as"}} <strong>{{.SignedUser.DisplayUsername}}</strong></span>
 					</span>
 					<hr>
 					<ul>
@@ -153,12 +153,12 @@
 			<details class="dropdown dir-rtl">
 				<summary data-tooltip-content="{{ctx.Locale.Tr "user_profile_and_more"}}">
 					{{ctx.AvatarUtils.Avatar .SignedUser 24}}
-					<span class="only-mobile tw-ml-2">{{.SignedUser.Name}}</span>
+					<span class="only-mobile tw-ml-2">{{.SignedUser.DisplayUsername}}</span>
 					<span class="not-mobile dropdown-icon">{{svg "octicon-triangle-down"}}</span>
 				</summary>
 				<div class="content">
 					<span class="header">
-						<span>{{ctx.Locale.Tr "signed_in_as"}} <strong>{{.SignedUser.Name}}</strong></span>
+						<span>{{ctx.Locale.Tr "signed_in_as"}} <strong>{{.SignedUser.DisplayUsername}}</strong></span>
 					</span>
 					<hr>
 					<ul>

@@ -86,7 +86,7 @@
 						<tr>
 							<td>{{.ID}}</td>
 							<td>
-								<a href="{{.HomeLink}}">{{.Name}}</a>
+								<a href="{{.HomeLink}}">{{.DisplayUsername}}</a>
 								{{if .IsAdmin}}
 									<span class="ui mini label">{{ctx.Locale.Tr "admin.users.admin"}}</span>
 								{{else if eq 2 .Type}}{{/* Reserved user */}}

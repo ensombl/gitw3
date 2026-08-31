@@ -5,7 +5,6 @@
 package integration
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +18,7 @@ import (
 	"forgejo.org/models/unittest"
 	user_model "forgejo.org/models/user"
 	"forgejo.org/modules/git"
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/test"
 	"forgejo.org/modules/translation"
@@ -41,10 +41,11 @@ func assertPlatformCreateForm(t *testing.T, htmlDoc *HTMLDoc, owner *user_model.
 	assert.Equal(t, 1, form.Find("#platform-step-back.tw-hidden").Length(), "Expected the back button to start hidden")
 	assert.Equal(t, 1, form.Find("#platform-create-submit.tw-hidden").Length(), "Expected the submit button to start hidden")
 	htmlDoc.AssertDropdownHasSelectedOption(t, "uid", strconv.FormatInt(owner.ID, 10))
-	for _, name := range []string{"platform_name", "platform_display_name", "platform_description", "platform_url"} {
+	assert.Equal(t, 0, form.Find("[name='repo_name'], [name='platform_name']").Length())
+	for _, name := range []string{"platform_display_name", "platform_description", "platform_url"} {
 		assert.Equal(t, 1, form.Find(fmt.Sprintf("[name='%s']", name)).Length(), "missing %s", name)
 	}
-	assert.Greater(t, form.Find(".w3ds-domain-option input[name='platform_domains']").Length(), 0, "published domains should be visible choices")
+	assert.Positive(t, form.Find(".w3ds-domain-option input[name='platform_domains']").Length(), "published domains should be visible choices")
 	_, platformURLRequired := form.Find("[name='platform_url']").Attr("required")
 	assert.False(t, platformURLRequired, "platform_url should be optional")
 }
@@ -212,15 +213,17 @@ func TestPortExistingApplicationCreatesEmptyDestination(t *testing.T) {
 	form := formPage.doc.Find("form#platform-port-form[action='/repo/create/port']")
 	assert.Equal(t, 1, form.Length())
 	formPage.AssertDropdownHasSelectedOption(t, "uid", strconv.FormatInt(user.ID, 10))
-	assert.Equal(t, 1, form.Find("input[name='repo_name']").Length())
+	assert.Equal(t, 0, form.Find("input[name='repo_name']").Length())
+	assert.Equal(t, 1, form.Find("input[name='display_name']").Length())
 	assert.Equal(t, 1, form.Find("input[name='default_branch']").Length())
 	assert.Equal(t, 0, form.Find("input[name='ename'], input[name='token']").Length())
 	assert.Equal(t, 0, formPage.doc.Find("#platform-port-signing-modal").Length())
 
+	displayName := "Ported Application"
 	repoName := "ported-application"
 	create := NewRequestWithValues(t, "POST", "/repo/create/port", map[string]string{
 		"uid":                strconv.FormatInt(user.ID, 10),
-		"repo_name":          repoName,
+		"display_name":       displayName,
 		"default_branch":     "main",
 		"object_format_name": "sha1",
 	})
@@ -284,7 +287,6 @@ func TestPortExistingApplicationCreatesEmptyDestination(t *testing.T) {
 	assert.Equal(t, 1, identityForm.Find("input[name='ename']").Length())
 	assert.Equal(t, 1, identityForm.Find("input[name='token'][type='password']").Length())
 	ready.AssertElement(t, "#platform-port-signing-modal", true)
-
 }
 
 func TestPlatformCreateCommitsManifest(t *testing.T) {
@@ -295,10 +297,8 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 	repoName := "guided-platform"
 	req := NewRequestWithValues(t, "POST", "/repo/create/new", map[string]string{
 		"uid":                   strconv.FormatInt(user.ID, 10),
-		"repo_name":             repoName,
 		"default_branch":        "master",
 		"object_format_name":    "sha1",
-		"platform_name":         "guided-platform",
 		"platform_display_name": "Guided Platform",
 		"platform_description":  "A platform created through the guided flow",
 		"platform_domains":      "productivity",
@@ -354,7 +354,7 @@ func TestPlatformCreateCommitsManifest(t *testing.T) {
 
 	deployResp := session.MakeRequest(t, NewRequestf(t, "GET", "/%s/%s/deploy", user.Name, repoName), http.StatusOK)
 	deployPage := NewHTMLParser(t, deployResp.Body)
-	deployPage.AssertElement(t, "form[data-deployment-form][data-platform-needs-identity='true']", true)
+	deployPage.AssertElement(t, "form[data-deployment-form]", true)
 	assert.Equal(t, 4, deployPage.doc.Find("[data-deployment-step-indicator]").Length())
 	assert.Equal(t, 4, deployPage.doc.Find("[data-deployment-step]").Length())
 	deployPage.AssertElement(t, ".deploy-ppauth-card a[href='https://docs.w3ds.metastate.foundation']", true)

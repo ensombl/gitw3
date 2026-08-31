@@ -492,6 +492,18 @@ func (u *User) DisplayName() string {
 	return u.Name
 }
 
+// DisplayUsername returns the eName-style presentation of a username. The @ is
+// cosmetic: u.Name remains unchanged for routes, Git remotes, mentions and APIs.
+func (u *User) DisplayUsername() string {
+	if u.ID <= 0 {
+		return u.Name
+	}
+	if strings.HasPrefix(u.Name, "@") {
+		return u.Name
+	}
+	return "@" + u.Name
+}
+
 var emailToReplacer = strings.NewReplacer(
 	"\n", "",
 	"\r", "",
@@ -534,6 +546,16 @@ func (u *User) GetDisplayName() string {
 		}
 	}
 	return u.Name
+}
+
+// GetUIDisplayName is the W3DS UI name. A profile display name wins when one is
+// available; otherwise the username is presented as an eName.
+func (u *User) GetUIDisplayName() string {
+	trimmed := strings.TrimSpace(u.FullName)
+	if len(trimmed) > 0 {
+		return trimmed
+	}
+	return u.DisplayUsername()
 }
 
 // GetCompleteName returns the full name and username in the form of
@@ -579,10 +601,10 @@ func (u *User) GitName() string {
 
 // ShortName ellipses username to length
 func (u *User) ShortName(length int) string {
-	if setting.UI.DefaultShowFullName && len(u.FullName) > 0 {
+	if len(strings.TrimSpace(u.FullName)) > 0 {
 		return base.EllipsisString(u.FullName, length)
 	}
-	return base.EllipsisString(u.Name, length)
+	return base.EllipsisString(u.DisplayUsername(), length)
 }
 
 // IsMailable checks if a user is eligible

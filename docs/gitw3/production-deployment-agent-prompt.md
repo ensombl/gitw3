@@ -75,6 +75,7 @@ Architecture that must be preserved:
 - GitW3 calls the publisher's authenticated internal API for publication and migration status.
 - platform-manifest-sync calls the production W3DS Registry and Provisioner.
 - W3DS user login goes through the W3DS OIDC bridge and is independent of the publisher.
+- W3DS user display names and avatars are enriched at sign-in from Awareness-as-a-Service (AaaS) using the signed-in eName. This lookup is best-effort and must not make AaaS an authentication dependency.
 - platform-manifest-sync currently owns a local BoltDB state file and runs an in-process worker. Run exactly one publisher replica on a durable volume. Do not horizontally scale it until its store/queue is moved to a shared transactional backend or leader election is implemented.
 - The existing-application port flow is ordered: push code, migrate and wallet-sign the existing eName using its current token, then explicitly activate public cutover.
 
@@ -129,7 +130,9 @@ Perform the following work:
 - Configure SMTP only when working credentials are supplied.
 - Configure structured production logs with rotation and ensure credentials, migration tokens, wallet payloads, and authorization headers are redacted.
 - Configure [platform_manifest_sync] with ENABLED=true, the private publisher URL, the shared internal token, the production ontology URL, the production Registry URL, and bounded request/signature timeouts.
-- Configure the W3DS authentication source through the supported administrative interface or CLI/API. Make this step idempotent.
+- Obtain a dedicated AaaS consumer key without printing it. Configure [w3ds_identity] with the production AWARENESS_URL, that AWARENESS_API_KEY through the secret mechanism, a bounded TIMEOUT, and ONLY_AUTHENTICATION=true. Never expose the key to the browser or logs. W3DS must be the only interactive web sign-in method in production.
+- Disable reverse-proxy web authentication and configure OAuth2 client auto-registration so a first W3DS login can create its local GitW3 account without falling back to a password/account-linking form.
+- Configure the W3DS authentication source through the supported administrative interface or CLI/API. Make this step idempotent and ensure the source name is exactly `W3DS`.
 
 ### 5. platform-manifest-sync configuration
 
@@ -218,6 +221,9 @@ Run and record these checks:
 - An invalid Forgejo webhook signature is rejected.
 - One valid signed test webhook is accepted without duplicate processing.
 - W3DS login starts through the intended OIDC bridge and returns to the canonical GitW3 URL.
+- Password sign-in, local registration, password recovery, OpenID, account-linking forms, and every non-W3DS OAuth source are rejected while [w3ds_identity] ONLY_AUTHENTICATION=true.
+- A test W3DS login maps the newest non-platform AaaS User profile to the local display name and avatar. Confirm a simulated AaaS timeout leaves login functional and preserves the existing profile.
+- New-platform and existing-application forms ask for a display name but no repository slug; the resulting collision-safe repository slug is generated server-side.
 - Creating an existing-application destination creates an empty repository.
 - Its handoff initially renders only Step 1; the eName/token form is absent.
 - Direct Step 2 submission before a push is rejected and never renders raw JSON in the browser.

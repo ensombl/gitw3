@@ -106,9 +106,15 @@ func PortPlatformStart(ctx *context.Context) {
 		ctx.HTML(http.StatusOK, tplPortPlatform)
 		return
 	}
+	repoName, err := availablePlatformRepositoryName(ctx, owner, form.DisplayName)
+	if err != nil {
+		ctx.ServerError("availablePlatformRepositoryName", err)
+		return
+	}
 
 	repository, err := repo_service.CreateRepository(ctx, ctx.Doer, owner, repo_service.CreateRepoOptions{
-		Name:             form.RepoName,
+		Name:             repoName,
+		Description:      form.DisplayName,
 		IsPrivate:        form.Private || setting.Repository.ForcePrivate,
 		DefaultBranch:    form.DefaultBranch,
 		AutoInit:         false,

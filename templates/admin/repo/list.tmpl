@@ -47,7 +47,7 @@
 						<tr>
 							<td>{{.ID}}</td>
 							<td>
-								<a class="tw-break-anywhere" href="{{.Owner.HomeLink}}">{{.Owner.Name}}</a>
+								<a class="tw-break-anywhere" href="{{.Owner.HomeLink}}">{{.Owner.DisplayUsername}}</a>
 								{{if .Owner.Visibility.IsPrivate}}
 									<span class="text gold">{{svg "octicon-lock"}}</span>
 								{{end}}

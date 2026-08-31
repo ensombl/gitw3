@@ -269,10 +269,10 @@ func RenderUser(ctx context.Context, user user_model.User) template.HTML {
 	if user.ID > 0 {
 		return template.HTML(fmt.Sprintf(
 			"<a href='%s' rel='nofollow'><strong>%s</strong></a>",
-			user.HomeLink(), html.EscapeString(user.GetDisplayName())))
+			user.HomeLink(), html.EscapeString(user.GetUIDisplayName())))
 	}
 	return template.HTML(fmt.Sprintf("<strong>%s</strong>",
-		html.EscapeString(user.GetDisplayName())))
+		html.EscapeString(user.GetUIDisplayName())))
 }
 
 func RenderReviewRequest(ctx context.Context, users []issues_model.RequestReviewTarget) template.HTML {

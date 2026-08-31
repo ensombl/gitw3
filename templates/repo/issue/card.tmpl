@@ -28,9 +28,9 @@
 				{{if .OriginalAuthor}}
 					{{ctx.Locale.Tr .GetLastEventLabelFake $timeStr .OriginalAuthor}}
 				{{else if gt .Poster.ID 0}}
-					{{ctx.Locale.Tr .GetLastEventLabel $timeStr .Poster.HomeLink .Poster.GetDisplayName}}
+					{{ctx.Locale.Tr .GetLastEventLabel $timeStr .Poster.HomeLink .Poster.GetUIDisplayName}}
 				{{else}}
-					{{ctx.Locale.Tr .GetLastEventLabelFake $timeStr .Poster.GetDisplayName}}
+					{{ctx.Locale.Tr .GetLastEventLabelFake $timeStr .Poster.GetUIDisplayName}}
 				{{end}}
 			</span>
 		</div>
@@ -70,7 +70,7 @@
 		</div>
 		<div class="issue-card-assignees">
 			{{range .Assignees}}
-				<a target="_blank" href="{{.HomeLink}}" data-tooltip-content="{{ctx.Locale.Tr "repo.projects.column.assigned_to"}} {{.Name}}">{{ctx.AvatarUtils.Avatar . 28}}</a>
+				<a target="_blank" href="{{.HomeLink}}" data-tooltip-content="{{ctx.Locale.Tr "repo.projects.column.assigned_to"}} {{.DisplayUsername}}">{{ctx.AvatarUtils.Avatar . 28}}</a>
 			{{end}}
 		</div>
 	</div>

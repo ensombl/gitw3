@@ -23,15 +23,15 @@
 										{{else}}
 											<span class="icon">{{svg "octicon-repo"}}</span>
 										{{end}}
-										<a class="muted name" href="{{$repo.Link}}">{{$repo.OwnerName}}/{{$repo.Name}}</a>
+										<a class="muted name" href="{{$repo.Link}}">@{{$repo.OwnerName}}/{{$repo.Name}}</a>
 										<span class="text light-3" {{if not (eq $repo.Size 0)}} data-tooltip-content="{{$repo.SizeDetailsString ctx.Locale}}"{{end}}>{{ctx.Locale.TrSize $repo.Size}}</span>
 										{{if $repo.IsFork}}
 											{{ctx.Locale.Tr "repo.forked_from"}}
-											<span><a href="{{$repo.BaseRepo.Link}}">{{$repo.BaseRepo.OwnerName}}/{{$repo.BaseRepo.Name}}</a></span>
+											<span><a href="{{$repo.BaseRepo.Link}}">@{{$repo.BaseRepo.OwnerName}}/{{$repo.BaseRepo.Name}}</a></span>
 										{{end}}
 									{{else}}
 										<span class="icon tw-inline-block tw-pt-2">{{svg "octicon-file-directory-fill"}}</span>
-										<span class="name tw-inline-block tw-pt-2">{{$.ContextUser.Name}}/{{$dir}}</span>
+										<span class="name tw-inline-block tw-pt-2">{{$.ContextUser.DisplayUsername}}/{{$dir}}</span>
 										<div class="tw-float-right">
 											{{if $.allowAdopt}}
 												<button class="ui button primary show-modal tw-p-2" data-modal="#adopt-unadopted-modal-{{$dirI}}"><span class="icon">{{svg "octicon-plus"}}</span><span class="label">{{ctx.Locale.Tr "repo.adopt_preexisting_label"}}</span></button>
@@ -94,11 +94,11 @@
 									{{else}}
 										{{svg "octicon-repo" 16 "tw-mr-1 iconFloat"}}
 									{{end}}
-									<a class="name" href="{{.Link}}">{{.OwnerName}}/{{.Name}}</a>
+									<a class="name" href="{{.Link}}">@{{.OwnerName}}/{{.Name}}</a>
 									<span>{{ctx.Locale.TrSize .Size}}</span>
 									{{if .IsFork}}
 										{{ctx.Locale.Tr "repo.forked_from"}}
-										<span><a href="{{.BaseRepo.Link}}">{{.BaseRepo.OwnerName}}/{{.BaseRepo.Name}}</a></span>
+										<span><a href="{{.BaseRepo.Link}}">@{{.BaseRepo.OwnerName}}/{{.BaseRepo.Name}}</a></span>
 									{{end}}
 								</div>
 							</div>

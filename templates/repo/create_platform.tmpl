@@ -23,6 +23,8 @@
 							<legend>{{ctx.Locale.Tr "platform.create.repo_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.create.repo_help"}}</p>
 							{{template "repo/create_platform_basic" .}}
+							<label class="required field">{{ctx.Locale.Tr "platform.create.display_name"}}<input name="platform_display_name" value="{{.platform_display_name}}" required maxlength="100"></label>
+							<span class="help">{{ctx.Locale.Tr "platform.create.automatic_slug_help"}}</span>
 							<label>{{ctx.Locale.Tr "repo.default_branch"}}<input name="default_branch" value="{{.default_branch}}" required></label>
 							<input type="hidden" name="readme" value="Default">
 							<input type="hidden" name="object_format_name" value="{{.DefaultObjectFormat.Name}}">
@@ -31,10 +33,6 @@
 						<fieldset class="platform-wizard-panel tw-hidden" data-platform-step="2" hidden>
 							<legend>{{ctx.Locale.Tr "platform.create.profile_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.create.profile_help"}}</p>
-							<div class="two fields">
-								<label class="field">{{ctx.Locale.Tr "platform.create.display_name"}}<input name="platform_display_name" value="{{.platform_display_name}}" required maxlength="100"></label>
-								<label class="field">{{ctx.Locale.Tr "platform.create.slug"}}<input id="platform-name" name="platform_name" value="{{.platform_name}}" required maxlength="100" pattern="[a-z0-9]+(?:-[a-z0-9]+)*"></label>
-							</div>
 							<label>{{ctx.Locale.Tr "platform.create.description"}}<textarea name="platform_description" required maxlength="2048">{{.platform_description}}</textarea></label>
 							{{if .DomainOntologyUnavailable}}
 								<div class="ui negative message">{{ctx.Locale.Tr "platform.domains.unavailable"}}</div>

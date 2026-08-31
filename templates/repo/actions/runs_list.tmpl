@@ -22,9 +22,9 @@
 					{{if .IsScheduledRun -}}
 						{{ctx.Locale.Tr "actions.runs.scheduled_description" .CommitLink (ShortSha .CommitSHA)}}
 					{{else if .IsDispatchedRun -}}
-						{{ctx.Locale.Tr "actions.runs.workflow_dispatch_description" .CommitLink (ShortSha .CommitSHA) .TriggerUser.HomeLink .TriggerUser.GetDisplayName}}
+						{{ctx.Locale.Tr "actions.runs.workflow_dispatch_description" .CommitLink (ShortSha .CommitSHA) .TriggerUser.HomeLink .TriggerUser.GetUIDisplayName}}
 					{{else -}}
-						{{ctx.Locale.Tr "actions.runs.on_push_description" .CommitLink (ShortSha .CommitSHA) .TriggerUser.HomeLink .TriggerUser.GetDisplayName}}
+						{{ctx.Locale.Tr "actions.runs.on_push_description" .CommitLink (ShortSha .CommitSHA) .TriggerUser.HomeLink .TriggerUser.GetUIDisplayName}}
 					{{end -}}
 				</div>
 			</div>

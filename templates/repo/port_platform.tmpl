@@ -18,6 +18,8 @@
 							<legend>{{ctx.Locale.Tr "platform.port.repo_heading"}}</legend>
 							<p>{{ctx.Locale.Tr "platform.port.repo_help"}}</p>
 							{{template "repo/create_platform_basic" .}}
+							<label class="required field">{{ctx.Locale.Tr "platform.create.display_name"}}<input name="display_name" value="{{.display_name}}" required maxlength="100"></label>
+							<span class="help">{{ctx.Locale.Tr "platform.create.automatic_slug_help"}}</span>
 							<label>{{ctx.Locale.Tr "repo.default_branch"}}<input name="default_branch" value="{{.default_branch}}" required></label>
 							<input type="hidden" name="object_format_name" value="{{.DefaultObjectFormat.Name}}">
 						</fieldset>

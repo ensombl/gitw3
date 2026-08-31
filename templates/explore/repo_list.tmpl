@@ -8,7 +8,7 @@
 				<div class="flex-item-header">
 					<div class="flex-item-title">
 						{{if and (or $.PageIsExplore $.PageIsProfileStarList) .Owner}}
-						<a class="text primary name" href="{{.Owner.HomeLink}}">{{.Owner.Name}}</a>/
+						<a class="text primary name" href="{{.Owner.HomeLink}}">{{.Owner.DisplayUsername}}</a>/
 						{{end}}
 						<a class="text primary name" href="{{.Link}}">{{.Name}}</a>
 						<span>

@@ -16,20 +16,20 @@
 			{{ctx.Locale.Tr "action.compare_commits_general"}}
 		{{end}}
 	</h2>
-	{{$BaseCompareName := $.BaseName -}}
-	{{- $HeadCompareName := $.HeadRepo.OwnerName -}}
+	{{$BaseCompareName := printf "@%s" $.BaseName -}}
+	{{- $HeadCompareName := printf "@%s" $.HeadRepo.OwnerName -}}
 	{{- if and (eq $.BaseName $.HeadRepo.OwnerName) (ne $.Repository.Name $.HeadRepo.Name) -}}
-		{{- $HeadCompareName = printf "%s/%s" $.HeadRepo.OwnerName $.HeadRepo.Name -}}
+		{{- $HeadCompareName = printf "@%s/%s" $.HeadRepo.OwnerName $.HeadRepo.Name -}}
 	{{- end -}}
 	{{- $OwnForkCompareName := "" -}}
 	{{- if .OwnForkRepo -}}
-		{{- $OwnForkCompareName = .OwnForkRepo.OwnerName -}}
+		{{- $OwnForkCompareName = printf "@%s" .OwnForkRepo.OwnerName -}}
 	{{- end -}}
 	{{- $RootRepoCompareName := "" -}}
 	{{- if .RootRepo -}}
-		{{- $RootRepoCompareName = .RootRepo.OwnerName -}}
+		{{- $RootRepoCompareName = printf "@%s" .RootRepo.OwnerName -}}
 		{{- if eq $.HeadRepo.OwnerName .RootRepo.OwnerName -}}
-			{{- $HeadCompareName = printf "%s/%s" $.HeadRepo.OwnerName $.HeadRepo.Name -}}
+			{{- $HeadCompareName = printf "@%s/%s" $.HeadRepo.OwnerName $.HeadRepo.Name -}}
 		{{- end -}}
 	{{- end -}}
 	<div class="ui segment choose branch">
