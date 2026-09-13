@@ -19,6 +19,7 @@ import (
 	unit_model "forgejo.org/models/unit"
 	"forgejo.org/models/unittest"
 	user_model "forgejo.org/models/user"
+	"forgejo.org/modules/setting"
 	api "forgejo.org/modules/structs"
 	"forgejo.org/modules/util"
 	"forgejo.org/modules/webhook"
@@ -59,6 +60,7 @@ func TestActionsAPISearchActionJobs_RepoRunner(t *testing.T) {
 		RepoID:  1,
 		OwnerID: 1,
 		Name:    "job_2",
+		HTMLURL: setting.AppURL + "user2/repo1/actions/runs/187/jobs/1/attempt/1",
 		Needs:   nil,
 		RunsOn:  []string{"ubuntu-latest"},
 		TaskID:  47,
@@ -1224,6 +1226,7 @@ func TestActionsAPIListActionRunJobs(t *testing.T) {
 				assert.Equal(t, expected.RepoID, actual.RepoID)
 				assert.Equal(t, expected.OwnerID, actual.OwnerID)
 				assert.Equal(t, expected.Name, actual.Name)
+				assert.NotEmpty(t, actual.HTMLURL)
 				assert.Equal(t, util.ConvertSlice[actions_model.LocalJobIdentifier, string](expected.Needs), actual.Needs)
 				assert.Equal(t, expected.RunsOn, actual.RunsOn)
 				assert.Equal(t, expected.TaskID, actual.TaskID)
@@ -1238,6 +1241,7 @@ func TestActionsAPIListActionRunJobs(t *testing.T) {
 						RepoID:  4,
 						OwnerID: 1,
 						Name:    "job1 (2)",
+						HTMLURL: setting.AppURL + "user5/repo4/actions/runs/189/jobs/1/attempt/1",
 						Needs:   nil,
 						RunsOn:  nil,
 						TaskID:  50,
@@ -1252,6 +1256,7 @@ func TestActionsAPIListActionRunJobs(t *testing.T) {
 						RepoID:  4,
 						OwnerID: 1,
 						Name:    "job1 (1)",
+						HTMLURL: setting.AppURL + "user5/repo4/actions/runs/191/jobs/0/attempt/1",
 						Needs:   nil,
 						RunsOn:  []string{"postmarketOS"},
 						TaskID:  54,

@@ -4,8 +4,10 @@
 package webhook
 
 import (
+	"fmt"
 	"testing"
 
+	actions_model "forgejo.org/models/actions"
 	webhook_model "forgejo.org/models/webhook"
 	"forgejo.org/modules/json"
 	api "forgejo.org/modules/structs"
@@ -154,6 +156,145 @@ func TestSlackPayload(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "[test/repo] Release created: <http://localhost:3000/test/repo/releases/tag/v1.0|v1.0> by `user1`", pl.Text)
+	})
+
+	t.Run("WorkflowJob", func(t *testing.T) {
+		testCases := []struct {
+			action                  api.HookWorkflowJobAction
+			jobStatus               actions_model.Status
+			expectedColour          string
+			expectedTitle           string
+			expectedText            string
+			expectedLink            string
+			expectedAttachmentTitle string
+		}{
+			{
+				action:         api.HookNewWorkflowJobAttempt,
+				jobStatus:      actions_model.StatusBlocked,
+				expectedColour: fmt.Sprintf("%x", yellowColor),
+				expectedTitle:  `[acme/test] Workflow job "build-and-test" is blocked`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+				expectedAttachmentTitle: `New attempt of job "build-and-test" with status blocked`,
+			},
+			{
+				action:         api.HookWorkflowJobCompleted,
+				jobStatus:      actions_model.StatusCancelled,
+				expectedColour: fmt.Sprintf("%x", greyColor),
+				expectedTitle:  `[acme/test] Workflow job "build-and-test" was cancelled`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+				expectedAttachmentTitle: `The job "build-and-test" has completed with status cancelled`,
+			},
+			{
+				action:         api.HookWorkflowJobCompleted,
+				jobStatus:      actions_model.StatusFailure,
+				expectedColour: fmt.Sprintf("%x", redColor),
+				expectedTitle:  `[acme/test] Workflow job "build-and-test" has failed`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+				expectedAttachmentTitle: `The job "build-and-test" has completed with status failure`,
+			},
+			{
+				action:         api.HookWorkflowJobStatusChanged,
+				jobStatus:      actions_model.StatusRunning,
+				expectedColour: fmt.Sprintf("%x", greenColorLight),
+				expectedTitle:  `[acme/test] Workflow job "build-and-test" has started running`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+				expectedAttachmentTitle: `The status of job "build-and-test" is now running`,
+			},
+			{
+				action:         api.HookWorkflowJobCompleted,
+				jobStatus:      actions_model.StatusSkipped,
+				expectedColour: fmt.Sprintf("%x", greyColor),
+				expectedTitle:  `[acme/test] Workflow job "build-and-test" was skipped`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+				expectedAttachmentTitle: `The job "build-and-test" has completed with status skipped`,
+			},
+			{
+				action:         api.HookWorkflowJobCompleted,
+				jobStatus:      actions_model.StatusSuccess,
+				expectedColour: fmt.Sprintf("%x", greenColor),
+				expectedTitle:  `[acme/test] Workflow job "build-and-test" has completed successfully`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+				expectedAttachmentTitle: `The job "build-and-test" has completed with status success`,
+			},
+			{
+				action:         api.HookNewWorkflowJobAttempt,
+				jobStatus:      actions_model.StatusWaiting,
+				expectedColour: fmt.Sprintf("%x", blueColor),
+				expectedTitle:  `[acme/test] Workflow job "build-and-test" is waiting`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+				expectedAttachmentTitle: `New attempt of job "build-and-test" with status waiting`,
+			},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.jobStatus.String(), func(t *testing.T) {
+				inputPayload := &api.WorkflowJobPayload{
+					Action: testCase.action,
+					Job: &api.ActionRunJob{
+						Name:    "build-and-test",
+						HTMLURL: "https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1",
+						Status:  testCase.jobStatus.String(),
+					},
+					Run: &api.ActionRun{
+						Title: "Update README.md",
+						TriggerUser: &api.User{
+							UserName:  "jane",
+							AvatarURL: "https://example.com/avatars/7dc9cf?size=64",
+						},
+					},
+					Repository: &api.Repository{
+						FullName: "acme/test",
+					},
+				}
+
+				payload, err := sc.WorkflowJob(inputPayload)
+				require.NoError(t, err)
+
+				assert.Equal(t, testCase.expectedTitle, payload.Text)
+
+				assert.Len(t, payload.Attachments, 1)
+				assert.Equal(t, testCase.expectedColour, payload.Attachments[0].Color)
+				assert.Equal(t, testCase.expectedText, payload.Attachments[0].Text)
+				assert.Equal(t, testCase.expectedAttachmentTitle, payload.Attachments[0].Title)
+				assert.Equal(t, "https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1",
+					payload.Attachments[0].TitleLink)
+			})
+		}
 	})
 }
 

@@ -75,6 +75,9 @@ func TestWebhook_EventsArray(t *testing.T) {
 		"pull_request_comment", "pull_request_review_approved", "pull_request_review_rejected",
 		"pull_request_review_comment", "pull_request_sync", "wiki", "repository", "release",
 		"package", "pull_request_review_request", "action_run_failure", "action_run_success",
+		"workflow_job_blocked", "workflow_job_cancelled", "workflow_job_failure",
+		"workflow_job_running", "workflow_job_skipped", "workflow_job_success",
+		"workflow_job_waiting",
 	},
 		(&Webhook{
 			HookEvent: &webhook_module.HookEvent{SendEverything: true},
@@ -123,7 +126,46 @@ func TestCreateWebhook(t *testing.T) {
 			RepoID:      3,
 			URL:         "https://www.example.com/unit_test",
 			ContentType: ContentTypeJSON,
-			Events:      `{"push_only":false,"send_everything":false,"choose_events":true,"events":{"create":true,"delete":true,"fork":true,"issues":true,"issue_assign":true,"issue_label":true,"issue_milestone":true,"issue_comment":true,"push":true,"pull_request":true,"pull_request_assign":true,"pull_request_label":true,"pull_request_milestone":true,"pull_request_comment":true,"pull_request_review":true,"pull_request_sync":true,"pull_request_review_request":true,"wiki":true,"repository":true,"release":true,"package":true,"action_run_failure":true,"action_run_recover":true,"action_run_success":true}}`,
+			Events: `
+{
+	"push_only": false,
+	"send_everything": false,
+	"choose_events": true,
+	"events": {
+		"create": true,
+		"delete": true,
+		"fork": true,
+		"issues": true,
+		"issue_assign": true,
+		"issue_label": true,
+		"issue_milestone": true,
+		"issue_comment": true,
+		"push": true,
+		"pull_request": true,
+		"pull_request_assign": true,
+		"pull_request_label": true,
+		"pull_request_milestone": true,
+		"pull_request_comment": true,
+		"pull_request_review": true,
+		"pull_request_sync": true,
+		"pull_request_review_request": true,
+		"wiki": true,
+		"repository": true,
+		"release": true,
+		"package": true,
+		"action_run_failure": true,
+		"action_run_recover": true,
+		"action_run_success": true,
+		"workflow_job_blocked": true,
+		"workflow_job_cancelled": true,
+		"workflow_job_failure": true,
+		"workflow_job_running": true,
+		"workflow_job_skipped": true,
+		"workflow_job_success": true,
+		"workflow_job_waiting": true
+	}
+}
+`,
 		}
 		unittest.AssertNotExistsBean(t, hook)
 		require.NoError(t, CreateWebhook(db.DefaultContext, hook, ""))
@@ -157,6 +199,13 @@ func TestCreateWebhook(t *testing.T) {
 			// string(webhook_module.HookEventWorkflowDispatch),
 			string(webhook_module.HookEventActionRunFailure),
 			string(webhook_module.HookEventActionRunSuccess),
+			string(webhook_module.HookEventWorkflowJobBlocked),
+			string(webhook_module.HookEventWorkflowJobCancelled),
+			string(webhook_module.HookEventWorkflowJobFailure),
+			string(webhook_module.HookEventWorkflowJobRunning),
+			string(webhook_module.HookEventWorkflowJobSkipped),
+			string(webhook_module.HookEventWorkflowJobSuccess),
+			string(webhook_module.HookEventWorkflowJobWaiting),
 		},
 			hookFromDb.EventsArray())
 	})

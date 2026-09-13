@@ -476,6 +476,8 @@ func CreateTaskForRunner(ctx context.Context, runner *actions_model.ActionRunner
 		return nil, err
 	}
 
+	priorStatus := job.Status
+
 	now := timeutil.TimeStampNow()
 	job.Started = now
 	job.Status = actions_model.StatusRunning
@@ -539,7 +541,6 @@ func CreateTaskForRunner(ctx context.Context, runner *actions_model.ActionRunner
 	// that just the same and return the `ErrNoJobUpdated` error code. An alternative would be to use READ COMMITTED
 	// transaction isolation level, but models/db doesn't currently expose that, and it would cause transaction nesting
 	// difficulties.
-	priorStatus := job.Status
 	if n, err := actions_model.UpdateRunJobWithoutNotification(ctx, job, builder.Eq{"task_id": 0}); err != nil && errors.Is(err, xorm.ErrDeadlock) {
 		return nil, actions_model.ErrNoJobUpdated
 	} else if err != nil {

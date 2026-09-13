@@ -9,11 +9,24 @@ import (
 	"net/url"
 	"strings"
 
+	actions_model "forgejo.org/models/actions"
 	webhook_model "forgejo.org/models/webhook"
 	"forgejo.org/modules/setting"
 	api "forgejo.org/modules/structs"
 	"forgejo.org/modules/util"
 	webhook_module "forgejo.org/modules/webhook"
+)
+
+var (
+	greenColor       = color("1ac600")
+	greenColorLight  = color("bfe5bf")
+	yellowColor      = color("ffd930")
+	greyColor        = color("4f545c")
+	purpleColor      = color("7289da")
+	orangeColor      = color("eb6420")
+	orangeColorLight = color("e68d60")
+	redColor         = color("ff3232")
+	blueColor        = color("2563eb")
 )
 
 type (
@@ -345,6 +358,41 @@ func (wpf webhookPayloadFormatter) getActionPayloadInfo(p *api.ActionPayload) (t
 	}
 
 	return text, color
+}
+
+func (wpf webhookPayloadFormatter) getWorkflowJobPayloadInfo(p *api.WorkflowJobPayload) (title, body string, colour int) {
+	switch p.Job.Status {
+	case actions_model.StatusBlocked.String():
+		title = fmt.Sprintf("[%[2]s] Workflow job %[1]q is blocked", p.Job.Name, p.Repository.FullName)
+		colour = yellowColor
+	case actions_model.StatusCancelled.String():
+		title = fmt.Sprintf("[%[2]s] Workflow job %[1]q was cancelled", p.Job.Name, p.Repository.FullName)
+		colour = greyColor
+	case actions_model.StatusFailure.String():
+		title = fmt.Sprintf("[%[2]s] Workflow job %[1]q has failed", p.Job.Name, p.Repository.FullName)
+		colour = redColor
+	case actions_model.StatusRunning.String():
+		title = fmt.Sprintf("[%[2]s] Workflow job %[1]q has started running", p.Job.Name, p.Repository.FullName)
+		colour = greenColorLight
+	case actions_model.StatusSkipped.String():
+		title = fmt.Sprintf("[%[2]s] Workflow job %[1]q was skipped", p.Job.Name, p.Repository.FullName)
+		colour = greyColor
+	case actions_model.StatusSuccess.String():
+		title = fmt.Sprintf("[%[2]s] Workflow job %[1]q has completed successfully", p.Job.Name, p.Repository.FullName)
+		colour = greenColor
+	case actions_model.StatusWaiting.String():
+		title = fmt.Sprintf("[%[2]s] Workflow job %[1]q is waiting", p.Job.Name, p.Repository.FullName)
+		colour = blueColor
+	}
+
+	body = fmt.Sprintf(`Repository: %s
+Run: %s
+Job: %s
+
+View details on %s.
+`, p.Repository.FullName, p.Run.Title, p.Job.Name, p.Job.HTMLURL)
+
+	return title, body, colour
 }
 
 // ToHook convert models.Webhook to api.Hook

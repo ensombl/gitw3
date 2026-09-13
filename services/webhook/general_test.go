@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	actions_model "forgejo.org/models/actions"
 	api "forgejo.org/modules/structs"
 
 	"github.com/stretchr/testify/assert"
@@ -804,5 +805,124 @@ func TestWebhookPayloadTextFormatter(t *testing.T) {
 	for i, c := range formatterCases {
 		text, _, _, _ := c.formatter.getIssuesPayloadInfo(p)
 		assert.Equal(t, c.expectedText, text, "case %d", i)
+	}
+}
+
+func TestGetWorkflowJobPayloadInfo(t *testing.T) {
+	formatter := webhookPayloadFormatter{
+		linkFormatter: noneLinkFormatter,
+		nameFormatter: noneNameFormatter,
+		withSender:    true,
+		withRepoName:  true,
+	}
+
+	testCases := []struct {
+		jobStatus      actions_model.Status
+		expectedColour int
+		expectedTitle  string
+		expectedBody   string
+	}{
+		{
+			jobStatus:      actions_model.StatusBlocked,
+			expectedColour: yellowColor,
+			expectedTitle:  `[acme/test] Workflow job "build-and-test" is blocked`,
+			expectedBody: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+		},
+		{
+			jobStatus:      actions_model.StatusCancelled,
+			expectedColour: greyColor,
+			expectedTitle:  `[acme/test] Workflow job "build-and-test" was cancelled`,
+			expectedBody: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+		},
+		{
+			jobStatus:      actions_model.StatusFailure,
+			expectedColour: redColor,
+			expectedTitle:  `[acme/test] Workflow job "build-and-test" has failed`,
+			expectedBody: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+		},
+		{
+			jobStatus:      actions_model.StatusRunning,
+			expectedColour: greenColorLight,
+			expectedTitle:  `[acme/test] Workflow job "build-and-test" has started running`,
+			expectedBody: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+		},
+		{
+			jobStatus:      actions_model.StatusSkipped,
+			expectedColour: greyColor,
+			expectedTitle:  `[acme/test] Workflow job "build-and-test" was skipped`,
+			expectedBody: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+		},
+		{
+			jobStatus:      actions_model.StatusSuccess,
+			expectedColour: greenColor,
+			expectedTitle:  `[acme/test] Workflow job "build-and-test" has completed successfully`,
+			expectedBody: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+		},
+		{
+			jobStatus:      actions_model.StatusWaiting,
+			expectedColour: blueColor,
+			expectedTitle:  `[acme/test] Workflow job "build-and-test" is waiting`,
+			expectedBody: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.
+`,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.jobStatus.String(), func(t *testing.T) {
+			payload := &api.WorkflowJobPayload{
+				Action: api.HookNewWorkflowJobAttempt,
+				Job: &api.ActionRunJob{
+					Name:    "build-and-test",
+					HTMLURL: "https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1",
+					Status:  testCase.jobStatus.String(),
+				},
+				Run: &api.ActionRun{
+					Title: "Update README.md",
+				},
+				Repository: &api.Repository{
+					FullName: "acme/test",
+				},
+			}
+
+			title, body, colour := formatter.getWorkflowJobPayloadInfo(payload)
+
+			assert.Equal(t, testCase.expectedColour, colour)
+			assert.Equal(t, testCase.expectedTitle, title)
+			assert.Equal(t, testCase.expectedBody, body)
+		})
 	}
 }

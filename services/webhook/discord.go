@@ -147,17 +147,6 @@ func color(clr string) int {
 	return 0
 }
 
-var (
-	greenColor       = color("1ac600")
-	greenColorLight  = color("bfe5bf")
-	yellowColor      = color("ffd930")
-	greyColor        = color("4f545c")
-	purpleColor      = color("7289da")
-	orangeColor      = color("eb6420")
-	orangeColorLight = color("e68d60")
-	redColor         = color("ff3232")
-)
-
 // https://discord.com/developers/docs/resources/message#embed-object-embed-limits
 // Discord has some limits in place for the embeds.
 // According to some tests, there is no consistent limit for different character sets.
@@ -335,6 +324,12 @@ func (d discordConvertor) Action(p *api.ActionPayload) (DiscordPayload, error) {
 	text, color := discordPayloadFormatter.getActionPayloadInfo(p)
 
 	return d.createPayload(p.Run.TriggerUser, text, "", p.Run.HTMLURL, color), nil
+}
+
+func (d discordConvertor) WorkflowJob(p *api.WorkflowJobPayload) (DiscordPayload, error) {
+	title, body, colour := discordPayloadFormatter.getWorkflowJobPayloadInfo(p)
+
+	return d.createPayload(p.Run.TriggerUser, title, body, p.Job.HTMLURL, colour), nil
 }
 
 var _ shared.PayloadConvertor[DiscordPayload] = discordConvertor{}

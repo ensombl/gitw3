@@ -514,3 +514,29 @@ type ActionPayload struct {
 func (p *ActionPayload) JSONPayload() ([]byte, error) {
 	return json.MarshalIndent(p, "", "  ")
 }
+
+type HookWorkflowJobAction string
+
+const (
+	HookNewWorkflowJobAttempt    HookWorkflowJobAction = "new_job_attempt"
+	HookWorkflowJobStatusChanged HookWorkflowJobAction = "job_status_changed"
+	HookWorkflowJobCompleted     HookWorkflowJobAction = "job_completed"
+)
+
+var _ Payloader = &WorkflowJobPayload{}
+
+type WorkflowJobPayload struct {
+	// Action that caused the webhook to trigger.
+	Action HookWorkflowJobAction `json:"action"`
+	// Job that triggered the webhook.
+	Job *ActionRunJob `json:"job"`
+	// Run that the job is part of.
+	Run *ActionRun `json:"run"`
+	// Repository that the job is run for.
+	Repository *Repository `json:"repository"`
+}
+
+// JSONPayload return payload information
+func (p *WorkflowJobPayload) JSONPayload() ([]byte, error) {
+	return json.MarshalIndent(p, "", "  ")
+}

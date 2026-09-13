@@ -18,6 +18,7 @@ import (
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/structs"
 	"forgejo.org/modules/test"
+	"forgejo.org/modules/timeutil"
 	webhook_module "forgejo.org/modules/webhook"
 
 	"github.com/stretchr/testify/assert"
@@ -201,4 +202,208 @@ func TestAction(t *testing.T) {
 		assert.Equal(t, actions_model.StatusWaiting.String(), payloadContent.PriorStatus)
 		assertActionEqual(t, newFailureRun, payloadContent.Run)
 	})
+}
+
+func TestWebhookNotifier_NewWorkflowJobAttempt(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+
+	defer test.MockVariableValue(&setting.Webhook.PayloadCommitLimit, 10)()
+
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	repo62 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 62, OwnerID: user2.ID})
+
+	webhook := webhook_model.Webhook{
+		OwnerID:     user2.ID,
+		RepoID:      repo62.ID,
+		URL:         "https://example.com/",
+		HTTPMethod:  "POST",
+		ContentType: webhook_model.ContentTypeJSON,
+		Events:      `{"send_everything":true}`,
+		IsActive:    true,
+		Type:        webhook_module.FORGEJO,
+	}
+
+	unittest.AssertSuccessfulInsert(t, webhook)
+
+	run := &actions_model.ActionRun{
+		Title:       "Update pom.xml",
+		RepoID:      repo62.ID,
+		OwnerID:     user2.ID,
+		TriggerUser: user2,
+		Status:      actions_model.StatusWaiting,
+	}
+
+	unittest.AssertSuccessfulInsert(t, run)
+
+	job := &actions_model.ActionRunJob{
+		RunID:             run.ID,
+		RepoID:            repo62.ID,
+		OwnerID:           user2.ID,
+		CommitSHA:         "365cc67e3d824b0c8dabf6f7799990ed2a9ce271",
+		IsForkPullRequest: false,
+		Name:              "build",
+		Attempt:           2,
+		Handle:            "51ddf9d1-2649-4b08-9fde-6867275a4b28",
+		JobID:             "build",
+		RunsOn:            []string{"fedora", "size-m"},
+		Status:            actions_model.StatusWaiting,
+		Started:           0,
+		Stopped:           0,
+		Created:           timeutil.TimeStamp(1789052551),
+		Updated:           timeutil.TimeStamp(1789052552),
+	}
+
+	unittest.AssertSuccessfulInsert(t, job)
+
+	require.NoError(t, job.LoadAttributes(t.Context()))
+
+	notifier := webhookNotifier{}
+	notifier.NewWorkflowJobAttempt(t.Context(), job)
+
+	hookTask := unittest.AssertExistsAndLoadBean(t,
+		&webhook_model.HookTask{EventType: webhook_module.HookEventWorkflowJobWaiting})
+
+	var payloadContent structs.WorkflowJobPayload
+	require.NoError(t, json.Unmarshal([]byte(hookTask.PayloadContent), &payloadContent))
+
+	assert.Equal(t, structs.HookNewWorkflowJobAttempt, payloadContent.Action)
+	assert.Equal(t, job.ID, payloadContent.Job.ID)
+	assert.Equal(t, run.ID, payloadContent.Run.ID)
+	assert.Equal(t, repo62.ID, payloadContent.Repository.ID)
+}
+
+func TestWebhookNotifier_WorkflowJobStatusChanged(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+
+	defer test.MockVariableValue(&setting.Webhook.PayloadCommitLimit, 10)()
+
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	repo62 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 62, OwnerID: user2.ID})
+
+	webhook := webhook_model.Webhook{
+		OwnerID:     user2.ID,
+		RepoID:      repo62.ID,
+		URL:         "https://example.com/",
+		HTTPMethod:  "POST",
+		ContentType: webhook_model.ContentTypeJSON,
+		Events:      `{"send_everything":true}`,
+		IsActive:    true,
+		Type:        webhook_module.FORGEJO,
+	}
+
+	unittest.AssertSuccessfulInsert(t, webhook)
+
+	run := &actions_model.ActionRun{
+		Title:       "Update pom.xml",
+		RepoID:      repo62.ID,
+		OwnerID:     user2.ID,
+		TriggerUser: user2,
+		Status:      actions_model.StatusRunning,
+	}
+
+	unittest.AssertSuccessfulInsert(t, run)
+
+	job := &actions_model.ActionRunJob{
+		RunID:             run.ID,
+		RepoID:            repo62.ID,
+		OwnerID:           user2.ID,
+		CommitSHA:         "365cc67e3d824b0c8dabf6f7799990ed2a9ce271",
+		IsForkPullRequest: false,
+		Name:              "build",
+		Attempt:           2,
+		Handle:            "51ddf9d1-2649-4b08-9fde-6867275a4b28",
+		JobID:             "build",
+		RunsOn:            []string{"fedora", "size-m"},
+		Status:            actions_model.StatusRunning,
+		Started:           1789052552,
+		Stopped:           0,
+		Created:           timeutil.TimeStamp(1789052551),
+		Updated:           timeutil.TimeStamp(1789052552),
+	}
+
+	unittest.AssertSuccessfulInsert(t, job)
+
+	require.NoError(t, job.LoadAttributes(t.Context()))
+
+	notifier := webhookNotifier{}
+	notifier.WorkflowJobStatusChanged(t.Context(), job, actions_model.StatusWaiting)
+
+	hookTask := unittest.AssertExistsAndLoadBean(t,
+		&webhook_model.HookTask{EventType: webhook_module.HookEventWorkflowJobRunning})
+
+	var payloadContent structs.WorkflowJobPayload
+	require.NoError(t, json.Unmarshal([]byte(hookTask.PayloadContent), &payloadContent))
+
+	assert.Equal(t, structs.HookWorkflowJobStatusChanged, payloadContent.Action)
+	assert.Equal(t, job.ID, payloadContent.Job.ID)
+	assert.Equal(t, run.ID, payloadContent.Run.ID)
+	assert.Equal(t, repo62.ID, payloadContent.Repository.ID)
+}
+
+func TestWebhookNotifier_WorkflowJobCompleted(t *testing.T) {
+	require.NoError(t, unittest.PrepareTestDatabase())
+
+	defer test.MockVariableValue(&setting.Webhook.PayloadCommitLimit, 10)()
+
+	user2 := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+	repo62 := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 62, OwnerID: user2.ID})
+
+	webhook := webhook_model.Webhook{
+		OwnerID:     user2.ID,
+		RepoID:      repo62.ID,
+		URL:         "https://example.com/",
+		HTTPMethod:  "POST",
+		ContentType: webhook_model.ContentTypeJSON,
+		Events:      `{"send_everything":true}`,
+		IsActive:    true,
+		Type:        webhook_module.FORGEJO,
+	}
+
+	unittest.AssertSuccessfulInsert(t, webhook)
+
+	run := &actions_model.ActionRun{
+		Title:       "Update pom.xml",
+		RepoID:      repo62.ID,
+		OwnerID:     user2.ID,
+		TriggerUser: user2,
+		Status:      actions_model.StatusSuccess,
+	}
+
+	unittest.AssertSuccessfulInsert(t, run)
+
+	job := &actions_model.ActionRunJob{
+		RunID:             run.ID,
+		RepoID:            repo62.ID,
+		OwnerID:           user2.ID,
+		CommitSHA:         "365cc67e3d824b0c8dabf6f7799990ed2a9ce271",
+		IsForkPullRequest: false,
+		Name:              "build",
+		Attempt:           2,
+		Handle:            "51ddf9d1-2649-4b08-9fde-6867275a4b28",
+		JobID:             "build",
+		RunsOn:            []string{"fedora", "size-m"},
+		Status:            actions_model.StatusSuccess,
+		Started:           1789052552,
+		Stopped:           1789052573,
+		Created:           timeutil.TimeStamp(1789052551),
+		Updated:           timeutil.TimeStamp(1789052574),
+	}
+
+	unittest.AssertSuccessfulInsert(t, job)
+
+	require.NoError(t, job.LoadAttributes(t.Context()))
+
+	notifier := webhookNotifier{}
+	notifier.WorkflowJobCompleted(t.Context(), job, actions_model.StatusRunning)
+
+	hookTask := unittest.AssertExistsAndLoadBean(t,
+		&webhook_model.HookTask{EventType: webhook_module.HookEventWorkflowJobSuccess})
+
+	var payloadContent structs.WorkflowJobPayload
+	require.NoError(t, json.Unmarshal([]byte(hookTask.PayloadContent), &payloadContent))
+
+	assert.Equal(t, structs.HookWorkflowJobCompleted, payloadContent.Action)
+	assert.Equal(t, job.ID, payloadContent.Job.ID)
+	assert.Equal(t, run.ID, payloadContent.Run.ID)
+	assert.Equal(t, repo62.ID, payloadContent.Repository.ID)
 }

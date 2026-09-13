@@ -6,6 +6,7 @@ package webhook
 import (
 	"testing"
 
+	actions_model "forgejo.org/models/actions"
 	webhook_model "forgejo.org/models/webhook"
 	"forgejo.org/modules/json"
 	api "forgejo.org/modules/structs"
@@ -188,6 +189,79 @@ func TestMatrixPayload(t *testing.T) {
 
 		assert.Equal(t, "[test/repo] Release created: [v1.0](http://localhost:3000/test/repo/releases/tag/v1.0) by user1", pl.Body)
 		assert.Equal(t, `[test/repo] Release created: <a href="http://localhost:3000/test/repo/releases/tag/v1.0">v1.0</a> by user1`, pl.FormattedBody)
+	})
+
+	t.Run("WorkflowJob", func(t *testing.T) {
+		testCases := []struct {
+			jobStatus    actions_model.Status
+			markdownBody string
+			htmlBody     string
+		}{
+			{
+				jobStatus:    actions_model.StatusBlocked,
+				markdownBody: `[acme/test] Workflow job "build-and-test" is blocked. [View details](https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1).`,
+				htmlBody:     `[acme/test] Workflow job "build-and-test" is blocked. <a href="https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1">View details</a>.`,
+			},
+			{
+				jobStatus:    actions_model.StatusCancelled,
+				markdownBody: `[acme/test] Workflow job "build-and-test" was cancelled. [View details](https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1).`,
+				htmlBody:     `[acme/test] Workflow job "build-and-test" was cancelled. <a href="https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1">View details</a>.`,
+			},
+			{
+				jobStatus:    actions_model.StatusFailure,
+				markdownBody: `[acme/test] Workflow job "build-and-test" has failed. [View details](https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1).`,
+				htmlBody:     `[acme/test] Workflow job "build-and-test" has failed. <a href="https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1">View details</a>.`,
+			},
+			{
+				jobStatus:    actions_model.StatusRunning,
+				markdownBody: `[acme/test] Workflow job "build-and-test" has started running. [View details](https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1).`,
+				htmlBody:     `[acme/test] Workflow job "build-and-test" has started running. <a href="https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1">View details</a>.`,
+			},
+			{
+				jobStatus:    actions_model.StatusSkipped,
+				markdownBody: `[acme/test] Workflow job "build-and-test" was skipped. [View details](https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1).`,
+				htmlBody:     `[acme/test] Workflow job "build-and-test" was skipped. <a href="https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1">View details</a>.`,
+			},
+			{
+				jobStatus:    actions_model.StatusSuccess,
+				markdownBody: `[acme/test] Workflow job "build-and-test" has completed successfully. [View details](https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1).`,
+				htmlBody:     `[acme/test] Workflow job "build-and-test" has completed successfully. <a href="https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1">View details</a>.`,
+			},
+			{
+				jobStatus:    actions_model.StatusWaiting,
+				markdownBody: `[acme/test] Workflow job "build-and-test" is waiting. [View details](https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1).`,
+				htmlBody:     `[acme/test] Workflow job "build-and-test" is waiting. <a href="https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1">View details</a>.`,
+			},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.jobStatus.String(), func(t *testing.T) {
+				inputPayload := &api.WorkflowJobPayload{
+					Action: api.HookNewWorkflowJobAttempt,
+					Job: &api.ActionRunJob{
+						Name:    "build-and-test",
+						HTMLURL: "https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1",
+						Status:  testCase.jobStatus.String(),
+					},
+					Run: &api.ActionRun{
+						Title: "Update README.md",
+						TriggerUser: &api.User{
+							UserName:  "jane",
+							AvatarURL: "https://example.com/avatars/7dc9cf?size=64",
+						},
+					},
+					Repository: &api.Repository{
+						FullName: "acme/test",
+					},
+				}
+
+				payload, err := mc.WorkflowJob(inputPayload)
+				require.NoError(t, err)
+
+				assert.Equal(t, testCase.markdownBody, payload.Body)
+				assert.Equal(t, testCase.htmlBody, payload.FormattedBody)
+			})
+		}
 	})
 }
 

@@ -316,6 +316,34 @@ func (w *Webhook) HasPullRequestReviewRequestEvent() bool {
 		(w.ChooseEvents && w.PullRequestReviewRequest)
 }
 
+func (w *Webhook) HasWorkflowJobBlockedEvent() bool {
+	return w.SendEverything || (w.ChooseEvents && w.WorkflowJobBlocked)
+}
+
+func (w *Webhook) HasWorkflowJobCancelledEvent() bool {
+	return w.SendEverything || (w.ChooseEvents && w.WorkflowJobCancelled)
+}
+
+func (w *Webhook) HasWorkflowJobFailureEvent() bool {
+	return w.SendEverything || (w.ChooseEvents && w.WorkflowJobFailure)
+}
+
+func (w *Webhook) HasWorkflowJobRunningEvent() bool {
+	return w.SendEverything || (w.ChooseEvents && w.WorkflowJobRunning)
+}
+
+func (w *Webhook) HasWorkflowJobSkippedEvent() bool {
+	return w.SendEverything || (w.ChooseEvents && w.WorkflowJobSkipped)
+}
+
+func (w *Webhook) HasWorkflowJobSuccessEvent() bool {
+	return w.SendEverything || (w.ChooseEvents && w.WorkflowJobSuccess)
+}
+
+func (w *Webhook) HasWorkflowJobWaitingEvent() bool {
+	return w.SendEverything || (w.ChooseEvents && w.WorkflowJobWaiting)
+}
+
 // EventCheckers returns event checkers
 func (w *Webhook) EventCheckers() []struct {
 	Has  func() bool
@@ -350,6 +378,13 @@ func (w *Webhook) EventCheckers() []struct {
 		{w.HasPullRequestReviewRequestEvent, webhook_module.HookEventPullRequestReviewRequest},
 		{w.HasActionRunFailureEvent, webhook_module.HookEventActionRunFailure},
 		{w.HasActionRunSuccessEvent, webhook_module.HookEventActionRunSuccess},
+		{w.HasWorkflowJobBlockedEvent, webhook_module.HookEventWorkflowJobBlocked},
+		{w.HasWorkflowJobCancelledEvent, webhook_module.HookEventWorkflowJobCancelled},
+		{w.HasWorkflowJobFailureEvent, webhook_module.HookEventWorkflowJobFailure},
+		{w.HasWorkflowJobRunningEvent, webhook_module.HookEventWorkflowJobRunning},
+		{w.HasWorkflowJobSkippedEvent, webhook_module.HookEventWorkflowJobSkipped},
+		{w.HasWorkflowJobSuccessEvent, webhook_module.HookEventWorkflowJobSuccess},
+		{w.HasWorkflowJobWaitingEvent, webhook_module.HookEventWorkflowJobWaiting},
 	}
 }
 

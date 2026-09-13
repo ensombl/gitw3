@@ -515,3 +515,13 @@ tasks:
 `, string(manifest))
 	})
 }
+
+func TestSourcehutConverter_WorkflowJob(t *testing.T) {
+	sc := sourcehutConvertor{
+		ctx:  t.Context(),
+		meta: BuildsMeta{},
+	}
+
+	_, err := sc.WorkflowJob(&api.WorkflowJobPayload{})
+	require.ErrorIs(t, err, shared.ErrPayloadTypeNotSupported)
+}

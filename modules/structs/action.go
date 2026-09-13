@@ -24,6 +24,8 @@ type ActionRunJob struct {
 	OwnerID int64 `json:"owner_id"`
 	// the action run job name
 	Name string `json:"name"`
+	// HTMLURL is the URL where a user can view the job using their browser.
+	HTMLURL string `json:"html_url"`
 	// the action run job needed ids
 	Needs []string `json:"needs"`
 	// the action run job labels to run on

@@ -283,8 +283,14 @@ type WebhookCoreForm struct {
 	Repository               bool
 	Package                  bool
 	ActionFailure            bool
-	ActionRecover            bool
 	ActionSuccess            bool
+	WorkflowJobBlocked       bool
+	WorkflowJobCancelled     bool
+	WorkflowJobFailure       bool
+	WorkflowJobRunning       bool
+	WorkflowJobSkipped       bool
+	WorkflowJobSuccess       bool
+	WorkflowJobWaiting       bool
 	Active                   bool
 	BranchFilter             string `binding:"GlobPattern"`
 	AuthorizationHeader      string

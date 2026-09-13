@@ -1285,7 +1285,13 @@ func ListActionRunJobs(ctx *context.APIContext) {
 
 	response := make([]*api.ActionRunJob, 0, len(jobs))
 	for _, job := range jobs {
-		response = append(response, convert.ToActionRunJob(job, nil))
+		convertedJob, err := convert.ToActionRunJob(ctx, job, nil)
+		if err != nil {
+			ctx.Error(http.StatusInternalServerError, "ToActionRunJob", err)
+			return
+		}
+
+		response = append(response, convertedJob)
 	}
 
 	ctx.JSON(http.StatusOK, response)
@@ -1683,7 +1689,13 @@ func GetActionJob(ctx *context.APIContext) {
 		full = actions.FullSteps(task)
 	}
 
-	ctx.JSON(http.StatusOK, convert.ToActionRunJob(job, full))
+	convertedJob, err := convert.ToActionRunJob(ctx, job, full)
+	if err != nil {
+		ctx.Error(http.StatusInternalServerError, "ToActionRunJob", err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, convertedJob)
 }
 
 // RerunActionJob reruns a completed workflow job and its dependent jobs.

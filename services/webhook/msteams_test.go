@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	actions_model "forgejo.org/models/actions"
 	webhook_model "forgejo.org/models/webhook"
 	"forgejo.org/modules/json"
 	api "forgejo.org/modules/structs"
@@ -373,6 +374,83 @@ func TestMSTeamsPayload(t *testing.T) {
 		require.Len(t, pl.Actions, 1)
 		assert.Equal(t, "View in Forgejo", pl.Actions[0].Title)
 		assert.Equal(t, "http://localhost:3000/test/repo/releases/tag/v1.0", pl.Actions[0].URL)
+	})
+
+	t.Run("WorkflowJob", func(t *testing.T) {
+		testCases := []struct {
+			jobStatus    actions_model.Status
+			expectedText string
+		}{
+			{
+				jobStatus:    actions_model.StatusBlocked,
+				expectedText: `Workflow job "build-and-test" is blocked, triggered by @jane`,
+			},
+			{
+				jobStatus:    actions_model.StatusCancelled,
+				expectedText: `Workflow job "build-and-test" was cancelled, triggered by @jane`,
+			},
+			{
+				jobStatus:    actions_model.StatusFailure,
+				expectedText: `Workflow job "build-and-test" has failed, triggered by @jane`,
+			},
+			{
+				jobStatus:    actions_model.StatusRunning,
+				expectedText: `Workflow job "build-and-test" has started running, triggered by @jane`,
+			},
+			{
+				jobStatus:    actions_model.StatusSkipped,
+				expectedText: `Workflow job "build-and-test" was skipped, triggered by @jane`,
+			},
+			{
+				jobStatus:    actions_model.StatusSuccess,
+				expectedText: `Workflow job "build-and-test" has completed successfully, triggered by @jane`,
+			},
+			{
+				jobStatus:    actions_model.StatusWaiting,
+				expectedText: `Workflow job "build-and-test" is waiting, triggered by @jane`,
+			},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.jobStatus.String(), func(t *testing.T) {
+				inputPayload := &api.WorkflowJobPayload{
+					Action: api.HookNewWorkflowJobAttempt,
+					Job: &api.ActionRunJob{
+						Name:    "build-and-test",
+						HTMLURL: "https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1",
+						Status:  testCase.jobStatus.String(),
+					},
+					Run: &api.ActionRun{
+						Title: "Update README.md",
+						TriggerUser: &api.User{
+							UserName:  "jane",
+							AvatarURL: "https://example.com/avatars/7dc9cf?size=64",
+						},
+					},
+					Repository: &api.Repository{
+						FullName: "acme/test",
+						HTMLURL:  "https://example.com/acme/test",
+					},
+				}
+
+				payload, err := mc.WorkflowJob(inputPayload)
+				require.NoError(t, err)
+
+				assert.Equal(t, "AdaptiveCard", payload.Type)
+				assert.Len(t, payload.Body, 3)
+
+				assert.True(t, findTextInBody(payload, "💬 Update | [acme/test](https://example.com/acme/test)"))
+				assert.True(t, findTextInBody(payload, testCase.expectedText))
+				assert.True(t, findTextInBody(payload, "Repository: acme/test"))
+				assert.True(t, findTextInBody(payload, "Run: Update README.md"))
+				assert.True(t, findTextInBody(payload, "Job: build-and-test"))
+
+				assert.Len(t, payload.Actions, 1)
+				assert.Equal(t, "View in Forgejo", payload.Actions[0].Title)
+				assert.Equal(t, "https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1",
+					payload.Actions[0].URL)
+			})
+		}
 	})
 }
 

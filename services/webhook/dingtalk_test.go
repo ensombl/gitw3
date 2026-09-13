@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"testing"
 
+	actions_model "forgejo.org/models/actions"
 	webhook_model "forgejo.org/models/webhook"
 	"forgejo.org/modules/json"
 	api "forgejo.org/modules/structs"
@@ -212,6 +213,106 @@ func TestDingTalkPayload(t *testing.T) {
 		assert.Equal(t, "[test/repo] Release created: v1.0 by user1", pl.ActionCard.Title)
 		assert.Equal(t, "view release", pl.ActionCard.SingleTitle)
 		assert.Equal(t, "http://localhost:3000/test/repo/releases/tag/v1.0", parseRealSingleURL(pl.ActionCard.SingleURL))
+	})
+
+	t.Run("WorkflowJob", func(t *testing.T) {
+		testCases := []struct {
+			jobStatus     actions_model.Status
+			expectedTitle string
+			expectedText  string
+		}{
+			{
+				jobStatus:     actions_model.StatusBlocked,
+				expectedTitle: `[acme/test] Workflow job "build-and-test" is blocked`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.`,
+			},
+			{
+				jobStatus:     actions_model.StatusCancelled,
+				expectedTitle: `[acme/test] Workflow job "build-and-test" was cancelled`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.`,
+			},
+			{
+				jobStatus:     actions_model.StatusFailure,
+				expectedTitle: `[acme/test] Workflow job "build-and-test" has failed`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.`,
+			},
+			{
+				jobStatus:     actions_model.StatusRunning,
+				expectedTitle: `[acme/test] Workflow job "build-and-test" has started running`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.`,
+			},
+			{
+				jobStatus:     actions_model.StatusSkipped,
+				expectedTitle: `[acme/test] Workflow job "build-and-test" was skipped`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.`,
+			},
+			{
+				jobStatus:     actions_model.StatusSuccess,
+				expectedTitle: `[acme/test] Workflow job "build-and-test" has completed successfully`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.`,
+			},
+			{
+				jobStatus:     actions_model.StatusWaiting,
+				expectedTitle: `[acme/test] Workflow job "build-and-test" is waiting`,
+				expectedText: `Repository: acme/test
+Run: Update README.md
+Job: build-and-test
+
+View details on https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1.`,
+			},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.jobStatus.String(), func(t *testing.T) {
+				inputPayload := &api.WorkflowJobPayload{
+					Action: api.HookNewWorkflowJobAttempt,
+					Job: &api.ActionRunJob{
+						Name:    "build-and-test",
+						HTMLURL: "https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1",
+						Status:  testCase.jobStatus.String(),
+					},
+					Run: &api.ActionRun{
+						Title: "Update README.md",
+					},
+					Repository: &api.Repository{
+						FullName: "acme/test",
+					},
+				}
+
+				payload, err := dc.WorkflowJob(inputPayload)
+				require.NoError(t, err)
+
+				assert.Equal(t, testCase.expectedTitle, payload.ActionCard.Title)
+				assert.Equal(t, testCase.expectedText, payload.ActionCard.Text)
+				assert.Equal(t, "view job", payload.ActionCard.SingleTitle)
+				assert.Equal(t, "https://example.com/acme/test/actions/runs/196540/jobs/3/attempt/1",
+					parseRealSingleURL(payload.ActionCard.SingleURL))
+			})
+		}
 	})
 }
 

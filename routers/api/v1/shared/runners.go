@@ -55,7 +55,7 @@ func GetActionRunJobs(ctx *context.APIContext, ownerID, repoID int64) {
 		labels = strings.Split(ctx.FormTrim("labels"), ",")
 	}
 
-	total, err := db.Find[actions_model.ActionRunJob](ctx, &actions_model.FindTaskOptions{
+	jobs, err := db.Find[actions_model.ActionRunJob](ctx, &actions_model.FindTaskOptions{
 		Status:  []actions_model.Status{actions_model.StatusWaiting, actions_model.StatusRunning},
 		OwnerID: ownerID,
 		RepoID:  repoID,
@@ -65,19 +65,20 @@ func GetActionRunJobs(ctx *context.APIContext, ownerID, repoID int64) {
 		return
 	}
 
-	res := fromRunJobModelToResponse(total, labels)
-
-	ctx.JSON(http.StatusOK, res)
-}
-
-func fromRunJobModelToResponse(job []*actions_model.ActionRunJob, labels []string) []*structs.ActionRunJob {
 	var res []*structs.ActionRunJob
-	for i := range job {
-		if len(labels) == 0 || labels[0] == "" && len(job[i].RunsOn) == 0 || job[i].ItRunsOn(labels) {
-			res = append(res, convert.ToActionRunJob(job[i], nil))
+	for _, job := range jobs {
+		if len(labels) == 0 || labels[0] == "" && len(job.RunsOn) == 0 || job.ItRunsOn(labels) {
+			convertedJob, err := convert.ToActionRunJob(ctx, job, nil)
+			if err != nil {
+				ctx.Error(http.StatusInternalServerError, "ToActionRunJob", err)
+				return
+			}
+
+			res = append(res, convertedJob)
 		}
 	}
-	return res
+
+	ctx.JSON(http.StatusOK, res)
 }
 
 // ListRunners lists runners for api route validated ownerID and repoID

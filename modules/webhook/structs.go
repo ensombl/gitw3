@@ -29,6 +29,13 @@ type HookEvents struct {
 	Package                  bool `json:"package"`
 	ActionRunFailure         bool `json:"action_run_failure"`
 	ActionRunSuccess         bool `json:"action_run_success"`
+	WorkflowJobBlocked       bool `json:"workflow_job_blocked"`
+	WorkflowJobCancelled     bool `json:"workflow_job_cancelled"`
+	WorkflowJobFailure       bool `json:"workflow_job_failure"`
+	WorkflowJobRunning       bool `json:"workflow_job_running"`
+	WorkflowJobSkipped       bool `json:"workflow_job_skipped"`
+	WorkflowJobSuccess       bool `json:"workflow_job_success"`
+	WorkflowJobWaiting       bool `json:"workflow_job_waiting"`
 }
 
 // HookEvent represents events that will deliver a hook.

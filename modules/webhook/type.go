@@ -35,8 +35,14 @@ const (
 	HookEventSchedule                  HookEventType = "schedule"
 	HookEventWorkflowDispatch          HookEventType = "workflow_dispatch"
 	HookEventActionRunFailure          HookEventType = "action_run_failure"
-	HookEventActionRunRecover          HookEventType = "action_run_recover"
 	HookEventActionRunSuccess          HookEventType = "action_run_success"
+	HookEventWorkflowJobBlocked        HookEventType = "workflow_job_blocked"
+	HookEventWorkflowJobCancelled      HookEventType = "workflow_job_cancelled"
+	HookEventWorkflowJobFailure        HookEventType = "workflow_job_failure"
+	HookEventWorkflowJobRunning        HookEventType = "workflow_job_running"
+	HookEventWorkflowJobSkipped        HookEventType = "workflow_job_skipped"
+	HookEventWorkflowJobSuccess        HookEventType = "workflow_job_success"
+	HookEventWorkflowJobWaiting        HookEventType = "workflow_job_waiting"
 )
 
 // Event returns the HookEventType as an event string
@@ -73,6 +79,20 @@ func (h HookEventType) Event() string {
 		return "action_run_failure"
 	case HookEventActionRunSuccess:
 		return "action_run_success"
+	case HookEventWorkflowJobBlocked:
+		return "workflow_job_blocked"
+	case HookEventWorkflowJobCancelled:
+		return "workflow_job_cancelled"
+	case HookEventWorkflowJobFailure:
+		return "workflow_job_failure"
+	case HookEventWorkflowJobRunning:
+		return "workflow_job_running"
+	case HookEventWorkflowJobSkipped:
+		return "workflow_job_skipped"
+	case HookEventWorkflowJobSuccess:
+		return "workflow_job_success"
+	case HookEventWorkflowJobWaiting:
+		return "workflow_job_waiting"
 	}
 	return ""
 }
