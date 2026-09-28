@@ -832,6 +832,14 @@ func Home(ctx *context.Context) {
 		}
 	}
 
+	// Simple Mode users land on the Deploy tab; empty repositories keep the
+	// home page so its push instructions stay visible.
+	if simple, _ := ctx.Data["SimpleMode"].(bool); simple && !ctx.Repo.Repository.IsEmpty &&
+		ctx.Link == ctx.Repo.RepoLink && ctx.Repo.CanRead(unit_model.TypeCode) {
+		ctx.Redirect(ctx.Repo.RepoLink + "/deploy")
+		return
+	}
+
 	checkHomeCodeViewable(ctx)
 	if ctx.Written() {
 		return

@@ -1,0 +1,23 @@
+{{template "base/head" .}}
+<div role="main" aria-label="{{.Title}}" class="page-content dashboard simple-dashboard">
+	<div class="ui container">
+		{{template "base/alert" .}}
+		<div class="simple-dashboard-heading">
+			<h1>{{ctx.Locale.Tr "platform.simple_mode.your_apps"}}</h1>
+			<a class="ui primary button" href="{{AppSubUrl}}/repo/create">{{svg "octicon-plus"}} {{ctx.Locale.Tr "new_repo.link"}}</a>
+		</div>
+		{{if .SimpleRepos}}
+			<ul class="simple-repo-list">
+				{{range .SimpleRepos}}
+					<li><a href="{{.Link}}">{{svg "octicon-repo"}} <span>{{if ne .OwnerID $.ContextUser.ID}}{{.OwnerName}}/{{end}}{{.Name}}</span></a></li>
+				{{end}}
+			</ul>
+		{{else}}
+			<div class="w3ds-empty-state">
+				{{svg "octicon-rocket" 48}}
+				<p>{{ctx.Locale.Tr "platform.simple_mode.empty"}}</p>
+			</div>
+		{{end}}
+	</div>
+</div>
+{{template "base/footer" .}}

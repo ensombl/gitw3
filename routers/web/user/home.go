@@ -94,6 +94,11 @@ func Dashboard(ctx *context.Context) {
 	ctx.Data["OrganizationsPageIsDisabled"] = setting.Service.Explore.DisableOrganizationsPage
 	ctx.Data["Date"] = date
 
+	if simple, _ := ctx.Data["SimpleMode"].(bool); simple {
+		simpleDashboard(ctx, ctxUser)
+		return
+	}
+
 	var uid int64
 	if ctxUser != nil {
 		uid = ctxUser.ID

@@ -135,6 +135,8 @@ func InitTest() {
 	// that test-only mechanism available unless a test explicitly enables the
 	// production W3DS-only policy.
 	setting.W3DSAllowAlternativeAuthenticationForTests = true
+	// Upstream tests exercise the full UI; GitW3 Simple Mode tests opt in.
+	setting.UI.DefaultSimpleMode = false
 	setting.Repository.DefaultBranch = "master" // many test code still assume that default branch is called "master"
 	_ = util.RemoveAll(repo_module.LocalCopyPath())
 

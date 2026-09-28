@@ -16,6 +16,7 @@ import (
 	quota_model "forgejo.org/models/quota"
 	repo_model "forgejo.org/models/repo"
 	"forgejo.org/models/unit"
+	user_model "forgejo.org/models/user"
 	"forgejo.org/modules/avatar"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/metrics"
@@ -232,6 +233,8 @@ func webAuth(authMethod auth_service.Method) func(*context.Context) {
 		if ctx.Doer == nil {
 			// ensure the session uid is deleted
 			_ = ctx.Session.Delete("uid")
+		} else {
+			ctx.Data["SimpleMode"] = user_model.IsSimpleMode(ctx, ctx.Doer)
 		}
 	}
 }
@@ -874,6 +877,7 @@ func registerRoutes(m *web.Route) {
 		m.Post("/logout", auth.SignOut)
 		m.Get("/task/{task}", reqSignIn, user.TaskStatus)
 		m.Get("/stopwatches", reqSignIn, user.GetStopwatches)
+		m.Post("/simple-mode", reqSignIn, user.ToggleSimpleMode)
 		m.Get("/search_candidates", ignExploreSignIn, user.SearchCandidates)
 		m.Group("/oauth2", func() {
 			m.Get("/{provider}", auth.SignInOAuth)

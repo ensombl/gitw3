@@ -26,6 +26,8 @@
 		<!-- navbar links non-mobile -->
 		{{if and .IsSigned .HideNavbarLinks}}
 			{{/* No links */}}
+		{{else if and .IsSigned .SimpleMode}}
+			<a class="item{{if .PageIsDashboard}} active{{end}}" {{if .PageIsDashboard}}aria-current="page" {{end}}href="{{AppSubUrl}}/">{{ctx.Locale.Tr "platform.simple_mode.your_apps"}}</a>
 		{{else if .IsSigned}}
 			{{if not .UnitIssuesGlobalDisabled}}
 				<a class="item{{if .PageIsIssues}} active{{end}}" {{if .PageIsIssues}}aria-current="page" {{end}}href="{{AppSubUrl}}/issues">{{ctx.Locale.Tr "issues"}}</a>
@@ -168,7 +170,12 @@
 								{{ctx.Locale.Tr "your_profile"}}
 							</a>
 						</li>
-						{{if not .DisableStars}}
+						<li>
+							<a class="link-action" href data-url="{{AppSubUrl}}/user/simple-mode?enabled={{not .SimpleMode}}">
+								{{if .SimpleMode}}{{svg "octicon-tools"}} {{ctx.Locale.Tr "platform.simple_mode.switch_advanced"}}{{else}}{{svg "octicon-rocket"}} {{ctx.Locale.Tr "platform.simple_mode.switch_simple"}}{{end}}
+							</a>
+						</li>
+						{{if and (not .DisableStars) (not .SimpleMode)}}
 							<li>
 								<a href="{{.SignedUser.HomeLink}}?tab=stars">
 									{{svg "octicon-star"}}

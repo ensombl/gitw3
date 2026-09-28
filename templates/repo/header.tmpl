@@ -34,7 +34,7 @@
 					{{end}}
 				</div>
 			</div>
-			{{if not (or .IsBeingCreated .IsBroken)}}
+			{{if not (or .IsBeingCreated .IsBroken (and $.SimpleMode (not $.RepoTransfer)))}}
 				<div class="repo-buttons button-row">
 					{{if $.RepoTransfer}}
 						<form method="post" action="{{$.RepoLink}}/action/accept_transfer?redirect_to={{$.RepoLink}}">
@@ -52,6 +52,7 @@
 							</div>
 						</form>
 					{{end}}
+					{{if not $.SimpleMode}}
 					{{if $.EnableFeed}}
 					{{/* An extra div-element is not necessary here, as this button does not secretly contain two buttons. */}}
 					<a class="ui compact small basic button" href="{{$.RepoLink}}.rss" data-tooltip-content="{{ctx.Locale.Tr "rss_feed"}}">
@@ -73,6 +74,7 @@
 						</div>
 					</button>
 					{{end}}
+					{{end}}
 				</div>
 			{{end}}
 		</div>
@@ -91,6 +93,18 @@
 	<overflow-menu class="ui container secondary pointing tabular top attached borderless menu tw-pt-0 tw-my-0">
 		{{if not (or .Repository.IsBeingCreated .Repository.IsBroken)}}
 			<div class="overflow-menu-items">
+				{{if $.SimpleMode}}
+				{{if and (.Permission.CanRead $.UnitTypeCode) (not .IsEmptyRepo)}}
+					<a class="{{if .PageIsDeploy}}active {{end}}item" href="{{.RepoLink}}/deploy">
+						{{svg "octicon-rocket"}} {{ctx.Locale.Tr "platform.deploy.tab"}}
+					</a>
+				{{end}}
+				{{if and (.Permission.CanRead $.UnitTypeReleases) (not .IsEmptyRepo)}}
+					<a class="{{if or .PageIsReleaseList .PageIsTagList}}active {{end}}item" href="{{.RepoLink}}/releases">
+						{{svg "octicon-tag"}} {{ctx.Locale.Tr "repo.releases"}}
+					</a>
+				{{end}}
+				{{else}}
 				{{if .Permission.CanRead $.UnitTypeCode}}
 					<a class="{{if .PageIsViewCode}}active {{end}}item" href="{{.RepoLink}}{{if and (ne .BranchName .Repository.DefaultBranch) (not $.PageIsWiki)}}/src/{{.BranchNameSubURL}}{{end}}">
 						{{svg "octicon-code"}} {{ctx.Locale.Tr "repo.code"}}
@@ -201,6 +215,7 @@
 					<a id="settings-btn" class="{{if and .PageIsRepoSettings (or $highlightSettings (not .PageIsRepoSettingsUnits))}}active {{end}}right item" href="{{.RepoLink}}/settings">
 						{{svg "octicon-tools"}} {{ctx.Locale.Tr "repo.settings"}}
 					</a>
+				{{end}}
 				{{end}}
 			</div>
 		{{else if .Permission.IsAdmin}}

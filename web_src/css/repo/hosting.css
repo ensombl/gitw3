@@ -190,3 +190,48 @@
     width: 100%;
   }
 }
+
+.simple-dashboard {
+  padding-top: 2rem;
+}
+
+.simple-dashboard-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.simple-dashboard-heading h1 {
+  margin: 0;
+}
+
+.simple-repo-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.simple-repo-list a {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  background: var(--color-box-body);
+  color: var(--color-text);
+  font-size: 1.1rem;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.simple-repo-list a:hover {
+  border-color: var(--color-primary);
+  text-decoration: none;
+}
