@@ -27,6 +27,8 @@ const (
 	maxComposeSize      = 256 << 10
 	deploymentKeyMount  = "/run/secrets/w3ds-deployment-key.json"
 	deploymentKeyEnvVar = "W3DS_DEPLOYMENT_KEY_FILE"
+	// deploymentKeyJSONEnvVar carries the key file content to compose services.
+	deploymentKeyJSONEnvVar = "W3DS_DEPLOYMENT_KEY_JSON"
 )
 
 // ErrNoDeployConfig means a commit has neither deploy.yml nor a Dockerfile.
@@ -38,6 +40,8 @@ type ReleaseConfig struct {
 	// Compose holds the validated compose file of each compose target.
 	Compose map[string]*hosting_module.ComposeFile
 	Builds  map[string][]hosting_module.ComposeBuild
+	// Preflight holds the instant Dockerfile checks per target.
+	Preflight map[string]*hosting_module.Preflight
 }
 
 // LoadReleaseConfig reads and validates deploy.yml (or the zero-config
@@ -53,7 +57,10 @@ func LoadReleaseConfig(ctx context.Context, repo *repo_model.Repository, commitS
 	if err != nil {
 		return nil, err
 	}
-	result := &ReleaseConfig{Compose: map[string]*hosting_module.ComposeFile{}, Builds: map[string][]hosting_module.ComposeBuild{}}
+	result := &ReleaseConfig{
+		Compose: map[string]*hosting_module.ComposeFile{}, Builds: map[string][]hosting_module.ComposeBuild{},
+		Preflight: map[string]*hosting_module.Preflight{},
+	}
 	content, err := commit.GetFileContent(hosting_module.ConfigPath, maxConfigSize)
 	switch {
 	case err == nil:
@@ -74,9 +81,12 @@ func LoadReleaseConfig(ctx context.Context, repo *repo_model.Repository, commitS
 	}
 	for _, target := range result.Config.Targets {
 		if target.Kind != hosting_module.KindCompose {
-			if _, err := commit.GetTreeEntryByPath(path.Join(target.Dockerfile)); err != nil {
+			dockerfile, err := commit.GetFileContent(target.Dockerfile, maxConfigSize)
+			if err != nil {
 				return nil, fmt.Errorf("target %q: %s not found in this release", target.Name, target.Dockerfile)
 			}
+			_, ignoreErr := commit.GetTreeEntryByPath(path.Join(target.Context, ".dockerignore"))
+			result.Preflight[target.Name] = hosting_module.CheckDockerfile(dockerfile, ignoreErr == nil)
 			continue
 		}
 		composeContent, err := commit.GetFileContent(target.Compose, maxComposeSize)
@@ -119,12 +129,21 @@ func appSpec(repo *repo_model.Repository, target *hosting_model.Target, spec *ho
 
 // EnsureTarget returns the named target of a repository, creating it (with
 // its Dokploy app, deployment key and pool domain) on first use. The spec is
-// always refreshed from the release being deployed.
-func EnsureTarget(ctx context.Context, repo *repo_model.Repository, spec *hosting_module.Target, actor *user_model.User) (*hosting_model.Target, error) {
+// always refreshed from the release being deployed. A non-empty subdomain
+// becomes (or replaces) the target's address under the base domain.
+func EnsureTarget(ctx context.Context, repo *repo_model.Repository, spec *hosting_module.Target, actor *user_model.User, subdomain string) (*hosting_model.Target, error) {
 	target, err := hosting_model.GetTargetByRepoAndName(ctx, repo.ID, spec.Name)
 	switch {
 	case err == nil:
-		return target, syncTargetSpec(ctx, repo, target, spec)
+		if err := syncTargetSpec(ctx, repo, target, spec); err != nil {
+			return nil, err
+		}
+		if subdomain != "" && routable(spec) {
+			if _, err := ClaimSubdomain(ctx, target, subdomain, actor.ID); err != nil {
+				return nil, err
+			}
+		}
+		return target, nil
 	case !errors.Is(err, hosting_model.ErrTargetNotExist):
 		return nil, err
 	}
@@ -135,7 +154,7 @@ func EnsureTarget(ctx context.Context, repo *repo_model.Repository, spec *hostin
 	if err := hosting_model.CreateTarget(ctx, target); err != nil {
 		return nil, err
 	}
-	if err := provisionTarget(ctx, repo, target, spec); err != nil {
+	if err := provisionTarget(ctx, repo, target, spec, subdomain, actor.ID); err != nil {
 		// Leave no half-created target behind; the next deploy starts over.
 		if cleanupErr := removeTarget(ctx, target); cleanupErr != nil {
 			log.Error("Clean up hosting target %d after failed provisioning: %v", target.ID, cleanupErr)
@@ -146,7 +165,7 @@ func EnsureTarget(ctx context.Context, repo *repo_model.Repository, spec *hostin
 	return target, nil
 }
 
-func provisionTarget(ctx context.Context, repo *repo_model.Repository, target *hosting_model.Target, spec *hosting_module.Target) error {
+func provisionTarget(ctx context.Context, repo *repo_model.Repository, target *hosting_model.Target, spec *hosting_module.Target, subdomain string, actorID int64) error {
 	c := current()
 	publicKey, keyFile, err := w3ds.GenerateDeploymentKey()
 	if err != nil {
@@ -171,7 +190,11 @@ func provisionTarget(ctx context.Context, repo *repo_model.Repository, target *h
 	if err := hosting_model.UpdateTargetCols(ctx, target, "public_key", "private_key_enc", "dokploy_app_id", "dokploy_compose_id"); err != nil {
 		return err
 	}
-	if err := attachPoolDomain(ctx, target, spec); err != nil {
+	if subdomain != "" && routable(spec) {
+		if _, err := ClaimSubdomain(ctx, target, subdomain, actorID); err != nil {
+			return err
+		}
+	} else if err := attachPoolDomain(ctx, target, spec); err != nil {
 		return err
 	}
 	if spec.Domain != "" {

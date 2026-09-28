@@ -14,6 +14,7 @@ import (
 	repo_model "forgejo.org/models/repo"
 	"forgejo.org/models/unit"
 	user_model "forgejo.org/models/user"
+	hosting_module "forgejo.org/modules/hosting"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/w3ds"
@@ -53,11 +54,15 @@ type managedActivity struct {
 
 type managedTarget struct {
 	*hosting_service.TargetView
+	// Subdomain is the label of the target's address under the base domain.
+	Subdomain   string
 	Deployments []*hosting_model.Deployment
 	Env         []managedEnvVar
 	DNSType     string
 	DNSValue    string
 	Pending     *hosting_model.Deployment
+	// Failure is the newest deployment when it failed, shown with a fix prompt.
+	Failure *hosting_model.Deployment
 }
 
 func renderManagedDeploy(ctx *context.Context, manifest *w3ds.PlatformManifest) {
@@ -69,7 +74,7 @@ func renderManagedDeploy(ctx *context.Context, manifest *w3ds.PlatformManifest) 
 	ctx.Data["HostingRequireW3DS"] = setting.Hosting.RequireW3DS
 	ctx.Data["HostingAllowCustomDomains"] = setting.Hosting.Domains.AllowCustom
 
-	releases, err := deploymentReleases(ctx)
+	releases, err := deploymentReleases(ctx, true)
 	if err != nil {
 		ctx.ServerError("deploymentReleases", err)
 		return
@@ -91,6 +96,9 @@ func renderManagedDeploy(ctx *context.Context, manifest *w3ds.PlatformManifest) 
 	}
 	ctx.Data["ManagedReleases"] = releases
 	ctx.Data["PlatformEName"] = platformEName
+	ctx.Data["ManagedBaseDomain"] = setting.Hosting.Domains.BaseDomain
+	ctx.Data["ManagedAppReady"] = repoHasDeployConfig(ctx)
+	ctx.Data["ManagedSuggestedSubdomain"] = suggestSubdomain(ctx)
 
 	views, err := hosting_service.ViewTargets(ctx, repo.ID)
 	if err != nil {
@@ -100,9 +108,18 @@ func renderManagedDeploy(ctx *context.Context, manifest *w3ds.PlatformManifest) 
 	targets := make([]*managedTarget, 0, len(views))
 	for _, view := range views {
 		target := &managedTarget{TargetView: view}
+		if pool := hosting_service.PoolDomain(ctx, view.Target); pool != nil {
+			target.Subdomain = subdomainOf("https://" + pool.FQDN)
+		}
 		if target.Deployments, err = hosting_model.ListDeployments(ctx, view.Target.ID, 10); err != nil {
 			ctx.ServerError("ListDeployments", err)
 			return
+		}
+		if len(target.Deployments) > 0 {
+			switch newest := target.Deployments[0]; newest.Status {
+			case hosting_model.StatusBuildFailed, hosting_model.StatusDeployFailed, hosting_model.StatusRolledBack:
+				target.Failure = newest
+			}
 		}
 		for _, deployment := range target.Deployments {
 			if !deployment.Status.IsFinal() && deployment.Status != hosting_model.StatusLive {
@@ -204,6 +221,7 @@ func HostingDeploy(ctx *context.Context) {
 	opts := hosting_service.DeployOptions{
 		Repo: ctx.Repo.Repository, Release: release, Actor: ctx.Doer,
 		TargetName: strings.TrimSpace(ctx.FormString("target")), Trigger: hosting_model.TriggerManual,
+		Subdomain: strings.TrimSpace(ctx.FormString("subdomain")),
 	}
 	if setting.Hosting.RequireW3DS {
 		manifest, _, err := loadPlatformManifestForRepository(ctx, ctx.Repo.Repository)
@@ -465,4 +483,80 @@ func HostingDeleteTarget(ctx *context.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, map[string]any{"ok": true, "redirect": ctx.Repo.RepoLink + "/deploy"})
+}
+
+// HostingCheckSubdomain reports whether an address under the base domain is
+// free, for the live check next to the address field.
+func HostingCheckSubdomain(ctx *context.Context) {
+	var targetID int64
+	if name := ctx.FormString("target"); name != "" {
+		if target, err := hosting_model.GetTargetByRepoAndName(ctx, ctx.Repo.Repository.ID, name); err == nil {
+			targetID = target.ID
+		}
+	}
+	fqdn, err := hosting_service.CheckSubdomain(ctx, ctx.FormString("name"), targetID)
+	if err != nil {
+		ctx.JSON(http.StatusOK, map[string]any{"available": false, "message": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, map[string]any{"available": true, "fqdn": fqdn, "url": "https://" + fqdn})
+}
+
+// HostingSetSubdomain moves a target to a new address under the base domain.
+func HostingSetSubdomain(ctx *context.Context) {
+	target := managedTargetFromPath(ctx)
+	if target == nil {
+		return
+	}
+	domain, err := hosting_service.ClaimSubdomain(ctx, target, ctx.FormString("subdomain"), ctx.Doer.ID)
+	if err != nil {
+		var userErr *hosting_service.UserError
+		if errors.Is(err, hosting_service.ErrSubdomainTaken) || errors.Is(err, hosting_module.ErrSubdomainInvalid) ||
+			errors.Is(err, hosting_module.ErrSubdomainReserved) || errors.As(err, &userErr) {
+			deploymentJSONError(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
+		hostingJSONError(ctx, err)
+		return
+	}
+	ctx.JSON(http.StatusOK, map[string]any{"ok": true, "url": "https://" + domain.FQDN})
+}
+
+// repoHasDeployConfig reports whether the default branch has what managed
+// hosting needs to build the app.
+func repoHasDeployConfig(ctx *context.Context) bool {
+	commit := ctx.Repo.Commit
+	if commit == nil {
+		return false
+	}
+	for _, path := range []string{"Dockerfile", hosting_module.ConfigPath} {
+		if _, err := commit.GetTreeEntryByPath(path); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// suggestSubdomain proposes a free address named after the repository.
+func suggestSubdomain(ctx *context.Context) string {
+	repo := ctx.Repo.Repository
+	for _, candidate := range []string{
+		hosting_module.SuggestSubdomain(repo.Name),
+		hosting_module.SuggestSubdomain(repo.OwnerName + "-" + repo.Name),
+	} {
+		if _, err := hosting_service.CheckSubdomain(ctx, candidate, 0); err == nil {
+			return candidate
+		}
+	}
+	return hosting_module.RandomName()
+}
+
+// subdomainOf returns the label of a URL under the base domain, or "".
+func subdomainOf(url string) string {
+	host := strings.TrimPrefix(url, "https://")
+	label, found := strings.CutSuffix(host, "."+setting.Hosting.Domains.BaseDomain)
+	if !found || strings.Contains(label, ".") {
+		return ""
+	}
+	return label
 }

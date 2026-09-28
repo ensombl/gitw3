@@ -6,7 +6,6 @@ package integration
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -20,10 +19,11 @@ import (
 	"forgejo.org/models/unittest"
 	user_model "forgejo.org/models/user"
 	hosting_module "forgejo.org/modules/hosting"
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/test"
-	files_service "forgejo.org/services/repository/files"
 	hosting_service "forgejo.org/services/hosting"
+	files_service "forgejo.org/services/repository/files"
 	"forgejo.org/tests"
 
 	"github.com/stretchr/testify/assert"
@@ -100,6 +100,8 @@ func (f *hostingFakes) Services(context.Context, string, string) ([]hosting_serv
 	return f.services, nil
 }
 
+func (f *hostingFakes) Diagnose(context.Context, string, string) (string, error) { return "", nil }
+
 func (f *hostingFakes) Call(context.Context, string, string, any, any) error { return nil }
 
 func setupHosting(t *testing.T) *hostingFakes {
@@ -149,8 +151,18 @@ func testHostingManagedDeployFlow(t *testing.T, _ *url.URL) {
 	assert.Equal(t, 1, doc.Find(".deploy-mode-tabs").Length())
 	session.MakeRequest(t, NewRequest(t, "GET", repo.Link()+"/deploy?tab=self"), http.StatusOK)
 
+	check := session.MakeRequest(t, NewRequest(t, "GET", repo.Link()+"/deploy/managed/subdomain?name=Hosted-App-Live"), http.StatusOK)
+	var availability struct {
+		Available bool   `json:"available"`
+		URL       string `json:"url"`
+	}
+	DecodeJSON(t, check, &availability)
+	assert.True(t, availability.Available)
+	assert.Equal(t, "https://hosted-app-live.apps.test", availability.URL)
+
 	response := session.MakeRequest(t, NewRequestWithValues(t, "POST", repo.Link()+"/deploy/managed", map[string]string{
 		"release_id": fmt.Sprint(release.ID),
+		"subdomain":  "hosted-app-live",
 	}), http.StatusCreated)
 	var started struct {
 		ID        int64  `json:"id"`
@@ -206,8 +218,8 @@ func testHostingManagedDeployFlow(t *testing.T, _ *url.URL) {
 	}
 	DecodeJSON(t, status, &live)
 	assert.Equal(t, "live", live.Status)
-	require.Len(t, fakes.domains, 1)
-	assert.Equal(t, "https://"+fakes.domains[0], live.URL)
+	assert.Equal(t, "https://hosted-app-live.apps.test", live.URL, "the chosen address is used")
+	assert.Contains(t, fakes.domains, "hosted-app-live.apps.test")
 
 	page = session.MakeRequest(t, NewRequest(t, "GET", repo.Link()+"/deploy"), http.StatusOK)
 	assert.Contains(t, page.Body.String(), live.URL)
@@ -244,4 +256,46 @@ func TestSimpleMode(t *testing.T) {
 	session.MakeRequest(t, NewRequest(t, "GET", repo.Link()), http.StatusOK)
 	dashboard = session.MakeRequest(t, NewRequest(t, "GET", "/"), http.StatusOK)
 	assert.Equal(t, 1, NewHTMLParser(t, dashboard.Body).Find("#dashboard-repo-list").Length())
+}
+
+func TestHostingSimpleDeployPage(t *testing.T) {
+	onApplicationRun(t, func(t *testing.T, _ *url.URL) {
+		setupHosting(t)
+		defer test.MockVariableValue(&setting.UI.DefaultSimpleMode, true)()
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		session := loginUser(t, owner.Name)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+
+		// A repository without a Dockerfile gets the AI prompt as step 1.
+		empty, _, cleanupEmpty := tests.CreateDeclarativeRepo(t, owner, "vibe-app", nil, nil, []*files_service.ChangeRepoFile{{
+			Operation: "create", TreePath: "index.js", ContentReader: strings.NewReader("console.log('hi')\n"),
+		}})
+		defer cleanupEmpty()
+		page := NewHTMLParser(t, session.MakeRequest(t, NewRequest(t, "GET", empty.Link()+"/deploy"), http.StatusOK).Body)
+		assert.Equal(t, 1, page.Find(".managed-simple").Length())
+		assert.Zero(t, page.Find(".deploy-mode-tabs").Length(), "simple mode has no managed/self-hosted switch")
+		assert.Contains(t, page.Find("#managed-ai-prompt").Text(), "Dockerfile")
+		assert.Equal(t, "vibe-app", page.Find("[data-managed-subdomain] input").AttrOr("value", ""))
+
+		check := session.MakeRequest(t, NewRequest(t, "GET", empty.Link()+"/deploy/managed/subdomain?name=infra"), http.StatusOK)
+		var availability struct {
+			Available bool   `json:"available"`
+			Message   string `json:"message"`
+		}
+		DecodeJSON(t, check, &availability)
+		assert.False(t, availability.Available)
+		assert.NotEmpty(t, availability.Message)
+
+		// Preflight stops an image that would bake secrets in, before any build.
+		leaky, _, cleanupLeaky := tests.CreateDeclarativeRepo(t, owner, "leaky-app", nil, nil, []*files_service.ChangeRepoFile{{
+			Operation: "create", TreePath: "Dockerfile",
+			ContentReader: strings.NewReader("FROM node:22\nCOPY .env ./\nEXPOSE 3000\n"),
+		}})
+		defer cleanupLeaky()
+		release := createNewReleaseUsingAPI(t, token, owner, leaky, "v1.0.0", leaky.DefaultBranch, "v1.0.0", "")
+		rejected := session.MakeRequest(t, NewRequestWithValues(t, "POST", leaky.Link()+"/deploy/managed", map[string]string{
+			"release_id": fmt.Sprint(release.ID), "subdomain": "leaky-app",
+		}), http.StatusBadRequest)
+		assert.Contains(t, rejected.Body.String(), ".env")
+	})
 }

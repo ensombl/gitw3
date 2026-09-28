@@ -142,10 +142,10 @@ func Deploy(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplRepoDeploy)
 }
 
-func deploymentReleases(ctx *context.Context) ([]deploymentReleaseView, error) {
+func deploymentReleases(ctx *context.Context, includeTags ...bool) ([]deploymentReleaseView, error) {
 	releases, err := db.Find[repo_model.Release](ctx, repo_model.FindReleasesOptions{
 		ListOptions: db.ListOptions{ListAll: true}, RepoID: ctx.Repo.Repository.ID,
-		IncludeDrafts: false, IncludeTags: false, IsPreRelease: optional.Some(false),
+		IncludeDrafts: false, IncludeTags: len(includeTags) > 0 && includeTags[0], IsPreRelease: optional.Some(false),
 	})
 	if err != nil {
 		return nil, err

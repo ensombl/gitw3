@@ -138,3 +138,15 @@ func DeleteDomain(ctx context.Context, id int64) error {
 	_, err := db.GetEngine(ctx).ID(id).Delete(new(Domain))
 	return err
 }
+
+// GetDomainByFQDN returns the domain with a host name.
+func GetDomainByFQDN(ctx context.Context, fqdn string) (*Domain, error) {
+	domain, exists, err := db.Get[Domain](ctx, builder.Eq{"fqdn": fqdn})
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrDomainNotExist
+	}
+	return domain, nil
+}

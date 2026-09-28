@@ -45,6 +45,9 @@ type DeployOptions struct {
 	DeployerEName string
 	// PlatformName is shown in the wallet signing prompt.
 	PlatformName string
+	// Subdomain is the address the user picked under the base domain; empty
+	// keeps the current one (or assigns an automatic name on first deploy).
+	Subdomain string
 }
 
 // SigningRequest asks the deployer's wallet to authorise a target's W3DS
@@ -76,8 +79,10 @@ func userErrorf(format string, args ...any) error {
 
 // ReleaseVersion validates that a release can be deployed and returns its version.
 func ReleaseVersion(release *repo_model.Release) (string, error) {
-	if release == nil || release.IsDraft || release.IsPrerelease || release.IsTag || release.Sha1 == "" {
-		return "", userErrorf("Choose a published stable release.")
+	// A pushed version tag deploys like a release, so an AI assistant can ship
+	// with `git tag v1.0.0 && git push --tags`.
+	if release == nil || release.IsDraft || release.IsPrerelease || release.Sha1 == "" {
+		return "", userErrorf("Choose a published stable release or version tag.")
 	}
 	version, valid := w3ds.NormalizeReleaseVersion(release.TagName)
 	if !valid {
@@ -105,9 +110,22 @@ func Deploy(ctx context.Context, opts DeployOptions) (*DeployResult, error) {
 			return nil, userErrorf("Release %s has no deploy target named %q.", opts.Release.TagName, opts.TargetName)
 		}
 	}
+	preflight := config.Preflight[spec.Name]
+	if preflight != nil && !preflight.OK() {
+		return nil, &UserError{Message: "Fix this before deploying:\n• " + strings.Join(preflight.Problems, "\n• ")}
+	}
 	existing, err := hosting_model.GetTargetByRepoAndName(ctx, opts.Repo.ID, spec.Name)
 	if err != nil && !errors.Is(err, hosting_model.ErrTargetNotExist) {
 		return nil, err
+	}
+	if opts.Subdomain != "" {
+		var existingID int64
+		if existing != nil {
+			existingID = existing.ID
+		}
+		if _, err := CheckSubdomain(ctx, opts.Subdomain, existingID); err != nil {
+			return nil, &UserError{Message: err.Error()}
+		}
 	}
 	needsSigning := setting.Hosting.RequireW3DS && (existing == nil || !targetAuthorised(ctx, existing))
 	if needsSigning {
@@ -129,7 +147,7 @@ func Deploy(ctx context.Context, opts DeployOptions) (*DeployResult, error) {
 		}
 	}
 
-	target, err := EnsureTarget(ctx, opts.Repo, spec, opts.Actor)
+	target, err := EnsureTarget(ctx, opts.Repo, spec, opts.Actor, opts.Subdomain)
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +160,9 @@ func Deploy(ctx context.Context, opts DeployOptions) (*DeployResult, error) {
 	deployment := &hosting_model.Deployment{
 		TargetID: target.ID, RepoID: opts.Repo.ID, ActorID: opts.Actor.ID, ReleaseID: opts.Release.ID,
 		TagName: opts.Release.TagName, CommitSHA: strings.ToLower(opts.Release.Sha1), Trigger: opts.Trigger,
+	}
+	if preflight != nil && len(preflight.Warnings) > 0 {
+		deployment.Warning = strings.Join(preflight.Warnings, "\n")
 	}
 	if err := hosting_model.CreateDeployment(ctx, deployment); err != nil {
 		return nil, err

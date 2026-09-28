@@ -109,6 +109,7 @@ func TestParseCompose(t *testing.T) {
 	_, err = file.PinImages(map[string]string{"api": "git.example.com/deployments/x-api@" + digest})
 	require.Error(t, err, "worker has no pinned image")
 
+	file.SetEnvironment(map[string]string{"API_KEY": "from-gitw3"})
 	file.ApplyPlacement([]string{"node.role==worker"})
 	rendered, err := file.PinImages(map[string]string{
 		"api":    "git.example.com/deployments/x-api@" + digest,
@@ -119,6 +120,8 @@ func TestParseCompose(t *testing.T) {
 	assert.Contains(t, string(rendered), "x-worker@"+digest)
 	assert.Contains(t, string(rendered), "redis:7")
 	assert.Equal(t, 3, strings.Count(string(rendered), "node.role==worker"))
+	assert.Equal(t, 3, strings.Count(string(rendered), "API_KEY: from-gitw3"))
+	assert.Contains(t, string(rendered), "MODE: prod", "existing environment is kept")
 }
 
 func TestParseComposeRejects(t *testing.T) {
@@ -190,4 +193,39 @@ func TestImageName(t *testing.T) {
 	assert.False(t, IsDigestReference(repository+":latest"))
 	assert.True(t, IsDigest(digest))
 	assert.False(t, IsDigest("sha256:xyz"))
+}
+
+func TestSubdomains(t *testing.T) {
+	assert.Equal(t, "my-shop", NormalizeSubdomain(" https://My-Shop.w3ds.dev/ ", "w3ds.dev"))
+	for _, valid := range []string{"myshop", "my-shop-2", "abc"} {
+		require.NoError(t, ValidateSubdomain(valid), valid)
+	}
+	for _, invalid := range []string{"ab", "1shop", "shop-", "my--shop", "a.b", "Shop", strings.Repeat("a", 41), ""} {
+		require.ErrorIs(t, ValidateSubdomain(invalid), ErrSubdomainInvalid, invalid)
+	}
+	require.ErrorIs(t, ValidateSubdomain("infra"), ErrSubdomainReserved)
+	require.ErrorIs(t, ValidateSubdomain("admin"), ErrSubdomainReserved)
+
+	assert.Equal(t, "my-cool-app", SuggestSubdomain("My_Cool.App"))
+	assert.Equal(t, "app-2048", SuggestSubdomain("2048"))
+	assert.NoError(t, ValidateSubdomain(SuggestSubdomain("api")), "reserved names fall back to a random one")
+	assert.NoError(t, ValidateSubdomain(SuggestSubdomain("x")))
+}
+
+func TestCheckDockerfile(t *testing.T) {
+	good := CheckDockerfile("FROM node:22-alpine\nWORKDIR /app\nCOPY . .\nENV PORT=3000\nEXPOSE 3000\nCMD [\"node\", \"server.js\"]\n", true)
+	assert.True(t, good.OK())
+	assert.Empty(t, good.Warnings)
+
+	assert.False(t, CheckDockerfile("  \n", false).OK())
+	assert.False(t, CheckDockerfile("RUN echo hi\n", false).OK(), "no FROM")
+	secrets := CheckDockerfile("FROM node:22\nCOPY .env ./\nEXPOSE 3000\n", true)
+	assert.False(t, secrets.OK())
+	assert.Contains(t, secrets.Problems[0], ".env")
+	assert.False(t, CheckDockerfile("FROM node:22\nCOPY --chown=node .env.production /app/\nEXPOSE 3000\n", true).OK())
+	assert.True(t, CheckDockerfile("FROM node:22\nCOPY .env.example ./\nEXPOSE 3000\n", true).OK(), "example env files are fine")
+
+	warned := CheckDockerfile("FROM python:3.12\nCOPY . .\nCMD python app.py --host 127.0.0.1\n", false)
+	assert.True(t, warned.OK())
+	assert.Len(t, warned.Warnings, 3, "localhost, no port, no .dockerignore")
 }

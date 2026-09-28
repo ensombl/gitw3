@@ -19,3 +19,4 @@ repo.settings.
 # routers/web/repo/hosting.go, templates/repo/deploy/managed.tmpl: deployment status labels and blocked states
 platform.hosting.status.
 platform.hosting.blocked.
+platform.hosting.failure.

@@ -1,3 +1,6 @@
+{{if .SimpleMode}}
+{{template "repo/deploy/managed_simple" .}}
+{{else}}
 <div id="managed-deploy" class="managed-deploy" data-deploy-url="{{.RepoLink}}/deploy/managed">
 	<div class="w3ds-page-heading">
 		<div>
@@ -26,6 +29,12 @@
 							{{end}}
 						</select>
 					</div>
+					{{if not .ManagedTargets}}
+						<div class="field">
+							<label>{{ctx.Locale.Tr "platform.hosting.address"}}</label>
+							{{template "repo/deploy/managed_address" (dict "ctxData" . "Name" "subdomain" "Value" .ManagedSuggestedSubdomain "Target" "")}}
+						</div>
+					{{end}}
 					{{if gt (len .ManagedTargets) 1}}
 						<div class="field">
 							<label for="managed_target">{{ctx.Locale.Tr "platform.hosting.target"}}</label>
@@ -45,16 +54,7 @@
 				{{end}}
 			</form>
 
-			<div class="managed-progress tw-hidden" data-managed-progress hidden aria-live="polite">
-				<ol class="managed-steps">
-					<li data-managed-step="build">{{svg "octicon-package"}} <span>{{ctx.Locale.Tr "platform.hosting.step_build"}}</span></li>
-					<li data-managed-step="sign">{{svg "octicon-shield-check"}} <span>{{ctx.Locale.Tr "platform.hosting.step_sign"}}</span></li>
-					<li data-managed-step="rollout">{{svg "octicon-sync"}} <span>{{ctx.Locale.Tr "platform.hosting.step_rollout"}}</span></li>
-					<li data-managed-step="live">{{svg "octicon-globe"}} <span>{{ctx.Locale.Tr "platform.hosting.step_live"}}</span></li>
-				</ol>
-				<p class="managed-progress-status" data-managed-status></p>
-				<a class="managed-live-url tw-hidden" data-managed-live-url target="_blank" rel="noopener noreferrer" hidden></a>
-			</div>
+			{{template "repo/deploy/managed_progress" .}}
 		</section>
 
 		{{range .ManagedTargets}}
@@ -80,6 +80,8 @@
 					{{end}}
 				</div>
 
+				{{with .Failure}}{{template "repo/deploy/managed_failure" (dict "ctxData" $ "Deployment" .)}}{{end}}
+
 				<details class="managed-panel" {{if $.SimpleMode}}open{{end}}>
 					<summary>{{svg "octicon-globe"}} {{ctx.Locale.Tr "platform.hosting.domains"}}</summary>
 					<ul class="managed-domains">
@@ -96,6 +98,13 @@
 							</li>
 						{{end}}
 					</ul>
+					{{if and $.CanManageHosting .Subdomain}}
+						<form class="ui form managed-inline-form" data-managed-form action="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/subdomain" method="post">
+							{{$.CsrfTokenHtml}}
+							{{template "repo/deploy/managed_address" (dict "ctxData" $ "Name" "subdomain" "Value" .Subdomain "Target" .Target.Name)}}
+							<button class="ui button">{{ctx.Locale.Tr "platform.hosting.simple.save_address"}}</button>
+						</form>
+					{{end}}
 					{{if and $.CanManageHosting $.HostingAllowCustomDomains}}
 						<form class="ui form managed-inline-form" data-managed-form action="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/domains" method="post">
 							{{$.CsrfTokenHtml}}
@@ -177,23 +186,6 @@
 		{{end}}
 	{{end}}
 
-	<dialog id="managed-signing-modal">
-		<article>
-			<header>{{ctx.Locale.Tr "platform.hosting.sign_title"}}</header>
-			<div class="content deploy-signing-content">
-				<p>{{ctx.Locale.Tr "platform.hosting.sign_help"}}</p>
-				<div class="w3ds-ppa-signing-qr"><canvas data-managed-qr aria-label="{{ctx.Locale.Tr "platform.deploy.sign_qr"}}"></canvas></div>
-				<a class="ui primary button" data-managed-open-wallet href="#">{{svg "octicon-device-mobile"}} {{ctx.Locale.Tr "platform.ppa.signing_open"}}</a>
-			</div>
-			<footer><button type="button" class="ui cancel button">{{ctx.Locale.Tr "platform.hosting.sign_later"}}</button></footer>
-		</article>
-	</dialog>
-
-	<dialog id="managed-log-modal" class="managed-log-modal">
-		<article>
-			<header>{{ctx.Locale.Tr "platform.hosting.log_title"}}</header>
-			<div class="content"><pre data-managed-log-output tabindex="0"></pre></div>
-			<footer><button type="button" class="ui cancel button">{{ctx.Locale.Tr "platform.hosting.close"}}</button></footer>
-		</article>
-	</dialog>
+	{{template "repo/deploy/managed_dialogs" .}}
 </div>
+{{end}}

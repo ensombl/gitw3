@@ -194,6 +194,42 @@ export function initManagedDeploy() {
     });
   }
 
+  // Live availability check for the address field.
+  for (const field of root.querySelectorAll<HTMLElement>('[data-managed-subdomain]')) {
+    const input = field.querySelector<HTMLInputElement>('input');
+    const status = field.nextElementSibling as HTMLElement | null;
+    if (!input || !status?.hasAttribute('data-managed-subdomain-status')) continue;
+    let timer = 0;
+    let sequence = 0;
+    const check = async () => {
+      const value = input.value.trim().toLowerCase();
+      input.value = value;
+      if (!value) {
+        status.textContent = '';
+        return;
+      }
+      const current = ++sequence;
+      const params = new URLSearchParams({name: value, target: field.dataset.target ?? ''});
+      try {
+        const response = await GET(`${field.dataset.checkUrl}?${params}`, {headers: {accept: 'application/json'}});
+        const result = await response.json() as {available: boolean; url?: string; message?: string};
+        if (current !== sequence) return;
+        status.classList.toggle('available', result.available);
+        status.classList.toggle('taken', !result.available);
+        status.textContent = result.available ? `✓ ${result.url}` : `✗ ${result.message ?? ''}`;
+        input.setCustomValidity(result.available ? '' : result.message ?? 'unavailable');
+      } catch {
+        status.textContent = '';
+      }
+    };
+    input.addEventListener('input', () => {
+      window.clearTimeout(timer);
+      input.setCustomValidity('');
+      timer = window.setTimeout(check, 300);
+    });
+    check();
+  }
+
   const logDialog = root.querySelector<HTMLDialogElement>('#managed-log-modal');
   const logOutput = logDialog?.querySelector<HTMLElement>('[data-managed-log-output]');
   for (const button of root.querySelectorAll<HTMLButtonElement>('[data-managed-log]')) {

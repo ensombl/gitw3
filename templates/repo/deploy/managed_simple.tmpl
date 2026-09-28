@@ -1,0 +1,114 @@
+<div id="managed-deploy" class="managed-deploy managed-simple" data-deploy-url="{{.RepoLink}}/deploy/managed">
+	{{if .ManagedBlocked}}
+		<div class="w3ds-empty-state">
+			{{svg "octicon-rocket" 48}}
+			<h2>{{ctx.Locale.Tr (printf "platform.hosting.blocked.%s" .ManagedBlocked)}}</h2>
+			<p>{{ctx.Locale.Tr (printf "platform.hosting.blocked.%s_help" .ManagedBlocked)}}</p>
+			{{if eq .ManagedBlocked "not_platform"}}<a class="ui primary button" href="{{.RepoLink}}/w3ds/welcome">{{ctx.Locale.Tr "platform.hosting.blocked.not_platform_action"}}</a>{{end}}
+		</div>
+	{{else if .ManagedTargets}}
+		{{$app := index .ManagedTargets 0}}
+		{{$latest := false}}{{if .ManagedReleases}}{{$latest = index .ManagedReleases 0}}{{end}}
+		<section class="simple-live" {{with $app.Pending}}data-managed-pending="{{$.RepoLink}}/deploy/managed/{{.ID}}/status"{{end}}>
+			{{if $app.Live}}
+				<span class="simple-live-badge">{{svg "octicon-dot-fill"}} {{ctx.Locale.Tr "platform.hosting.simple.live"}}</span>
+			{{else}}
+				<span class="simple-live-badge offline">{{ctx.Locale.Tr "platform.hosting.not_live"}}</span>
+			{{end}}
+			{{if $app.URL}}<a class="simple-live-url" href="{{$app.URL}}" target="_blank" rel="noopener noreferrer">{{$app.URL}} {{svg "octicon-link-external" 20}}</a>{{end}}
+			<p class="simple-live-meta">{{if $app.Live}}{{ctx.Locale.Tr "platform.hosting.live_release" $app.Live.TagName}} · {{DateUtils.TimeSince $app.Live.FinishedUnix}}{{end}}</p>
+
+			{{template "repo/deploy/managed_progress" .}}
+
+			{{with $app.Failure}}
+				{{template "repo/deploy/managed_failure" (dict "ctxData" $ "Deployment" .)}}
+			{{end}}
+
+			{{if and $.CanManagedDeploy $latest}}
+				<form class="ui form simple-update" data-managed-deploy-form action="{{$.RepoLink}}/deploy/managed" method="post">
+					{{$.CsrfTokenHtml}}
+					<input type="hidden" name="target" value="{{$app.Target.Name}}">
+					<input type="hidden" name="release_id" value="{{$latest.ID}}">
+					<button type="submit" class="ui primary large button" data-managed-deploy-submit>
+						{{svg "octicon-rocket" 18}}
+						{{if and $app.Live (eq $app.Live.TagName $latest.Tag)}}{{ctx.Locale.Tr "platform.hosting.simple.redeploy" $latest.Tag}}{{else}}{{ctx.Locale.Tr "platform.hosting.simple.deploy_latest" $latest.Tag}}{{end}}
+					</button>
+				</form>
+			{{end}}
+		</section>
+
+		{{if and $.CanManageHosting $app.Subdomain}}
+			<details class="simple-panel">
+				<summary>{{svg "octicon-pencil"}} {{ctx.Locale.Tr "platform.hosting.simple.change_address"}}</summary>
+				<form class="ui form managed-inline-form" data-managed-form action="{{$.RepoLink}}/deploy/managed/targets/{{$app.Target.Name}}/subdomain" method="post">
+					{{$.CsrfTokenHtml}}
+					{{template "repo/deploy/managed_address" (dict "ctxData" $ "Name" "subdomain" "Value" $app.Subdomain "Target" $app.Target.Name)}}
+					<button class="ui button">{{ctx.Locale.Tr "platform.hosting.simple.save_address"}}</button>
+				</form>
+			</details>
+		{{end}}
+		<details class="simple-panel">
+			<summary>{{svg "octicon-copilot"}} {{ctx.Locale.Tr "platform.hosting.simple.ai_help"}}</summary>
+			<p>{{ctx.Locale.Tr "platform.hosting.simple.ai_help_text"}}</p>
+			{{template "repo/deploy/ai_prompt" .}}
+		</details>
+	{{else}}
+		<div class="simple-heading">
+			<h1>{{ctx.Locale.Tr "platform.hosting.simple.title"}}</h1>
+			<p>{{ctx.Locale.Tr "platform.hosting.simple.subtitle"}}</p>
+		</div>
+		<ol class="simple-steps">
+			<li class="simple-step{{if .ManagedAppReady}} done{{end}}">
+				<div class="simple-step-marker">{{if .ManagedAppReady}}{{svg "octicon-check" 18}}{{else}}1{{end}}</div>
+				<div class="simple-step-body">
+					<h2>{{ctx.Locale.Tr "platform.hosting.simple.step_ready"}}</h2>
+					{{if .ManagedAppReady}}
+						<p>{{ctx.Locale.Tr "platform.hosting.simple.step_ready_done"}}</p>
+					{{else}}
+						<p>{{ctx.Locale.Tr "platform.hosting.simple.step_ready_help"}}</p>
+						{{template "repo/deploy/ai_prompt" .}}
+					{{end}}
+				</div>
+			</li>
+			<li class="simple-step{{if .ManagedReleases}} done{{end}}">
+				<div class="simple-step-marker">{{if .ManagedReleases}}{{svg "octicon-check" 18}}{{else}}2{{end}}</div>
+				<div class="simple-step-body">
+					<h2>{{ctx.Locale.Tr "platform.hosting.simple.step_version"}}</h2>
+					{{if .ManagedReleases}}
+						<p>{{ctx.Locale.Tr "platform.hosting.simple.step_version_done" (index .ManagedReleases 0).Tag}}</p>
+					{{else}}
+						<p>{{ctx.Locale.Tr "platform.hosting.simple.step_version_help"}}</p>
+						<a class="ui button" href="{{.RepoLink}}/releases/new?tag=v1.0.0">{{svg "octicon-tag"}} {{ctx.Locale.Tr "platform.hosting.simple.step_version_action"}}</a>
+					{{end}}
+				</div>
+			</li>
+			<li class="simple-step">
+				<div class="simple-step-marker">3</div>
+				<div class="simple-step-body">
+					<h2>{{ctx.Locale.Tr "platform.hosting.simple.step_deploy"}}</h2>
+					<form class="ui form simple-deploy-form" data-managed-deploy-form action="{{.RepoLink}}/deploy/managed" method="post">
+						{{.CsrfTokenHtml}}
+						<label class="simple-label">{{ctx.Locale.Tr "platform.hosting.simple.address_label"}}</label>
+						{{template "repo/deploy/managed_address" (dict "ctxData" . "Name" "subdomain" "Value" .ManagedSuggestedSubdomain "Target" "")}}
+						{{if .ManagedReleases}}
+							{{if gt (len .ManagedReleases) 1}}
+								<details class="simple-version-picker">
+									<summary>{{ctx.Locale.Tr "platform.hosting.simple.other_version"}}</summary>
+									<select name="release_id" aria-label="{{ctx.Locale.Tr "platform.hosting.release"}}">
+										{{range .ManagedReleases}}<option value="{{.ID}}" {{if and $.HostingRequireW3DS $.PlatformEName (not .PPACertified)}}disabled{{end}}>{{.Tag}}</option>{{end}}
+									</select>
+								</details>
+							{{else}}
+								<input type="hidden" name="release_id" value="{{(index .ManagedReleases 0).ID}}">
+							{{end}}
+						{{end}}
+						<button type="submit" class="ui primary huge button simple-deploy-button" data-managed-deploy-submit {{if or (not .CanManagedDeploy) (not .ManagedReleases) (not .ManagedAppReady)}}disabled{{end}}>{{svg "octicon-rocket" 20}} {{ctx.Locale.Tr "platform.hosting.deploy"}}</button>
+						{{if not .CanManagedDeploy}}<p class="help">{{ctx.Locale.Tr "platform.hosting.writer_required"}}</p>{{end}}
+					</form>
+					{{template "repo/deploy/managed_progress" .}}
+				</div>
+			</li>
+		</ol>
+	{{end}}
+	{{template "repo/deploy/managed_dialogs" .}}
+</div>

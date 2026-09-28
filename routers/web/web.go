@@ -1720,6 +1720,7 @@ func registerRoutes(m *web.Route) {
 			m.Get("/{deployment}/status", reqSignIn, repo.DeploymentStatus)
 			m.Group("/managed", func() {
 				m.Post("", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingDeploy)
+				m.Get("/subdomain", repo.HostingCheckSubdomain)
 				m.Get("/{deployment}/status", repo.HostingDeploymentStatus)
 				m.Get("/{deployment}/log", repo.HostingBuildLog)
 				m.Post("/{deployment}/cancel", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingCancel)
@@ -1728,6 +1729,7 @@ func registerRoutes(m *web.Route) {
 					m.Post("/env", repo.HostingSetEnv)
 					m.Post("/env/delete", repo.HostingDeleteEnv)
 					m.Post("/auto-deploy", repo.HostingSetAutoDeploy)
+					m.Post("/subdomain", repo.HostingSetSubdomain)
 					m.Post("/domains", repo.HostingAddDomain)
 					m.Post("/domains/{domain}/verify", repo.HostingVerifyDomain)
 					m.Post("/domains/{domain}/delete", repo.HostingRemoveDomain)

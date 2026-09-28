@@ -39,7 +39,7 @@ func newTarget(t *testing.T) (*repo_model.Repository, *user_model.User, *hosting
 	t.Helper()
 	repo := unittest.AssertExistsAndLoadBean(t, &repo_model.Repository{ID: 1})
 	user := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: repo.OwnerID})
-	target, err := EnsureTarget(db.DefaultContext, repo, webSpec(), user)
+	target, err := EnsureTarget(db.DefaultContext, repo, webSpec(), user, "")
 	require.NoError(t, err)
 	return repo, user, target
 }
@@ -220,9 +220,11 @@ func TestRolloutRolledBack(t *testing.T) {
 	f.registry.images["user2-repo1-web@"+testDigest] = true
 	body, signature := signedCallback(t, BuildCallback{JobID: job.ID, Nonce: job.Nonce, Status: "success", Digests: map[string]string{"": testDigest}})
 	require.NoError(t, HandleBuildCallback(ctx, body, signature))
+	f.swarm.diagnosis = "svc: failed (task: non-zero exit (1)), exit code 1\nLast log lines:\nError: Cannot find module 'express'"
 	f.swarm.services = []ServiceStatus{{Name: "svc", Image: "x@" + testDigest, UpdateState: "rollback_completed", Desired: 1, Running: 1}}
 	require.NoError(t, SyncDeployments(ctx))
 	assert.Equal(t, hosting_model.StatusRolledBack, reload(t, deployment.ID).Status)
+	assert.Contains(t, reload(t, deployment.ID).Error, "Cannot find module", "the crash reason reaches the user")
 }
 
 func TestW3DSVersionGate(t *testing.T) {
@@ -380,4 +382,42 @@ func TestCheckAlertsReportsFailedDeploys(t *testing.T) {
 		found = found || strings.Contains(notice.Description, "v9.9.9")
 	}
 	assert.True(t, found, "failed deploy raises an admin notice")
+}
+
+func TestClaimSubdomain(t *testing.T) {
+	f := setupFakes(t)
+	ctx := db.DefaultContext
+	repo, user, target := newTarget(t)
+	automatic := PoolDomain(ctx, target)
+	require.NotNil(t, automatic)
+
+	fqdn, err := CheckSubdomain(ctx, "My-Shop", 0)
+	require.NoError(t, err)
+	assert.Equal(t, "my-shop.apps.example.com", fqdn)
+	_, err = CheckSubdomain(ctx, "infra", 0)
+	require.ErrorIs(t, err, hosting_module.ErrSubdomainReserved)
+
+	domain, err := ClaimSubdomain(ctx, target, "https://my-shop.apps.example.com", user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "my-shop.apps.example.com", domain.FQDN)
+	assert.Equal(t, "https://my-shop.apps.example.com", PublicURL(ctx, target))
+	assert.Contains(t, f.dokploy.hosts(), "my-shop.apps.example.com")
+	assert.NotContains(t, f.dokploy.hosts(), automatic.FQDN, "the old automatic address is released")
+	_, err = hosting_model.GetDomainByFQDN(ctx, automatic.FQDN)
+	require.ErrorIs(t, err, hosting_model.ErrDomainNotExist)
+
+	again, err := ClaimSubdomain(ctx, target, "my-shop", user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, domain.ID, again.ID, "claiming your own name again is a no-op")
+
+	other, err := EnsureTarget(ctx, repo, &hosting_module.Target{Name: "api", Kind: hosting_module.KindDockerfile, Port: 80, Replicas: 1}, user, "")
+	require.NoError(t, err)
+	_, err = ClaimSubdomain(ctx, other, "my-shop", user.ID)
+	require.ErrorIs(t, err, ErrSubdomainTaken)
+	_, err = CheckSubdomain(ctx, "my-shop", other.ID)
+	require.ErrorIs(t, err, ErrSubdomainTaken)
+
+	third, err := EnsureTarget(ctx, repo, &hosting_module.Target{Name: "docs", Kind: hosting_module.KindDockerfile, Port: 80, Replicas: 1}, user, "cool-docs")
+	require.NoError(t, err)
+	assert.Equal(t, "https://cool-docs.apps.example.com", PublicURL(ctx, third), "first deploy uses the chosen address")
 }

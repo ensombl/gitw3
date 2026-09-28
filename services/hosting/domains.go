@@ -266,6 +266,82 @@ func RemoveDomain(ctx context.Context, target *hosting_model.Target, domain *hos
 	return nil
 }
 
+// ErrSubdomainTaken means another app already uses the address.
+var ErrSubdomainTaken = errors.New("that address is already taken")
+
+// CheckSubdomain validates a user-chosen name under the base domain and
+// returns its host name. A name the target already owns is available to it.
+func CheckSubdomain(ctx context.Context, value string, targetID int64) (string, error) {
+	base := setting.Hosting.Domains.BaseDomain
+	label := hosting_module.NormalizeSubdomain(value, base)
+	if err := hosting_module.ValidateSubdomain(label); err != nil {
+		return "", err
+	}
+	fqdn := hosting_module.PoolFQDN(label, base)
+	domain, err := hosting_model.GetDomainByFQDN(ctx, fqdn)
+	switch {
+	case errors.Is(err, hosting_model.ErrDomainNotExist):
+		return fqdn, nil
+	case err != nil:
+		return "", err
+	case targetID != 0 && domain.TargetID == targetID:
+		return fqdn, nil
+	}
+	return "", ErrSubdomainTaken
+}
+
+// ClaimSubdomain gives a target the address it asked for under the base
+// domain, replacing its previous automatic address. The wildcard record
+// already covers every name; other DNS providers get a record created.
+func ClaimSubdomain(ctx context.Context, target *hosting_model.Target, value string, actorID int64) (*hosting_model.Domain, error) {
+	fqdn, err := CheckSubdomain(ctx, value, target.ID)
+	if err != nil {
+		return nil, err
+	}
+	spec, err := target.Spec()
+	if err != nil {
+		return nil, err
+	}
+	previous, err := hosting_model.ListTargetDomains(ctx, target.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, domain := range previous {
+		if domain.FQDN == fqdn {
+			return domain, nil
+		}
+	}
+	recordID, err := current().DNS.CreateRecord(ctx, fqdn)
+	if err != nil {
+		return nil, fmt.Errorf("create DNS record for %s: %w", fqdn, err)
+	}
+	domain := &hosting_model.Domain{
+		FQDN: fqdn, Kind: hosting_model.DomainPool, Status: hosting_model.DomainAssigned,
+		TargetID: target.ID, ProviderRecordID: recordID,
+	}
+	if err := hosting_model.CreateDomain(ctx, domain); err != nil {
+		_ = current().DNS.DeleteRecord(ctx, recordID)
+		if errors.Is(err, hosting_model.ErrDomainTaken) {
+			return nil, ErrSubdomainTaken
+		}
+		return nil, err
+	}
+	if routable(spec) {
+		if err := routeDomain(ctx, target, spec, domain); err != nil {
+			return nil, err
+		}
+	}
+	for _, old := range previous {
+		if old.Kind == hosting_model.DomainPool {
+			if err := releaseDomain(ctx, old); err != nil {
+				log.Warn("Release old address %s of target %d: %v", old.FQDN, target.ID, err)
+			}
+		}
+	}
+	hosting_model.Audit(ctx, actorID, target.RepoID, target.ID, 0, hosting_model.AuditDomainAttached, map[string]any{"domain": fqdn})
+	return domain, nil
+}
+
 // PoolDomain returns the target's automatically assigned domain, if any.
 func PoolDomain(ctx context.Context, target *hosting_model.Target) *hosting_model.Domain {
 	domains, err := hosting_model.ListTargetDomains(ctx, target.ID)

@@ -37,6 +37,30 @@ default is `[ui] DEFAULT_SIMPLE_MODE` (default `true`).
 Rollback redeploys an earlier live release's digest **and** its environment snapshot without
 rebuilding.
 
+## Simple Mode deploy page and error relay
+
+Simple Mode shows the Deploy page as three steps:
+
+1. **Get your app ready.** A copy-paste prompt tells the user's AI assistant how to add a Dockerfile
+   that GitW3 can run: listen on `0.0.0.0:$PORT`, a `.dockerignore`, no secrets, and a version tag.
+2. **Publish a version.** A pushed `vX.Y.Z` tag deploys just like a release.
+3. **Pick an address and deploy.**
+
+Once an app is live, the page shows its URL, a "Deploy latest version" button, a rename form and the
+AI prompt.
+
+Failures are explained where the user will see them:
+
+- **Preflight, before anything is queued.** Deploy stops at once when the Dockerfile has no `FROM` or
+  copies a `.env` file into the image. It warns when the start command uses `localhost`, when no port
+  is declared, or when `COPY .` runs without a `.dockerignore`.
+- **Build errors.** The builder sends back the last meaningful lines of the BuildKit log, such as the
+  failing `RUN` step and its compiler or package-manager error.
+- **Crashes after deploy.** When a rollout is rolled back or fails, GitW3 reads the failed Swarm task's
+  error and the app's last 30 log lines through the socket proxy.
+
+Each failure is shown with a "fix-it" prompt that contains the exact error.
+
 ## `.forgejo/deploy.yml`
 
 ```yaml
@@ -78,7 +102,12 @@ GitW3 injects these environment variables:
 - `PORT`, unless the app sets its own
 - `GITW3_URL`, `GITW3_RELEASE`, `GITW3_COMMIT`, `GITW3_TARGET`
 - `W3DS_DEPLOYMENT_ENAME`
-- `W3DS_DEPLOYMENT_KEY_FILE`, which points at the mounted `w3ds-deployment-key.json`
+- `W3DS_DEPLOYMENT_KEY_FILE`, which points at the mounted `w3ds-deployment-key.json` (single-image apps)
+- `W3DS_DEPLOYMENT_KEY_JSON`, the same key file content, for compose services
+
+The deployment key is fully managed: GitW3 generates it on the first deploy, stores it encrypted, has
+the deployer's wallet authorise it once, and signs every later version with it. For compose apps, GitW3
+writes the environment into every service, since Swarm stacks do not otherwise receive it.
 
 ## Domains
 
@@ -89,6 +118,11 @@ DNS.
 - `PROVIDER = wildcard` (default): `*.BASE_DOMAIN` already points at the ingress; names cost nothing.
 - `PROVIDER = cloudflare`: an `A` record is created per name through the Cloudflare API
   (`CLOUDFLARE_API_TOKEN` needs `Zone.DNS:Edit` on `CLOUDFLARE_ZONE_ID`).
+
+Users can also type the address they want, e.g. `myshop` → `myshop.<BASE_DOMAIN>`. The Deploy page
+suggests one based on the repository name and checks availability live. Names must be 3–40 lowercase
+letters, digits and dashes, and platform names like `infra`, `www`, `api` and `admin` are reserved. With
+the wildcard provider a new name needs no DNS change; renaming releases the old name.
 
 Users can attach their own domain. The UI shows the record to create: a `CNAME` to the app's pool name,
 or an `A` record to `TARGET_IP`. **Check DNS** verifies it before routing, and Traefik issues the
