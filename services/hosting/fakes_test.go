@@ -76,13 +76,6 @@ func (f *fakeDokploy) SetEnv(_ context.Context, appID string, env map[string]str
 	return nil
 }
 
-func (f *fakeDokploy) AddFileMount(_ context.Context, appID, mountPath, content string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.mounts[appID+":"+mountPath] = content
-	return nil
-}
-
 func (f *fakeDokploy) DeployImage(_ context.Context, appID, imageRef, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

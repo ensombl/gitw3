@@ -72,7 +72,6 @@ type DokployClient interface {
 	UpdateApp(ctx context.Context, appID string, spec AppSpec) error
 	DeleteApp(ctx context.Context, appID string) error
 	SetEnv(ctx context.Context, appID string, env map[string]string) error
-	AddFileMount(ctx context.Context, appID, mountPath, content string) error
 	DeployImage(ctx context.Context, appID, imageRef, title string) error
 	AppState(ctx context.Context, appID string) (*AppState, error)
 
@@ -248,18 +247,13 @@ func (c *dokployHTTPClient) SetEnv(ctx context.Context, appID string, env map[st
 	}, nil)
 }
 
-func (c *dokployHTTPClient) AddFileMount(ctx context.Context, appID, mountPath, content string) error {
-	return c.call(ctx, http.MethodPost, "mounts.create", map[string]any{
-		"type": "file", "content": content, "mountPath": mountPath,
-		"serviceType": "application", "serviceId": appID,
-	}, nil)
-}
-
 func (c *dokployHTTPClient) DeployImage(ctx context.Context, appID, imageRef, title string) error {
 	// Registry credentials come from the Dokploy registry entry (registryId),
 	// so no credentials are sent with the image reference.
+	// Dokploy requires the credential fields to be present, even as null.
 	if err := c.call(ctx, http.MethodPost, "application.saveDockerProvider", map[string]any{
 		"applicationId": appID, "dockerImage": imageRef,
+		"username": nil, "password": nil, "registryUrl": nil,
 	}, nil); err != nil {
 		return err
 	}

@@ -102,6 +102,15 @@ func deployToCluster(ctx context.Context, target *hosting_model.Target, deployme
 		return err
 	}
 	runtimeEnv := withPlatformEnv(ctx, target, spec, deployment, env)
+	// The W3DS deployment key travels in the environment: a file mount would
+	// live on the manager's disk and cannot reach tasks on worker nodes.
+	keyFile, err := target.PrivateKey()
+	if err != nil {
+		return err
+	}
+	if keyFile != "" {
+		runtimeEnv[deploymentKeyJSONEnvVar] = keyFile
+	}
 	title := "GitW3 " + deployment.TagName + " (#" + strconv.FormatInt(deployment.ID, 10) + ")"
 	c := current()
 	if spec.Kind == hosting_module.KindCompose {
@@ -118,17 +127,9 @@ func deployToCluster(ctx context.Context, target *hosting_model.Target, deployme
 			return err
 		}
 		file.ApplyPlacement(setting.Hosting.PlacementConstraints)
-		// Compose services get the environment (and the W3DS deployment key, which
-		// single-image apps receive as a mounted file) written into each service.
-		keyFile, err := target.PrivateKey()
-		if err != nil {
-			return err
-		}
-		stackEnv := maps.Clone(runtimeEnv)
-		if keyFile != "" {
-			stackEnv[deploymentKeyJSONEnvVar] = keyFile
-		}
-		file.SetEnvironment(stackEnv)
+		// Swarm stacks only use the deploy environment for substitution, so it
+		// is written into each service.
+		file.SetEnvironment(runtimeEnv)
 		rendered, err := file.PinImages(images)
 		if err != nil {
 			return err
@@ -172,9 +173,6 @@ func withPlatformEnv(ctx context.Context, target *hosting_model.Target, spec *ho
 	}
 	if target.DeploymentEName != "" {
 		runtime["W3DS_DEPLOYMENT_ENAME"] = target.DeploymentEName
-	}
-	if target.DokployAppID != "" {
-		runtime[deploymentKeyEnvVar] = deploymentKeyMount
 	}
 	return runtime
 }

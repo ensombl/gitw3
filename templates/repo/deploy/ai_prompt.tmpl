@@ -10,7 +10,7 @@ How GitW3 runs apps:
 - The app must serve HTTP on the port in the PORT environment variable (GitW3 sets it; default 3000) and listen on 0.0.0.0, not localhost.
 - Containers are stateless and can be restarted or replaced at any time: nothing written to the container's disk survives a deploy. Keep data in an external database or storage service.
 - GitW3 also sets GITW3_URL (the app's public https URL), GITW3_RELEASE and GITW3_COMMIT. Secrets such as API keys are added later in GitW3, never committed.
-- GitW3 manages the app's W3DS deployment key automatically. If the app needs to sign as its W3DS deployment, read the key from the file named by W3DS_DEPLOYMENT_KEY_FILE (or the JSON in W3DS_DEPLOYMENT_KEY_JSON for multi-service apps). Never generate, commit or print a key yourself.
+- GitW3 manages the app's W3DS deployment key automatically. If the app needs to sign as its W3DS deployment, read the w3ds-deployment-key.json content from the W3DS_DEPLOYMENT_KEY_JSON environment variable. Never generate, commit or print a key yourself.
 
 Please:
 1. Work out how the app is built and started (language, framework, package manager, build command, start command, static site or server).
