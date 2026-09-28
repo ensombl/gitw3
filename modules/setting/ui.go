@@ -35,6 +35,8 @@ var UI = struct {
 	SearchRepoDescription bool
 	OnlyShowRelevantRepos bool
 	ExploreDefaultSort    string `ini:"EXPLORE_PAGING_DEFAULT_SORT"`
+	// DefaultSimpleMode is the Simple Mode state for users who never toggled it.
+	DefaultSimpleMode bool `ini:"-"`
 
 	AmbiguousUnicodeDetection bool
 	SkipEscapeContexts        []string
@@ -154,6 +156,7 @@ func loadUIFrom(rootCfg ConfigProvider) {
 	UI.ShowUserEmail = sec.Key("SHOW_USER_EMAIL").MustBool(true)
 	UI.DefaultShowFullName = sec.Key("DEFAULT_SHOW_FULL_NAME").MustBool(false)
 	UI.SearchRepoDescription = sec.Key("SEARCH_REPO_DESCRIPTION").MustBool(true)
+	UI.DefaultSimpleMode = sec.Key("DEFAULT_SIMPLE_MODE").MustBool(true)
 
 	// OnlyShowRelevantRepos=false is important for many private/enterprise instances,
 	// because many private repositories do not have "description/topic", users just want to search by their names.
