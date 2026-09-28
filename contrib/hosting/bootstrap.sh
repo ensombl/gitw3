@@ -32,6 +32,11 @@ random() {
 	head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'
 }
 
+# Bot passwords satisfy any PASSWORD_COMPLEXITY policy (lower, upper, digit, spec).
+password() {
+	printf 'Aa1!%s' "$(random)"
+}
+
 ensure_org() {
 	exists "/orgs/$1" || api POST /orgs "$(jq -cn --arg n "$1" --arg d "$2" '{username: $n, full_name: $d, visibility: "private"}')" >/dev/null
 	echo "org $1 ready"
@@ -70,8 +75,8 @@ ensure_org deployments "GitW3 managed hosting images"
 ensure_org platform "GitW3 platform services"
 
 echo "== Registry bots"
-push_password="$(random)"
-pull_password="$(random)"
+push_password="$(password)"
+pull_password="$(password)"
 ensure_bot deployments-push "$push_password"
 ensure_bot deployments-pull "$pull_password"
 ensure_team deployments publishers write deployments-push
