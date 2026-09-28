@@ -94,6 +94,7 @@ import {initAuthorizedIntegrationClaimRuleEditor} from './features/authorized-in
 import {initPlatformOnboarding} from './features/platform-onboarding.ts';
 import {initW3DSPlatformStatus} from './features/w3ds-platform-status.ts';
 import {initW3DSDeploy} from './features/w3ds-deploy.ts';
+import {initManagedDeploy} from './features/hosting.ts';
 import {initW3DSWelcome} from './features/w3ds-welcome.ts';
 import {initW3DSPlatformPort} from './features/w3ds-platform-port.ts';
 
@@ -205,6 +206,7 @@ onDomReady(() => {
   initPlatformOnboarding();
   initW3DSPlatformStatus();
   initW3DSDeploy();
+  initManagedDeploy();
   initW3DSWelcome();
   initW3DSPlatformPort();
 

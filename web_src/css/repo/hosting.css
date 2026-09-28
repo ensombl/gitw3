@@ -1,0 +1,192 @@
+.deploy-mode-tabs {
+  margin-bottom: 1.5rem !important;
+}
+
+.managed-deploy-card .managed-deploy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+.managed-deploy-row > .field {
+  flex: 1 1 14rem;
+  margin: 0 !important;
+}
+
+.managed-deploy-button {
+  flex: 0 0 auto;
+}
+
+.managed-progress {
+  margin-top: 1.5rem;
+}
+
+.managed-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.managed-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius);
+  color: var(--color-text-light-2);
+}
+
+.managed-steps li.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.managed-steps li.active svg {
+  animation: managed-pulse 1.4s ease-in-out infinite;
+}
+
+.managed-steps li.completed {
+  border-color: var(--color-green);
+  color: var(--color-green);
+}
+
+.managed-steps li.failed {
+  border-color: var(--color-red);
+  color: var(--color-red);
+}
+
+@keyframes managed-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.managed-progress-status {
+  margin: 0.75rem 0 0;
+  color: var(--color-text-light-1);
+  overflow-wrap: anywhere;
+}
+
+.managed-live-url,
+.managed-target-url {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.managed-target-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.managed-target-meta {
+  margin-top: 0.25rem;
+  color: var(--color-text-light-2);
+}
+
+.managed-auto-deploy,
+.managed-secret-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.managed-panel {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--color-secondary);
+  padding-top: 0.75rem;
+}
+
+.managed-panel > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+}
+
+.managed-domains {
+  margin: 0.75rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.managed-domains li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+}
+
+.managed-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.managed-inline-form > .field {
+  flex: 1 1 12rem;
+  margin: 0 !important;
+}
+
+.managed-history-error {
+  max-width: 28rem;
+  color: var(--color-text-light-1);
+  overflow-wrap: anywhere;
+}
+
+.managed-history-actions {
+  white-space: nowrap;
+}
+
+.managed-danger {
+  margin-top: 1.25rem;
+  text-align: end;
+}
+
+.managed-activity {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.managed-activity li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--color-secondary);
+}
+
+.managed-log-modal pre {
+  max-height: 60vh;
+  overflow: auto;
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: var(--border-radius);
+  background: var(--color-code-bg);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 767.98px) {
+  .managed-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .managed-deploy-button {
+    width: 100%;
+  }
+}

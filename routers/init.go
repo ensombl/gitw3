@@ -39,6 +39,7 @@ import (
 	"forgejo.org/services/cron"
 	federation_service "forgejo.org/services/federation"
 	feed_service "forgejo.org/services/feed"
+	hosting_service "forgejo.org/services/hosting"
 	indexer_service "forgejo.org/services/indexer"
 	"forgejo.org/services/mailer"
 	mailer_incoming "forgejo.org/services/mailer/incoming"
@@ -162,6 +163,7 @@ func InitWebInstalled(ctx context.Context) {
 	mustInit(svg.Init)
 
 	actions_service.Init()
+	mustInitCtx(ctx, hosting_service.Init)
 	mustInit(stats.Init)
 
 	mustInit(actions_router.InitOIDC)

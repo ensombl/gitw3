@@ -712,6 +712,8 @@ func registerRoutes(m *web.Route) {
 	m.Methods("POST, OPTIONS", "/w3ds/ppa/callback", ignoreCSRF, repo.W3DSPPACallback)
 	m.Methods("POST, OPTIONS", "/w3ds/migrations/callback", ignoreCSRF, repo.PlatformMigrationCallback)
 	m.Methods("POST, OPTIONS", "/w3ds/deploy/callback", ignoreCSRF, repo.DeploymentCallback)
+	m.Post("/-/hosting/callback", ignoreCSRF, repo.HostingBuildCallback)
+	m.Get("/-/hosting/source/{job}", repo.HostingBuildSource)
 
 	m.Group("/login/oauth", func() {
 		m.Group("", func() {
@@ -1708,6 +1710,22 @@ func registerRoutes(m *web.Route) {
 			m.Get("", reqSignIn, repo.Deploy)
 			m.Post("", context.RepoMustNotBeArchived(), reqSignIn, web.Bind(forms.CreateDeploymentForm{}), repo.CreateDeployment)
 			m.Get("/{deployment}/status", reqSignIn, repo.DeploymentStatus)
+			m.Group("/managed", func() {
+				m.Post("", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingDeploy)
+				m.Get("/{deployment}/status", repo.HostingDeploymentStatus)
+				m.Get("/{deployment}/log", repo.HostingBuildLog)
+				m.Post("/{deployment}/cancel", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingCancel)
+				m.Post("/{deployment}/rollback", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingRollback)
+				m.Group("/targets/{target}", func() {
+					m.Post("/env", repo.HostingSetEnv)
+					m.Post("/env/delete", repo.HostingDeleteEnv)
+					m.Post("/auto-deploy", repo.HostingSetAutoDeploy)
+					m.Post("/domains", repo.HostingAddDomain)
+					m.Post("/domains/{domain}/verify", repo.HostingVerifyDomain)
+					m.Post("/domains/{domain}/delete", repo.HostingRemoveDomain)
+					m.Post("/delete", repo.HostingDeleteTarget)
+				}, context.RepoMustNotBeArchived(), reqRepoAdmin)
+			}, reqSignIn)
 		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
 
 		m.Group("/activity_author_data", func() {

@@ -1,0 +1,199 @@
+<div id="managed-deploy" class="managed-deploy" data-deploy-url="{{.RepoLink}}/deploy/managed">
+	<div class="w3ds-page-heading">
+		<div>
+			<h1>{{ctx.Locale.Tr "platform.hosting.title"}}</h1>
+			<p>{{ctx.Locale.Tr "platform.hosting.subtitle"}}</p>
+		</div>
+	</div>
+
+	{{if .ManagedBlocked}}
+		<div class="w3ds-empty-state">
+			{{svg "octicon-rocket" 48}}
+			<h2>{{ctx.Locale.Tr (printf "platform.hosting.blocked_%s" .ManagedBlocked)}}</h2>
+			<p>{{ctx.Locale.Tr (printf "platform.hosting.blocked_%s_help" .ManagedBlocked)}}</p>
+			{{if eq .ManagedBlocked "not_platform"}}<a class="ui primary button" href="{{.RepoLink}}/w3ds/welcome">{{ctx.Locale.Tr "platform.hosting.blocked_not_platform_action"}}</a>{{end}}
+		</div>
+	{{else}}
+		<section class="w3ds-section managed-deploy-card">
+			<form class="ui form managed-deploy-form" data-managed-deploy-form action="{{.RepoLink}}/deploy/managed" method="post">
+				{{.CsrfTokenHtml}}
+				<div class="managed-deploy-row">
+					<div class="field">
+						<label for="managed_release">{{ctx.Locale.Tr "platform.hosting.release"}}</label>
+						<select id="managed_release" name="release_id" required {{if not .CanManagedDeploy}}disabled{{end}}>
+							{{range $index, $release := .ManagedReleases}}
+								<option value="{{$release.ID}}" {{if and $.HostingRequireW3DS $.PlatformEName (not $release.PPACertified)}}disabled{{end}}>{{$release.Tag}}{{if and $.HostingRequireW3DS $.PlatformEName (not $release.PPACertified)}} · {{ctx.Locale.Tr "platform.deploy.release_uncertified"}}{{end}}</option>
+							{{end}}
+						</select>
+					</div>
+					{{if gt (len .ManagedTargets) 1}}
+						<div class="field">
+							<label for="managed_target">{{ctx.Locale.Tr "platform.hosting.target"}}</label>
+							<select id="managed_target" name="target">
+								{{range .ManagedTargets}}<option value="{{.Target.Name}}">{{.Target.Name}}</option>{{end}}
+							</select>
+						</div>
+					{{end}}
+					<button type="submit" class="ui primary huge button managed-deploy-button" data-managed-deploy-submit {{if or (not .CanManagedDeploy) (not .ManagedReleases)}}disabled{{end}}>{{svg "octicon-rocket" 20}} {{ctx.Locale.Tr "platform.hosting.deploy"}}</button>
+				</div>
+				{{if not .ManagedReleases}}
+					<div class="ui info message">{{ctx.Locale.Tr "platform.hosting.no_releases"}} <a href="{{.RepoLink}}/releases/new">{{ctx.Locale.Tr "platform.hosting.no_releases_action"}}</a></div>
+				{{else if .ManagedCertificationsUnavailable}}
+					<div class="ui warning message">{{ctx.Locale.Tr "platform.deploy.certification_unavailable"}}</div>
+				{{else if not .CanManagedDeploy}}
+					<p class="help">{{ctx.Locale.Tr "platform.hosting.writer_required"}}</p>
+				{{end}}
+			</form>
+
+			<div class="managed-progress tw-hidden" data-managed-progress hidden aria-live="polite">
+				<ol class="managed-steps">
+					<li data-managed-step="build">{{svg "octicon-package"}} <span>{{ctx.Locale.Tr "platform.hosting.step_build"}}</span></li>
+					<li data-managed-step="sign">{{svg "octicon-shield-check"}} <span>{{ctx.Locale.Tr "platform.hosting.step_sign"}}</span></li>
+					<li data-managed-step="rollout">{{svg "octicon-sync"}} <span>{{ctx.Locale.Tr "platform.hosting.step_rollout"}}</span></li>
+					<li data-managed-step="live">{{svg "octicon-globe"}} <span>{{ctx.Locale.Tr "platform.hosting.step_live"}}</span></li>
+				</ol>
+				<p class="managed-progress-status" data-managed-status></p>
+				<a class="managed-live-url tw-hidden" data-managed-live-url target="_blank" rel="noopener noreferrer" hidden></a>
+			</div>
+		</section>
+
+		{{range .ManagedTargets}}
+			{{$target := .}}
+			<section class="w3ds-section managed-target" {{with .Pending}}data-managed-pending="{{$.RepoLink}}/deploy/managed/{{.ID}}/status"{{end}}>
+				<div class="managed-target-heading">
+					<div>
+						{{if gt (len $.ManagedTargets) 1}}<span class="deploy-kicker">{{.Target.Name}}</span>{{end}}
+						{{if .URL}}
+							<a class="managed-target-url" href="{{.URL}}" target="_blank" rel="noopener noreferrer">{{.URL}} {{svg "octicon-link-external"}}</a>
+						{{else}}
+							<strong>{{ctx.Locale.Tr "platform.hosting.internal_only"}}</strong>
+						{{end}}
+						<div class="managed-target-meta">
+							{{if .Live}}{{ctx.Locale.Tr "platform.hosting.live_release" .Live.TagName}} · {{DateUtils.TimeSince .Live.FinishedUnix}}{{else}}{{ctx.Locale.Tr "platform.hosting.not_live"}}{{end}}
+						</div>
+					</div>
+					{{if and $.CanManageHosting (not $.SimpleMode)}}
+						<label class="managed-auto-deploy">
+							<input type="checkbox" data-managed-auto-deploy="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/auto-deploy" {{if .Target.AutoDeploy}}checked{{end}}>
+							<span>{{ctx.Locale.Tr "platform.hosting.auto_deploy"}}</span>
+						</label>
+					{{end}}
+				</div>
+
+				<details class="managed-panel" {{if $.SimpleMode}}open{{end}}>
+					<summary>{{svg "octicon-globe"}} {{ctx.Locale.Tr "platform.hosting.domains"}}</summary>
+					<ul class="managed-domains">
+						{{range .Domains}}
+							<li>
+								<code>{{.FQDN}}</code>
+								{{if eq .Kind "pool"}}<span class="ui label">{{ctx.Locale.Tr "platform.hosting.domain_automatic"}}</span>
+								{{else if eq .Status "verified"}}<span class="ui green label">{{ctx.Locale.Tr "platform.hosting.domain_verified"}}</span>
+								{{else}}<span class="ui yellow label">{{ctx.Locale.Tr "platform.hosting.domain_pending"}}</span>{{end}}
+								{{if and $.CanManageHosting (eq .Kind "custom")}}
+									{{if ne .Status "verified"}}<button type="button" class="ui mini button" data-managed-action="{{$.RepoLink}}/deploy/managed/targets/{{$target.Target.Name}}/domains/{{.ID}}/verify">{{ctx.Locale.Tr "platform.hosting.domain_verify"}}</button>{{end}}
+									<button type="button" class="ui mini basic red button" data-managed-action="{{$.RepoLink}}/deploy/managed/targets/{{$target.Target.Name}}/domains/{{.ID}}/delete" data-confirm="{{ctx.Locale.Tr "platform.hosting.domain_remove_confirm" .FQDN}}">{{ctx.Locale.Tr "remove"}}</button>
+								{{end}}
+							</li>
+						{{end}}
+					</ul>
+					{{if and $.CanManageHosting $.HostingAllowCustomDomains}}
+						<form class="ui form managed-inline-form" data-managed-form action="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/domains" method="post">
+							{{$.CsrfTokenHtml}}
+							<div class="field"><input name="domain" required maxlength="253" placeholder="app.example.com" aria-label="{{ctx.Locale.Tr "platform.hosting.domain_add"}}"></div>
+							<button class="ui button">{{ctx.Locale.Tr "platform.hosting.domain_add"}}</button>
+						</form>
+						<p class="help">{{ctx.Locale.Tr "platform.hosting.domain_help" .DNSType .DNSValue}}</p>
+					{{end}}
+				</details>
+
+				{{if and $.CanManageHosting (not $.SimpleMode)}}
+					<details class="managed-panel">
+						<summary>{{svg "octicon-gear"}} {{ctx.Locale.Tr "platform.hosting.env"}}</summary>
+						<p class="help">{{ctx.Locale.Tr "platform.hosting.env_help"}}</p>
+						{{if .Env}}
+							<table class="ui very basic compact table managed-env">
+								<tbody>
+									{{range .Env}}
+										<tr>
+											<td><code>{{.Key}}</code></td>
+											<td>{{if .IsSecret}}<span class="text grey">{{ctx.Locale.Tr "platform.hosting.env_secret"}}</span>{{else}}<code>{{.Value}}</code>{{end}}</td>
+											<td class="right aligned"><button type="button" class="ui mini basic red button" data-managed-action="{{$.RepoLink}}/deploy/managed/targets/{{$target.Target.Name}}/env/delete" data-key="{{.Key}}" data-confirm="{{ctx.Locale.Tr "platform.hosting.env_delete_confirm" .Key}}">{{ctx.Locale.Tr "remove"}}</button></td>
+										</tr>
+									{{end}}
+								</tbody>
+							</table>
+						{{end}}
+						<form class="ui form managed-inline-form" data-managed-form action="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/env" method="post">
+							{{$.CsrfTokenHtml}}
+							<div class="field"><input name="key" required maxlength="255" placeholder="DATABASE_URL" aria-label="{{ctx.Locale.Tr "platform.hosting.env_key"}}"></div>
+							<div class="field"><input name="value" type="password" autocomplete="off" placeholder="{{ctx.Locale.Tr "platform.hosting.env_value"}}" aria-label="{{ctx.Locale.Tr "platform.hosting.env_value"}}"></div>
+							<label class="managed-secret-toggle"><input type="checkbox" name="secret" value="true" checked> {{ctx.Locale.Tr "platform.hosting.env_is_secret"}}</label>
+							<button class="ui button">{{ctx.Locale.Tr "platform.hosting.env_save"}}</button>
+						</form>
+						<p class="help">{{ctx.Locale.Tr "platform.hosting.env_applies"}}</p>
+					</details>
+				{{end}}
+
+				<details class="managed-panel" open>
+					<summary>{{svg "octicon-history"}} {{ctx.Locale.Tr "platform.hosting.history"}}</summary>
+					<table class="ui very basic compact table managed-history">
+						<tbody>
+							{{range .Deployments}}
+								<tr>
+									<td><strong>{{.TagName}}</strong>{{if eq .Trigger "rollback"}} <span class="ui mini label">{{ctx.Locale.Tr "platform.hosting.trigger_rollback"}}</span>{{else if eq .Trigger "release"}} <span class="ui mini label">{{ctx.Locale.Tr "platform.hosting.trigger_release"}}</span>{{end}}</td>
+									<td><span class="ui mini label {{if eq .Status "live"}}green{{else if or (eq .Status "build_failed") (eq .Status "deploy_failed") (eq .Status "rolled_back")}}red{{else if or (eq .Status "superseded") (eq .Status "cancelled")}}{{else}}blue{{end}}">{{ctx.Locale.Tr (printf "platform.hosting.status_%s" .Status)}}</span></td>
+									<td class="text grey">{{DateUtils.TimeSince .StartedUnix}}</td>
+									<td class="managed-history-error">{{if .Error}}{{.Error}}{{else if .Warning}}{{svg "octicon-alert"}} {{.Warning}}{{end}}</td>
+									<td class="right aligned managed-history-actions">
+										{{if ne .Trigger "rollback"}}<button type="button" class="ui mini basic button" data-managed-log="{{$.RepoLink}}/deploy/managed/{{.ID}}/log">{{ctx.Locale.Tr "platform.hosting.view_log"}}</button>{{end}}
+										{{if and $.CanManagedDeploy (eq .Status "superseded")}}<button type="button" class="ui mini button" data-managed-action="{{$.RepoLink}}/deploy/managed/{{.ID}}/rollback" data-confirm="{{ctx.Locale.Tr "platform.hosting.rollback_confirm" .TagName}}">{{ctx.Locale.Tr "platform.hosting.rollback"}}</button>{{end}}
+										{{if and $.CanManagedDeploy .Status.IsPending}}<button type="button" class="ui mini basic red button" data-managed-action="{{$.RepoLink}}/deploy/managed/{{.ID}}/cancel">{{ctx.Locale.Tr "cancel"}}</button>{{end}}
+									</td>
+								</tr>
+							{{else}}
+								<tr><td class="text grey">{{ctx.Locale.Tr "platform.hosting.history_empty"}}</td></tr>
+							{{end}}
+						</tbody>
+					</table>
+				</details>
+
+				{{if and $.CanManageHosting (not $.SimpleMode)}}
+					<div class="managed-danger">
+						<button type="button" class="ui basic red button" data-managed-action="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/delete" data-confirm="{{ctx.Locale.Tr "platform.hosting.delete_confirm" .Target.Name}}">{{svg "octicon-trash"}} {{ctx.Locale.Tr "platform.hosting.delete"}}</button>
+					</div>
+				{{end}}
+			</section>
+		{{end}}
+
+		{{if and .ManagedActivity (not .SimpleMode)}}
+			<section class="w3ds-section">
+				<h2>{{ctx.Locale.Tr "platform.hosting.activity"}}</h2>
+				<ul class="managed-activity">
+					{{range .ManagedActivity}}
+						<li><strong>{{.Actor}}</strong> <span>{{ctx.Locale.Tr (printf "platform.hosting.audit_%s" .Action)}}</span> <span class="text grey">{{DateUtils.TimeSince .CreatedUnix}}</span></li>
+					{{end}}
+				</ul>
+			</section>
+		{{end}}
+	{{end}}
+
+	<dialog id="managed-signing-modal">
+		<article>
+			<header>{{ctx.Locale.Tr "platform.hosting.sign_title"}}</header>
+			<div class="content deploy-signing-content">
+				<p>{{ctx.Locale.Tr "platform.hosting.sign_help"}}</p>
+				<div class="w3ds-ppa-signing-qr"><canvas data-managed-qr aria-label="{{ctx.Locale.Tr "platform.deploy.sign_qr"}}"></canvas></div>
+				<a class="ui primary button" data-managed-open-wallet href="#">{{svg "octicon-device-mobile"}} {{ctx.Locale.Tr "platform.ppa.signing_open"}}</a>
+			</div>
+			<footer><button type="button" class="ui cancel button">{{ctx.Locale.Tr "platform.hosting.sign_later"}}</button></footer>
+		</article>
+	</dialog>
+
+	<dialog id="managed-log-modal" class="managed-log-modal">
+		<article>
+			<header>{{ctx.Locale.Tr "platform.hosting.log_title"}}</header>
+			<div class="content"><pre data-managed-log-output tabindex="0"></pre></div>
+			<footer><button type="button" class="ui cancel button">{{ctx.Locale.Tr "platform.hosting.close"}}</button></footer>
+		</article>
+	</dialog>
+</div>

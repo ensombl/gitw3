@@ -198,10 +198,14 @@ func syncTargetSpec(ctx context.Context, repo *repo_model.Repository, target *ho
 	if previous.Kind != spec.Kind {
 		return fmt.Errorf("target %q changed kind from %s to %s; delete the target to redeploy it with a new kind", spec.Name, previous.Kind, spec.Kind)
 	}
+	// auto_deploy in deploy.yml only seeds a new target; afterwards the
+	// switch on the Deploy tab owns it.
+	autoDeploy := target.AutoDeploy
 	if err := target.SetSpec(spec); err != nil {
 		return err
 	}
-	if err := hosting_model.UpdateTargetCols(ctx, target, "config_json", "kind", "replicas", "auto_deploy"); err != nil {
+	target.AutoDeploy = autoDeploy
+	if err := hosting_model.UpdateTargetCols(ctx, target, "config_json", "kind", "replicas"); err != nil {
 		return err
 	}
 	if target.DokployAppID != "" {

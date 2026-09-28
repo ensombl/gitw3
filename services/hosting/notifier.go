@@ -78,3 +78,10 @@ func autoDeploy(ctx context.Context, rel *repo_model.Release) {
 		}
 	}()
 }
+
+// DeleteRepository tears down the repository's apps, domains and targets.
+func (*notifier) DeleteRepository(ctx context.Context, _ *user_model.User, repo *repo_model.Repository) {
+	if err := DeleteRepoTargets(ctx, repo.ID); err != nil {
+		log.Error("Remove managed hosting of deleted repository %s: %v", repo.FullName(), err)
+	}
+}
