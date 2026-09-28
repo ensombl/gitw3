@@ -1,0 +1,52 @@
+# GitW3 managed hosting builder.
+#
+# This workflow lives in the central platform/builder repository. App
+# repositories can only trigger it (GitW3 dispatches it); they can never edit
+# it, so the registry push token and callback key stay here.
+#
+# Inputs are passed to the script through environment variables only, never
+# interpolated into shell code.
+name: GitW3 managed build
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: GitW3 build job id
+        required: true
+        type: string
+      spec:
+        description: Base64 JSON build spec
+        required: true
+        type: string
+      source_url:
+        description: Signed, expiring source archive URL
+        required: true
+        type: string
+      callback_url:
+        description: GitW3 build callback URL
+        required: true
+        type: string
+
+concurrency:
+  group: gitw3-build-${{ inputs.job_id }}
+
+jobs:
+  build:
+    runs-on: gitw3-builder
+    timeout-minutes: 45
+    steps:
+      - uses: https://code.forgejo.org/actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - name: Build, scan and push by digest
+        env:
+          JOB_ID: ${{ inputs.job_id }}
+          SPEC: ${{ inputs.spec }}
+          SOURCE_URL: ${{ inputs.source_url }}
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          REGISTRY_USER: ${{ vars.REGISTRY_USER }}
+          REGISTRY_PUSH_TOKEN: ${{ secrets.REGISTRY_PUSH_TOKEN }}
+          CALLBACK_HMAC_KEY: ${{ secrets.CALLBACK_HMAC_KEY }}
+          BUILDKIT_HOST: ${{ vars.BUILDKIT_HOST }}
+        run: ./scripts/build.sh
