@@ -118,6 +118,17 @@ func deployToCluster(ctx context.Context, target *hosting_model.Target, deployme
 			return err
 		}
 		file.ApplyPlacement(setting.Hosting.PlacementConstraints)
+		// Compose services get the environment (and the W3DS deployment key, which
+		// single-image apps receive as a mounted file) written into each service.
+		keyFile, err := target.PrivateKey()
+		if err != nil {
+			return err
+		}
+		stackEnv := maps.Clone(runtimeEnv)
+		if keyFile != "" {
+			stackEnv[deploymentKeyJSONEnvVar] = keyFile
+		}
+		file.SetEnvironment(stackEnv)
 		rendered, err := file.PinImages(images)
 		if err != nil {
 			return err

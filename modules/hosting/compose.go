@@ -6,6 +6,7 @@ package hosting
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -219,6 +220,34 @@ func (c *ComposeFile) ApplyPlacement(constraints []string) {
 			values = append(values, constraint)
 		}
 		deploy["placement"] = map[string]any{"constraints": values}
+	}
+}
+
+// SetEnvironment injects variables into every service. Swarm stacks do not
+// receive the deploy's environment on their own (it only feeds ${VAR}
+// substitution), so GitW3 writes it into each service; values set in GitW3
+// override the compose file's.
+func (c *ComposeFile) SetEnvironment(env map[string]string) {
+	if len(env) == 0 {
+		return
+	}
+	for _, service := range c.services {
+		merged := map[string]any{}
+		switch existing := service["environment"].(type) {
+		case map[string]any:
+			maps.Copy(merged, existing)
+		case []any:
+			for _, item := range existing {
+				if entry, ok := item.(string); ok {
+					key, value, _ := strings.Cut(entry, "=")
+					merged[key] = value
+				}
+			}
+		}
+		for key, value := range env {
+			merged[key] = value
+		}
+		service["environment"] = merged
 	}
 }
 
