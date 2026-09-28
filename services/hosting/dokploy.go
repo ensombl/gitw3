@@ -210,6 +210,9 @@ func (c *dokployHTTPClient) UpdateApp(ctx context.Context, appID string, spec Ap
 	if c.registryID != "" {
 		input["registryId"] = c.registryID
 	}
+	if len(setting.Hosting.PlacementConstraints) > 0 {
+		input["placementSwarm"] = map[string]any{"Constraints": setting.Hosting.PlacementConstraints}
+	}
 	if spec.NanoCPUs > 0 {
 		input["cpuLimit"] = strconv.FormatInt(spec.NanoCPUs, 10)
 	}

@@ -116,6 +116,7 @@ func deployToCluster(ctx context.Context, target *hosting_model.Target, deployme
 		if err != nil {
 			return err
 		}
+		file.ApplyPlacement(setting.Hosting.PlacementConstraints)
 		rendered, err := file.PinImages(images)
 		if err != nil {
 			return err

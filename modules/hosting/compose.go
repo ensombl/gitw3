@@ -202,6 +202,26 @@ func (c *ComposeFile) PinImages(images map[string]string) ([]byte, error) {
 	return yaml.Marshal(c.root)
 }
 
+// ApplyPlacement sets GitW3's placement constraints on every service. User
+// placement is rejected at validation, so these are the only constraints.
+func (c *ComposeFile) ApplyPlacement(constraints []string) {
+	if len(constraints) == 0 {
+		return
+	}
+	for _, service := range c.services {
+		deploy, ok := service["deploy"].(map[string]any)
+		if !ok {
+			deploy = map[string]any{}
+			service["deploy"] = deploy
+		}
+		values := make([]any, 0, len(constraints))
+		for _, constraint := range constraints {
+			values = append(values, constraint)
+		}
+		deploy["placement"] = map[string]any{"constraints": values}
+	}
+}
+
 var digestReferencePattern = regexp.MustCompile(`^[a-z0-9.:\-/_]+@sha256:[a-f0-9]{64}$`)
 
 // IsDigestReference reports whether ref pins an image by sha256 digest.

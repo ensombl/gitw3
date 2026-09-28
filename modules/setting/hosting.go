@@ -34,6 +34,8 @@ var Hosting = struct {
 	DokployEnvironmentID string
 	// DokployServerID pins applications to a Dokploy server; empty means the local manager.
 	DokployServerID string
+	// PlacementConstraints keep app containers off the control plane.
+	PlacementConstraints []string
 	// SwarmProxyURL is a restricted Docker socket proxy on the manager used for read-only service status.
 	SwarmProxyURL string
 
@@ -88,6 +90,10 @@ func loadHostingFrom(rootCfg ConfigProvider) {
 	Hosting.DokployRegistryID = section.Key("DOKPLOY_REGISTRY_ID").MustString("")
 	Hosting.DokployEnvironmentID = section.Key("DOKPLOY_ENVIRONMENT_ID").MustString("")
 	Hosting.DokployServerID = section.Key("DOKPLOY_SERVER_ID").MustString("")
+	Hosting.PlacementConstraints = section.Key("PLACEMENT_CONSTRAINTS").Strings(",")
+	if !section.HasKey("PLACEMENT_CONSTRAINTS") {
+		Hosting.PlacementConstraints = []string{"node.role==worker"}
+	}
 	Hosting.SwarmProxyURL = strings.TrimRight(section.Key("SWARM_PROXY_URL").MustString(""), "/")
 	Hosting.RequireW3DS = section.Key("REQUIRE_W3DS").MustBool(true)
 	Hosting.BuilderRepo = section.Key("BUILDER_REPO").MustString("platform/builder")

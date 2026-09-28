@@ -109,6 +109,7 @@ func TestParseCompose(t *testing.T) {
 	_, err = file.PinImages(map[string]string{"api": "git.example.com/deployments/x-api@" + digest})
 	require.Error(t, err, "worker has no pinned image")
 
+	file.ApplyPlacement([]string{"node.role==worker"})
 	rendered, err := file.PinImages(map[string]string{
 		"api":    "git.example.com/deployments/x-api@" + digest,
 		"worker": "git.example.com/deployments/x-worker@" + digest,
@@ -117,6 +118,7 @@ func TestParseCompose(t *testing.T) {
 	assert.NotContains(t, string(rendered), "build")
 	assert.Contains(t, string(rendered), "x-worker@"+digest)
 	assert.Contains(t, string(rendered), "redis:7")
+	assert.Equal(t, 3, strings.Count(string(rendered), "node.role==worker"))
 }
 
 func TestParseComposeRejects(t *testing.T) {
