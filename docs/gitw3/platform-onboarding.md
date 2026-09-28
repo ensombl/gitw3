@@ -93,6 +93,7 @@ configure:
 | `PLATFORM_SYNC_PROVISIONER_URL` | W3DS Provisioner base URL; defaults to the production Provisioner. |
 | `PLATFORM_SYNC_VERIFICATION_ID` | Approved production provisioning verification identifier. |
 | `PLATFORM_SYNC_PUBLISHER_URL` | Certified platform URL used to request eVault tokens. |
+| `PLATFORM_SYNC_TRUSTED_PPA_ISSUERS` | Comma-separated PPA hosts or origins whose signed decisions count as certification; defaults to `ppa.w3ds.metastate.foundation`. A decision counts only if its JWS verifies against `https://<issuer>/.well-known/jwks.json`. Unsigned records, and records from other issuers, are ignored even when they sit in the platform eVault. |
 
 The bot token must be able to read private platform repositories and update their manifest after
 provisioning. Do not reuse a human administrator token.

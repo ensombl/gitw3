@@ -39,7 +39,9 @@ type fakePlatformInfrastructure struct {
 	published              []map[string]any
 	profiles               map[string]map[string]any
 	accreditations         []w3ds.AccreditationDecision
-	server                 *httptest.Server
+	// forgedAccreditations are written straight into the eVault, unsigned.
+	forgedAccreditations []map[string]any
+	server               *httptest.Server
 }
 
 func newFakePlatformInfrastructure(t *testing.T) *fakePlatformInfrastructure {
@@ -201,7 +203,10 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 			f.mu.Lock()
 			edges := make([]map[string]any, 0, len(f.accreditations))
 			for _, decision := range f.accreditations {
-				edges = append(edges, map[string]any{"node": map[string]any{"parsed": decision}})
+				edges = append(edges, map[string]any{"node": map[string]any{"parsed": ppaRecord(decision)}})
+			}
+			for _, forged := range f.forgedAccreditations {
+				edges = append(edges, map[string]any{"node": map[string]any{"parsed": forged}})
 			}
 			f.mu.Unlock()
 			json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"metaEnvelopes": map[string]any{
@@ -253,6 +258,7 @@ func testConfig(baseURL, statePath string) Config {
 		RequestTimeout:      time.Second,
 		ReconcilePeriod:     time.Millisecond,
 		AccreditationPeriod: time.Millisecond,
+		TrustedPPAIssuers:   []string{testPPAURL()},
 	}
 }
 
@@ -468,7 +474,7 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 			switch {
 			case strings.Contains(query, "PlatformAccreditations"):
 				_ = json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"metaEnvelopes": map[string]any{
-					"edges":    []any{map[string]any{"node": map[string]any{"parsed": certificationDecision}}},
+					"edges":    []any{map[string]any{"node": map[string]any{"parsed": ppaRecord(certificationDecision)}}},
 					"pageInfo": map[string]any{"hasNextPage": false, "endCursor": nil},
 				}}})
 			case strings.Contains(query, "ExistingDeploymentBindings"):
@@ -898,4 +904,36 @@ func TestProcessorPublishesDeploymentVersionWithDeploymentKey(t *testing.T) {
 	assert.Equal(t, signature, signer.Signature)
 	signer = deploymentBindingSigner(w3ds.DeploymentBindingDocument{Type: "deployment_key"}, stored)
 	assert.Equal(t, "@deployer", signer.Signer)
+}
+
+func TestProcessorIgnoresUnsignedAccreditations(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, fake.server.Client())
+	require.NoError(t, store.Save(&Job{RepositoryID: 42, EName: "@guided.w3id", Status: StatusPublished}))
+
+	fake.mu.Lock()
+	// The platform owner can write to their own eVault, so a plain record
+	// claiming a grant (or one pointing at an attacker's JWKS) must not count.
+	fake.forgedAccreditations = []map[string]any{
+		{"platformEName": "@guided.w3id", "platformVersion": "1.2.3", "decision": "granted", "createdAt": "2026-09-01T00:00:00Z"},
+		{"platformEName": "@guided.w3id", "platformVersion": "1.2.3", "decision": "granted", "jws": "e30.e30.e30", "issuerJwksUri": "https://evil.example/.well-known/jwks.json"},
+	}
+	fake.mu.Unlock()
+	certifications, err := processor.CheckDeploymentCertifications(context.Background(), CheckDeploymentCertificationsRequest{
+		RepositoryID: 42, PlatformEName: "@guided.w3id", Versions: []string{"1.2.3"},
+	})
+	require.NoError(t, err)
+	assert.False(t, certifications["1.2.3"].Certified)
+
+	fake.mu.Lock()
+	fake.accreditations = []w3ds.AccreditationDecision{
+		{PlatformEName: "@guided.w3id", PlatformVersion: "1.2.3", Decision: "granted", CreatedAt: "2026-08-01T00:00:00Z"},
+	}
+	fake.mu.Unlock()
+	certifications, err = processor.CheckDeploymentCertifications(context.Background(), CheckDeploymentCertificationsRequest{
+		RepositoryID: 42, PlatformEName: "@guided.w3id", Versions: []string{"1.2.3"},
+	})
+	require.NoError(t, err)
+	assert.True(t, certifications["1.2.3"].Certified, "a decision signed by the trusted PPA counts")
 }

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
@@ -205,13 +206,14 @@ func (c *forgejoClient) authorENames(ctx context.Context, fullName string) ([]st
 type w3dsClient struct {
 	config Config
 	http   *http.Client
+	ppa    *w3ds.PPAVerifier
 	mu     sync.Mutex
 	token  string
 	expiry time.Time
 }
 
 func newW3DSClient(config Config, client *http.Client) *w3dsClient {
-	return &w3dsClient{config: config, http: client}
+	return &w3dsClient{config: config, http: client, ppa: w3ds.NewPPAVerifier(config.TrustedPPAIssuers, client)}
 }
 
 type preparedIdentity struct {
@@ -688,7 +690,7 @@ func (c *w3dsClient) accreditations(ctx context.Context, ename, version string) 
 				MetaEnvelopes struct {
 					Edges []struct {
 						Node struct {
-							Parsed w3ds.AccreditationDecision `json:"parsed"`
+							Parsed w3ds.PPAAccreditationRecord `json:"parsed"`
 						} `json:"node"`
 					} `json:"edges"`
 					PageInfo struct {
@@ -706,7 +708,14 @@ func (c *w3dsClient) accreditations(ctx context.Context, ename, version string) 
 			return nil, err
 		}
 		for _, edge := range result.Data.MetaEnvelopes.Edges {
-			decision := edge.Node.Parsed
+			// Only decisions signed by a trusted PPA count; anything else in
+			// the eVault could have been written by the platform owner.
+			verified, err := c.ppa.Verify(ctx, edge.Node.Parsed)
+			if err != nil {
+				slog.Warn("ignoring PPA decision", "platform", ename, "error", err)
+				continue
+			}
+			decision := *verified
 			if strings.TrimSpace(decision.PlatformEName) != ename || (version != "" && strings.TrimSpace(decision.PlatformVersion) != version) {
 				continue
 			}
