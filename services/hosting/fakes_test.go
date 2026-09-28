@@ -33,6 +33,8 @@ type fakeDokploy struct {
 	mounts    map[string]string
 	status    string
 	deployErr error
+	// lastDeploy is Dokploy's newest deploy job: title and status.
+	lastDeploy [2]string
 }
 
 func newFakeDokploy() *fakeDokploy {
@@ -89,7 +91,7 @@ func (f *fakeDokploy) DeployImage(_ context.Context, appID, imageRef, _ string) 
 func (f *fakeDokploy) AppState(_ context.Context, appID string) (*AppState, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return &AppState{AppName: f.apps[appID].AppName, Status: f.status}, nil
+	return &AppState{AppName: f.apps[appID].AppName, Status: f.status, LastDeployTitle: f.lastDeploy[0], LastDeployStatus: f.lastDeploy[1]}, nil
 }
 
 func (f *fakeDokploy) CreateCompose(_ context.Context, spec ComposeSpec) (string, string, error) {

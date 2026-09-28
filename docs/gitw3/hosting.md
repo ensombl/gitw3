@@ -147,7 +147,7 @@ Bring-up order:
    `/srv/gitw3` and the database from `terraform output postgres`.
 3. Open Dokploy on the manager (VPN only, port 3000). Create an API key, a project `gitw3-apps` and note
    its environment ID.
-4. Run `GITW3_URL=… GITW3_ADMIN_TOKEN=… DOKPLOY_URL=… DOKPLOY_API_KEY=… contrib/hosting/bootstrap.sh`.
+4. Run `GITW3_URL=… GITW3_ADMIN_TOKEN=… DOKPLOY_URL=… contrib/hosting/bootstrap.sh`.
 5. Put the printed runner token and `docker swarm join-token -q worker` into `terraform.tfvars`, then
    apply again. This registers the build runner and creates the seed worker.
 6. `docker stack deploy -c contrib/hosting/manager/socket-proxy.stack.yml gitw3-status` on the manager.
@@ -167,13 +167,14 @@ ENABLED = true
 DOKPLOY_URL = http://10.10.0.3:3000
 DOKPLOY_API_KEY = …
 DOKPLOY_ENVIRONMENT_ID = …
-DOKPLOY_REGISTRY_ID = …
 SWARM_PROXY_URL = http://10.10.0.3:2375
 PLACEMENT_CONSTRAINTS = node.role==worker
 BUILDER_REPO = platform/builder
 BUILDER_WORKFLOW = build.yml
 REGISTRY_OWNER = deployments
 REGISTRY_HOST = git.example.com
+REGISTRY_PULL_USER = deployments-pull
+REGISTRY_PULL_TOKEN = …             ; read:package token printed by bootstrap.sh
 CALLBACK_SECRET = …                 ; same as the builder's CALLBACK_HMAC_KEY secret
 REQUIRE_W3DS = true
 KEEP_DIGESTS = 10
@@ -231,7 +232,7 @@ Until the scaler runs, add workers by hand with `infra/cloud-init/worker.yaml.tf
 - **Token rotation:**
   - The swarm worker join token is rotated automatically.
   - Rotate the registry bot tokens by re-running `bootstrap.sh`. It issues new tokens and updates the
-    builder secret; then update the Dokploy registry password with the new pull token.
+    builder secret; then put the new pull token in `app.ini` `REGISTRY_PULL_TOKEN`.
   - Rotate `CALLBACK_SECRET` by setting `CALLBACK_SECRET=<new>` for `bootstrap.sh` and updating
     `app.ini` together.
 - **Three managers:**
@@ -266,7 +267,7 @@ Until the scaler runs, add workers by hand with `infra/cloud-init/worker.yaml.tf
 | Credential | Held by | Scope |
 | --- | --- | --- |
 | Registry push token | `platform/builder` secret `REGISTRY_PUSH_TOKEN` | `deployments-push`, member of `deployments` only |
-| Registry pull token | Dokploy registry entry | `deployments-pull`, read only |
+| Registry pull token | `app.ini` `REGISTRY_PULL_TOKEN`, sent to Dokploy with each deploy | `deployments-pull`, read only |
 | Source access | Signed per-job URL (`SOURCE_URL_TTL`) | one commit archive |
 | Dokploy API key | `app.ini` `DOKPLOY_API_KEY` | Dokploy API |
 | Callback HMAC key | `app.ini` `CALLBACK_SECRET` + builder secret `CALLBACK_HMAC_KEY` | signs build callbacks |

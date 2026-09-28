@@ -2,13 +2,13 @@
 # One-time setup of GitW3 managed hosting on a running GitW3 instance.
 #
 # Creates the deployments and platform organizations, the registry bot users
-# and their scoped tokens, seeds platform/builder, configures its secrets and
-# (optionally) registers the registry in Dokploy. Prints the app.ini section
-# and the runner registration token for the build node.
+# and their scoped tokens, seeds platform/builder and configures its secrets.
+# Prints the app.ini section (including the pull token) and the runner
+# registration token for the build node.
 #
 # Usage:
 #   GITW3_URL=https://git.example.com GITW3_ADMIN_TOKEN=... \
-#   [DOKPLOY_URL=http://10.10.0.3:3000 DOKPLOY_API_KEY=...] \
+#   [DOKPLOY_URL=http://10.10.0.3:3000] \
 #   contrib/hosting/bootstrap.sh
 set -euo pipefail
 
@@ -103,15 +103,6 @@ api POST /repos/platform/builder/actions/variables/REGISTRY_USER '{"value": "dep
 	api PUT /repos/platform/builder/actions/variables/REGISTRY_USER '{"value": "deployments-push"}' >/dev/null
 runner_token="$(api GET /repos/platform/builder/actions/runners/registration-token | jq -r '.token')"
 
-registry_id=""
-if [ -n "${DOKPLOY_URL:-}" ] && [ -n "${DOKPLOY_API_KEY:-}" ]; then
-	echo "== Dokploy registry"
-	registry_id="$(curl -fsS -X POST -H "x-api-key: $DOKPLOY_API_KEY" -H 'Content-Type: application/json' \
-		--data "$(jq -cn --arg u "$registry_host" --arg p "$pull_token" \
-			'{registryName: "gitw3", username: "deployments-pull", password: $p, registryUrl: $u, registryType: "cloud", imagePrefix: ""}')" \
-		"${DOKPLOY_URL%/}/api/registry.create" | jq -r '.registryId // empty')"
-fi
-
 cat <<EOF
 
 == Done. Add this to app.ini and restart GitW3:
@@ -121,9 +112,10 @@ ENABLED = true
 DOKPLOY_URL = ${DOKPLOY_URL:-http://<manager-private-ip>:3000}
 DOKPLOY_API_KEY = <Dokploy API key>
 DOKPLOY_ENVIRONMENT_ID = <environment of the "gitw3-apps" Dokploy project>
-DOKPLOY_REGISTRY_ID = ${registry_id:-<registry id; create it in Dokploy with user deployments-pull and the token below>}
 SWARM_PROXY_URL = http://<manager-private-ip>:2375
 REGISTRY_HOST = $registry_host
+REGISTRY_PULL_USER = deployments-pull
+REGISTRY_PULL_TOKEN = $pull_token
 CALLBACK_SECRET = $callback_secret
 
 [hosting.domains]
@@ -134,8 +126,3 @@ TARGET_IP = <terraform output ingress_ip>
 == Build node: set builder_runner_token in terraform.tfvars to
 $runner_token
 EOF
-if [ -z "$registry_id" ]; then
-	echo
-	echo "== Registry pull token for Dokploy (user deployments-pull):"
-	echo "$pull_token"
-fi

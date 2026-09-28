@@ -25,6 +25,8 @@ const (
 	RolloutHealthy    Rollout = "healthy"
 	RolloutRolledBack Rollout = "rolled_back"
 	RolloutFailed     Rollout = "failed"
+	// RolloutRejected means Dokploy failed the deploy before Swarm got it.
+	RolloutRejected Rollout = "rejected"
 )
 
 // ServiceStatus is one Swarm service as seen through the socket proxy.

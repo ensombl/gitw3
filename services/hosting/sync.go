@@ -140,6 +140,10 @@ func syncRollout(ctx context.Context, deployment *hosting_model.Deployment) {
 	case RolloutFailed:
 		failDeploy(ctx, target, deployment, withDiagnosis(ctx, target, "The rollout failed; the previous release keeps serving traffic."))
 		return
+	case RolloutRejected:
+		log.Warn("Dokploy failed deployment %d of app %s; see its deploy log in Dokploy", deployment.ID, target.DokployAppID)
+		failDeploy(ctx, target, deployment, "The hosting cluster could not start this release. This is a problem on GitW3's side, not in your app; deploy again, and ask an admin if it keeps happening.")
+		return
 	}
 	if time.Since(deployment.UpdatedUnix.AsTime()) > setting.Hosting.HealthTimeout {
 		failDeploy(ctx, target, deployment, withDiagnosis(ctx, target, "The new release did not start in time. Check that the app listens on 0.0.0.0:$PORT."))
@@ -148,59 +152,62 @@ func syncRollout(ctx context.Context, deployment *hosting_model.Deployment) {
 
 func rolloutState(ctx context.Context, target *hosting_model.Target, deployment *hosting_model.Deployment) (Rollout, error) {
 	c := current()
-	if c.Swarm == nil {
-		return dokployRollout(ctx, target)
+	var state *AppState
+	var err error
+	if target.DokployComposeID != "" {
+		state, err = c.Dokploy.ComposeState(ctx, target.DokployComposeID)
+	} else {
+		state, err = c.Dokploy.AppState(ctx, target.DokployAppID)
 	}
-	repo, err := repo_model.GetRepositoryByID(ctx, target.RepoID)
 	if err != nil {
 		return RolloutUnknown, err
+	}
+	// Dokploy can fail before Swarm ever sees the release; the service then
+	// looks unchanged rather than failed.
+	if state.DeployFailed(deployment.ID) {
+		return RolloutRejected, nil
+	}
+	if c.Swarm == nil {
+		return dokployRollout(state), nil
 	}
 	var services []ServiceStatus
 	digests := map[string]string{}
 	if target.DokployComposeID != "" {
+		repo, err := repo_model.GetRepositoryByID(ctx, target.RepoID)
+		if err != nil {
+			return RolloutUnknown, err
+		}
 		services, err = c.Swarm.Services(ctx, "", dokployAppName(repo, target))
-		images, imagesErr := deployment.Images()
-		if imagesErr != nil {
-			return RolloutUnknown, imagesErr
+		if err != nil {
+			return RolloutUnknown, err
+		}
+		images, err := deployment.Images()
+		if err != nil {
+			return RolloutUnknown, err
 		}
 		for service, ref := range images {
 			_, digest, _ := strings.Cut(ref, "@")
 			digests[service] = digest
 		}
 	} else {
-		var state *AppState
-		if state, err = c.Dokploy.AppState(ctx, target.DokployAppID); err != nil {
+		if services, err = c.Swarm.Services(ctx, state.AppName, ""); err != nil {
 			return RolloutUnknown, err
 		}
-		services, err = c.Swarm.Services(ctx, state.AppName, "")
 		digests[""] = deployment.ImageDigest
-	}
-	if err != nil {
-		return RolloutUnknown, err
 	}
 	return EvaluateRollout(services, digests), nil
 }
 
 // dokployRollout is the fallback when no socket proxy is configured: it
 // trusts Dokploy's own deploy status.
-func dokployRollout(ctx context.Context, target *hosting_model.Target) (Rollout, error) {
-	var state *AppState
-	var err error
-	if target.DokployComposeID != "" {
-		state, err = current().Dokploy.ComposeState(ctx, target.DokployComposeID)
-	} else {
-		state, err = current().Dokploy.AppState(ctx, target.DokployAppID)
-	}
-	if err != nil {
-		return RolloutUnknown, err
-	}
+func dokployRollout(state *AppState) Rollout {
 	switch state.Status {
 	case "done":
-		return RolloutHealthy, nil
+		return RolloutHealthy
 	case "error":
-		return RolloutFailed, nil
+		return RolloutFailed
 	}
-	return RolloutInProgress, nil
+	return RolloutInProgress
 }
 
 // TargetView is a template-friendly summary of a target.
