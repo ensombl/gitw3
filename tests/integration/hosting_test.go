@@ -248,9 +248,10 @@ func TestSimpleMode(t *testing.T) {
 
 	releases := session.MakeRequest(t, NewRequest(t, "GET", repo.Link()+"/releases"), http.StatusOK)
 	tabs := NewHTMLParser(t, releases.Body).Find(".overflow-menu-items a")
-	require.Equal(t, 2, tabs.Length())
+	require.Equal(t, 3, tabs.Length())
 	assert.Equal(t, repo.Link()+"/deploy", tabs.Eq(0).AttrOr("href", ""))
-	assert.Equal(t, repo.Link()+"/releases", tabs.Eq(1).AttrOr("href", ""))
+	assert.Equal(t, repo.Link()+"/w3ds", tabs.Eq(1).AttrOr("href", ""))
+	assert.Equal(t, repo.Link()+"/releases", tabs.Eq(2).AttrOr("href", ""))
 
 	session.MakeRequest(t, NewRequest(t, "POST", "/user/simple-mode?enabled=false"), http.StatusOK)
 	session.MakeRequest(t, NewRequest(t, "GET", repo.Link()), http.StatusOK)
