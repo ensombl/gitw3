@@ -30,10 +30,16 @@ var Hosting = struct {
 	DokployAPIKey string
 	// DokployRegistryID is the Dokploy registry entry holding the pull token for the deployments org.
 	DokployRegistryID string
+	// DokployEnvironmentID is the Dokploy project environment that holds every managed app.
+	DokployEnvironmentID string
 	// DokployServerID pins applications to a Dokploy server; empty means the local manager.
 	DokployServerID string
 	// SwarmProxyURL is a restricted Docker socket proxy on the manager used for read-only service status.
 	SwarmProxyURL string
+
+	// RequireW3DS ties every managed deploy to a wallet-authorised W3DS
+	// deployment record of a PPA-certified release.
+	RequireW3DS bool
 
 	BuilderRepo     string
 	BuilderWorkflow string
@@ -63,6 +69,7 @@ var Hosting = struct {
 		AllowCustom        bool
 	}
 }{
+	RequireW3DS:     true,
 	BuilderRepo:     "platform/builder",
 	BuilderWorkflow: "build.yml",
 	RegistryOwner:   "deployments",
@@ -79,8 +86,10 @@ func loadHostingFrom(rootCfg ConfigProvider) {
 	Hosting.DokployURL = strings.TrimRight(section.Key("DOKPLOY_URL").MustString(""), "/")
 	Hosting.DokployAPIKey = section.Key("DOKPLOY_API_KEY").MustString("")
 	Hosting.DokployRegistryID = section.Key("DOKPLOY_REGISTRY_ID").MustString("")
+	Hosting.DokployEnvironmentID = section.Key("DOKPLOY_ENVIRONMENT_ID").MustString("")
 	Hosting.DokployServerID = section.Key("DOKPLOY_SERVER_ID").MustString("")
 	Hosting.SwarmProxyURL = strings.TrimRight(section.Key("SWARM_PROXY_URL").MustString(""), "/")
+	Hosting.RequireW3DS = section.Key("REQUIRE_W3DS").MustBool(true)
 	Hosting.BuilderRepo = section.Key("BUILDER_REPO").MustString("platform/builder")
 	Hosting.BuilderWorkflow = section.Key("BUILDER_WORKFLOW").MustString("build.yml")
 	Hosting.BuilderRef = section.Key("BUILDER_REF").MustString("")
@@ -108,8 +117,8 @@ func loadHostingFrom(rootCfg ConfigProvider) {
 	Hosting.Domains.AllowCustom = domains.Key("ALLOW_CUSTOM").MustBool(true)
 
 	if Hosting.Enabled {
-		if Hosting.DokployURL == "" || Hosting.DokployAPIKey == "" {
-			log.Fatal("[hosting] DOKPLOY_URL and DOKPLOY_API_KEY are required when hosting is enabled")
+		if Hosting.DokployURL == "" || Hosting.DokployAPIKey == "" || Hosting.DokployEnvironmentID == "" {
+			log.Fatal("[hosting] DOKPLOY_URL, DOKPLOY_API_KEY and DOKPLOY_ENVIRONMENT_ID are required when hosting is enabled")
 		}
 		if Hosting.CallbackSecret == "" {
 			log.Fatal("[hosting] CALLBACK_SECRET is required when hosting is enabled")

@@ -36,7 +36,7 @@ const (
 )
 
 var transitions = map[Status][]Status{
-	StatusQueued:                {StatusBuilding, StatusDeploying, StatusBuildFailed, StatusCancelled},
+	StatusQueued:                {StatusBuilding, StatusAwaitingSignature, StatusAwaitingCertification, StatusDeploying, StatusBuildFailed, StatusDeployFailed, StatusCancelled},
 	StatusBuilding:              {StatusBuilt, StatusBuildFailed, StatusCancelled},
 	StatusBuilt:                 {StatusAwaitingSignature, StatusAwaitingCertification, StatusDeploying, StatusDeployFailed, StatusCancelled},
 	StatusAwaitingSignature:     {StatusAwaitingCertification, StatusDeploying, StatusDeployFailed, StatusCancelled},

@@ -33,8 +33,10 @@ type Target struct {
 	// W3DSDeploymentID links the wallet-signed W3DS deployment record created
 	// on the first managed deploy; later versions are signed with the target's
 	// deployment key instead of the wallet.
-	W3DSDeploymentID string             `xorm:"VARCHAR(64)"`
-	DeploymentEName  string             `xorm:"VARCHAR(255)"`
+	W3DSDeploymentID string `xorm:"'w3ds_deployment_id' VARCHAR(64)"`
+	DeploymentEName  string `xorm:"'deployment_ename' VARCHAR(255)"`
+	// W3DSVersion is the software version currently published for the W3DS deployment.
+	W3DSVersion      string             `xorm:"'w3ds_version' VARCHAR(255)"`
 	PublicKey        string             `xorm:"TEXT"`
 	PrivateKeyEnc    []byte             `xorm:"BLOB"`
 	LiveDeploymentID int64              `xorm:"NOT NULL DEFAULT 0"`
@@ -157,4 +159,16 @@ func DeleteTargetsByRepo(ctx context.Context, repoID int64) error {
 		}
 	}
 	return nil
+}
+
+// GetTargetByW3DSDeployment finds the target a W3DS deployment record was prepared for.
+func GetTargetByW3DSDeployment(ctx context.Context, w3dsDeploymentID string) (*Target, error) {
+	target, exists, err := db.Get[Target](ctx, builder.Eq{"w3ds_deployment_id": w3dsDeploymentID})
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrTargetNotExist
+	}
+	return target, nil
 }
