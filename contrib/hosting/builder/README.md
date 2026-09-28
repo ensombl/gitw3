@@ -22,12 +22,12 @@ repository; app repositories can only trigger it through GitW3.
 
 ## Repository settings
 
-| Kind     | Name                  | Value |
-|----------|-----------------------|-------|
-| Variable | `REGISTRY_USER`       | `deployments-push` |
-| Variable | `BUILDKIT_HOST`       | `unix:///run/buildkit/buildkitd.sock` (default) |
-| Secret   | `REGISTRY_PUSH_TOKEN` | token of `deployments-push` with `write:package` |
-| Secret   | `CALLBACK_HMAC_KEY`   | same value as `[hosting] CALLBACK_SECRET` in app.ini |
+| Kind | Name | Value |
+| --- | --- | --- |
+| Variable | `REGISTRY_USER` | `deployments-push` |
+| Variable | `BUILDKIT_HOST` | `unix:///run/buildkit/buildkitd.sock` (default) |
+| Secret | `REGISTRY_PUSH_TOKEN` | token of `deployments-push` with `write:package` |
+| Secret | `CALLBACK_HMAC_KEY` | same value as `[hosting] CALLBACK_SECRET` in app.ini |
 
 The push token belongs to a bot that is only a member of the `deployments`
 organization, so it can write images there and nowhere else.

@@ -165,6 +165,16 @@ PlatformProfile synchronized from the default branch.
 See **[docs/gitw3/platform-onboarding.md](docs/gitw3/platform-onboarding.md)** for the manifest contract,
 service deployment, system webhook, credentials, status integration, and failure behavior.
 
+### Managed hosting and Simple Mode
+
+The Deploy tab can build a tagged release and run it on an autoscaling Docker Swarm on DigitalOcean
+(managed through Dokploy), with an automatic `*.apps` domain, custom domains, rollbacks and push-free
+auto-deploy of new releases. New users start in Simple Mode, which shows only their repositories, the
+Deploy tab and releases.
+
+See **[docs/gitw3/hosting.md](docs/gitw3/hosting.md)** for the deploy flow, `deploy.yml`, infrastructure
+bring-up, `app.ini` settings, the autoscaler, and the credential map.
+
 ## Licence
 
 Forgejo is GPL-3.0-or-later, and so is GitW3. See [LICENSE](LICENSE).
