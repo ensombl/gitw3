@@ -1,0 +1,26 @@
+# Read-only Docker API for GitW3's rollout checks ([hosting] SWARM_PROXY_URL).
+# Port 2375 is only reachable from the Forgejo host (cloud firewall rule).
+#   docker stack deploy -c socket-proxy.stack.yml gitw3-status
+version: "3.8"
+
+services:
+  proxy:
+    image: docker.io/tecnativa/docker-socket-proxy:0.3.0
+    environment:
+      SERVICES: "1"
+      TASKS: "1"
+      NODES: "0"
+      INFO: "0"
+      POST: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - target: 2375
+        published: 2375
+        mode: host
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: any

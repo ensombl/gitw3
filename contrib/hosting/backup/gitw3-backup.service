@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up GitW3 managed hosting data to Spaces
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/gitw3/backup.env
+ExecStart=/usr/local/bin/gitw3-backup.sh
+Nice=10
+IOSchedulingClass=idle

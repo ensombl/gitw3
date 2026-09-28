@@ -1,0 +1,28 @@
+#cloud-config
+# GitW3 host: Docker plus the data volume. GitW3 itself is installed as
+# described in docs/gitw3/production-deployment-agent-prompt.md, with its
+# data directory on /srv/gitw3 and the [hosting] section from
+# docs/gitw3/hosting.md.
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - rclone
+  - postgresql-client
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-gitw3.conf
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin prohibit-password
+
+mounts:
+  - ["/dev/disk/by-id/scsi-0DO_Volume_${volume_name}", "/srv/gitw3", "ext4", "defaults,nofail,discard", "0", "2"]
+
+runcmd:
+  - systemctl restart ssh || systemctl restart sshd
+  - mkdir -p /srv/gitw3
+  - mount -a
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
