@@ -205,7 +205,12 @@ func (f *fakeDNS) DeleteRecord(_ context.Context, id string) error {
 }
 
 type fakeSwarm struct {
-	services []ServiceStatus
+	services  []ServiceStatus
+	diagnosis string
+}
+
+func (f *fakeSwarm) Diagnose(context.Context, string, string) (string, error) {
+	return f.diagnosis, nil
 }
 
 func (f *fakeSwarm) Services(context.Context, string, string) ([]ServiceStatus, error) {

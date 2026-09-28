@@ -1,0 +1,20 @@
+{{/* . is a dict: ctxData, Deployment (a failed deployment) */}}
+<div class="managed-failure">
+	<h3>{{svg "octicon-alert"}} {{ctx.Locale.Tr (printf "platform.hosting.failure.%s" .Deployment.Status)}} · {{.Deployment.TagName}}</h3>
+	<p>{{ctx.Locale.Tr "platform.hosting.failure.help"}}</p>
+	<pre class="managed-failure-error">{{.Deployment.Error}}</pre>
+	<div class="deployment-ai-prompt-box">
+		<div class="deployment-ai-prompt-toolbar">
+			<span>{{svg "octicon-copilot" 16}} {{ctx.Locale.Tr "platform.hosting.failure.ai_label"}}</span>
+			<button type="button" class="ui small primary button" data-clipboard-target="#managed-fix-prompt-{{.Deployment.ID}}">{{svg "octicon-copy" 16}} {{ctx.Locale.Tr "platform.deploy.ai_copy"}}</button>
+		</div>
+		<pre id="managed-fix-prompt-{{.Deployment.ID}}" tabindex="0"><code>My app in {{.ctxData.Repository.FullName}} failed to deploy on GitW3 managed hosting ({{.Deployment.TagName}}, stage: {{.Deployment.Status}}).
+
+GitW3 builds the Dockerfile at the repository root and runs the container with the PORT environment variable set (the app must listen on 0.0.0.0:$PORT). This is the error GitW3 reported:
+
+{{.Deployment.Error}}
+
+Please find the cause in the repository, fix it, build and run the Docker image locally to confirm it works (docker build -t app . &amp;&amp; docker run -e PORT=3000 -p 3000:3000 app), commit the fix, and publish the next version with git tag vX.Y.Z &amp;&amp; git push origin HEAD --tags. Then tell me what was wrong and what you changed.</code></pre>
+	</div>
+	<button type="button" class="ui small basic button" data-managed-log="{{.ctxData.RepoLink}}/deploy/managed/{{.Deployment.ID}}/log">{{ctx.Locale.Tr "platform.hosting.view_log"}}</button>
+</div>

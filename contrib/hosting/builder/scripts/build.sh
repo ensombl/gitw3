@@ -41,6 +41,14 @@ fail() {
 	exit 1
 }
 
+# build_error keeps the part of a BuildKit log a person (or their AI) needs:
+# the last lines before the failure, without step prefixes and cache noise.
+build_error() {
+	sed -E 's/^#[0-9]+ ([0-9]+\.[0-9]+ )?//' "$1" |
+		grep -vE '^(DONE|CACHED|transferring|resolve|sha256:|exporting|writing|naming|pushing|\[internal\]|\s*$)' |
+		tail -n 40 | cut -c1-300
+}
+
 # inside_source resolves a spec path and refuses anything outside the checkout.
 inside_source() {
 	local resolved
@@ -87,7 +95,10 @@ while read -r image; do
 		--cache-from "type=registry,ref=$ref:buildcache" \
 		--cache-to "type=registry,ref=$ref:buildcache,mode=max,ignore-error=true" \
 		--metadata-file "$workdir/meta.json" \
-		--push "$context" || fail "docker build failed for ${service:-the image}"
+		--progress=plain \
+		--push "$context" 2>&1 | tee "$workdir/build.log" ||
+		fail "docker build failed for ${service:-the image}:
+$(build_error "$workdir/build.log")"
 	digest="$(jq -r '."containerimage.digest"' "$workdir/meta.json")"
 	[[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]] || fail "BuildKit reported no image digest"
 	digests="$(jq -c --arg s "$service" --arg d "$digest" '. + {($s): $d}' <<<"$digests")"

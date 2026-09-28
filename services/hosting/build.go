@@ -166,7 +166,7 @@ func HandleBuildCallback(ctx context.Context, body []byte, signature string) err
 	if callback.Status != "success" {
 		job.Status = hosting_model.BuildFailed
 		_ = hosting_model.UpdateBuildJobCols(ctx, job, "status", "runner", "finished_unix", "scan_result_json")
-		failBuild(ctx, target, deployment, "Build failed: "+truncate(callback.Error, 2000))
+		failBuild(ctx, target, deployment, "Build failed: "+truncate(callback.Error, 8000))
 		return nil
 	}
 	if callback.Scan.Blocking(setting.Hosting.Scan.Severity) {
@@ -177,7 +177,7 @@ func HandleBuildCallback(ctx context.Context, body []byte, signature string) err
 			failBuild(ctx, target, deployment, "Blocked: "+summary)
 			return nil
 		}
-		deployment.Warning = summary
+		deployment.Warning = strings.TrimSpace(deployment.Warning + "\n" + summary)
 	}
 	images, err := verifiedImages(ctx, target, deployment, callback.Digests)
 	if err != nil {

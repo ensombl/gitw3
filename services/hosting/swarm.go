@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
@@ -39,6 +40,9 @@ type ServiceStatus struct {
 // socket proxy. It is read-only: all writes go through Dokploy.
 type SwarmClient interface {
 	Services(ctx context.Context, name, stackNamespace string) ([]ServiceStatus, error)
+	// Diagnose explains why a rollout failed: the error of the latest failed
+	// task and the last log lines of the service, for the person deploying.
+	Diagnose(ctx context.Context, name, stackNamespace string) (string, error)
 }
 
 // EvaluateRollout decides whether a deploy of the given image digests is done.
@@ -188,4 +192,111 @@ func (c *swarmProxyClient) Services(ctx context.Context, name, stackNamespace st
 		result = append(result, status)
 	}
 	return result, nil
+}
+
+type dockerTaskDetail struct {
+	ServiceID string    `json:"ServiceID"`
+	CreatedAt time.Time `json:"CreatedAt"`
+	Status    struct {
+		State           string `json:"State"`
+		Err             string `json:"Err"`
+		ContainerStatus struct {
+			ExitCode int `json:"ExitCode"`
+		} `json:"ContainerStatus"`
+	} `json:"Status"`
+}
+
+const diagnoseLogLines = 30
+
+func (c *swarmProxyClient) Diagnose(ctx context.Context, name, stackNamespace string) (string, error) {
+	filters := map[string][]string{}
+	if stackNamespace != "" {
+		filters["label"] = []string{"com.docker.stack.namespace=" + stackNamespace}
+	} else {
+		filters["name"] = []string{name}
+	}
+	encoded, _ := json.Marshal(filters)
+	var services []dockerService
+	if err := c.get(ctx, "/services", url.Values{"filters": {string(encoded)}}, &services); err != nil {
+		return "", err
+	}
+	var out strings.Builder
+	for _, service := range services {
+		if stackNamespace == "" && service.Spec.Name != name {
+			continue
+		}
+		taskFilters, _ := json.Marshal(map[string][]string{"service": {service.ID}})
+		var tasks []dockerTaskDetail
+		if err := c.get(ctx, "/tasks", url.Values{"filters": {string(taskFilters)}}, &tasks); err != nil {
+			return "", err
+		}
+		var latest *dockerTaskDetail
+		for i := range tasks {
+			task := &tasks[i]
+			failed := task.Status.Err != "" || task.Status.ContainerStatus.ExitCode != 0 ||
+				task.Status.State == "failed" || task.Status.State == "rejected"
+			if failed && (latest == nil || task.CreatedAt.After(latest.CreatedAt)) {
+				latest = task
+			}
+		}
+		if latest == nil {
+			continue
+		}
+		fmt.Fprintf(&out, "%s: %s", service.Spec.Name, latest.Status.State)
+		if latest.Status.Err != "" {
+			fmt.Fprintf(&out, " (%s)", latest.Status.Err)
+		}
+		if code := latest.Status.ContainerStatus.ExitCode; code != 0 {
+			fmt.Fprintf(&out, ", exit code %d", code)
+		}
+		out.WriteString("\n")
+		if logs, err := c.serviceLogs(ctx, service.ID); err == nil && logs != "" {
+			fmt.Fprintf(&out, "Last log lines:\n%s\n", logs)
+		}
+	}
+	return strings.TrimSpace(out.String()), nil
+}
+
+// serviceLogs returns the last log lines of a service, demultiplexing
+// Docker's stdout/stderr stream framing.
+func (c *swarmProxyClient) serviceLogs(ctx context.Context, serviceID string) (string, error) {
+	query := url.Values{"stdout": {"1"}, "stderr": {"1"}, "tail": {fmt.Sprint(diagnoseLogLines)}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/services/"+url.PathEscape(serviceID)+"/logs?"+query.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	response, err := c.http.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("docker logs: HTTP %d", response.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 256<<10))
+	if err != nil {
+		return "", err
+	}
+	return demuxDockerLogs(raw), nil
+}
+
+func demuxDockerLogs(raw []byte) string {
+	var out strings.Builder
+	for len(raw) >= 8 && (raw[0] == 1 || raw[0] == 2) && raw[1] == 0 && raw[2] == 0 && raw[3] == 0 {
+		size := int(raw[4])<<24 | int(raw[5])<<16 | int(raw[6])<<8 | int(raw[7])
+		raw = raw[8:]
+		if size > len(raw) {
+			size = len(raw)
+		}
+		out.Write(raw[:size])
+		raw = raw[size:]
+	}
+	out.Write(raw) // TTY streams are not framed
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	for i, line := range lines {
+		if len(line) > 300 {
+			lines[i] = line[:300]
+		}
+	}
+	return strings.Join(lines, "\n")
 }

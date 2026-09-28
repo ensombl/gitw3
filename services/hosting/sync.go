@@ -131,18 +131,18 @@ func syncRollout(ctx context.Context, deployment *hosting_model.Deployment) {
 		markLive(ctx, target, deployment)
 		return
 	case RolloutRolledBack:
-		deployment.Error = "The new release failed its health checks; Swarm rolled back to the previous release."
+		deployment.Error = withDiagnosis(ctx, target, "The new release crashed or failed its health checks, so the previous release keeps running.")
 		if ok, _ := hosting_model.Transition(ctx, deployment, hosting_model.StatusRolledBack, "error"); ok {
 			hosting_model.Audit(ctx, deployment.ActorID, deployment.RepoID, target.ID, deployment.ID, hosting_model.AuditDeployFailed, map[string]any{"error": deployment.Error})
 			setCommitStatus(ctx, target, deployment, "failure", "Rolled back: health checks failed", "")
 		}
 		return
 	case RolloutFailed:
-		failDeploy(ctx, target, deployment, "The rollout failed; the previous release keeps serving traffic.")
+		failDeploy(ctx, target, deployment, withDiagnosis(ctx, target, "The rollout failed; the previous release keeps serving traffic."))
 		return
 	}
 	if time.Since(deployment.UpdatedUnix.AsTime()) > setting.Hosting.HealthTimeout {
-		failDeploy(ctx, target, deployment, "The new release did not become healthy in time.")
+		failDeploy(ctx, target, deployment, withDiagnosis(ctx, target, "The new release did not start in time. Check that the app listens on 0.0.0.0:$PORT."))
 	}
 }
 
@@ -234,4 +234,31 @@ func ViewTargets(ctx context.Context, repoID int64) ([]*TargetView, error) {
 		views = append(views, view)
 	}
 	return views, nil
+}
+
+// withDiagnosis appends what the swarm knows about a failed rollout (the
+// task error and the app's last log lines) so the person deploying, or
+// their AI, can see why it failed.
+func withDiagnosis(ctx context.Context, target *hosting_model.Target, message string) string {
+	c := current()
+	if c.Swarm == nil {
+		return message
+	}
+	repo, err := repo_model.GetRepositoryByID(ctx, target.RepoID)
+	if err != nil {
+		return message
+	}
+	var diagnosis string
+	if target.DokployComposeID != "" {
+		diagnosis, err = c.Swarm.Diagnose(ctx, "", dokployAppName(repo, target))
+	} else if state, stateErr := c.Dokploy.AppState(ctx, target.DokployAppID); stateErr == nil {
+		diagnosis, err = c.Swarm.Diagnose(ctx, state.AppName, "")
+	}
+	if err != nil {
+		log.Warn("Diagnose rollout of target %d: %v", target.ID, err)
+	}
+	if diagnosis == "" {
+		return message
+	}
+	return message + "\n\n" + diagnosis
 }
