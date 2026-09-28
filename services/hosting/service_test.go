@@ -6,12 +6,15 @@ package hosting
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"forgejo.org/models/db"
 	hosting_model "forgejo.org/models/hosting"
 	repo_model "forgejo.org/models/repo"
+	system_model "forgejo.org/models/system"
 	"forgejo.org/models/unittest"
 	user_model "forgejo.org/models/user"
 	hosting_module "forgejo.org/modules/hosting"
@@ -321,4 +324,60 @@ func TestEvaluateRollout(t *testing.T) {
 
 func TestFormatEnv(t *testing.T) {
 	assert.Equal(t, "A=\"1\"\nB=\"say \\\"hi\\\"\\n\\$HOME\"\n", FormatEnv(map[string]string{"B": "say \"hi\"\n$HOME", "A": "1"}))
+}
+
+func TestKeptDigests(t *testing.T) {
+	setupFakes(t)
+	defer test.MockVariableValue(&setting.Hosting.KeepDigests, 2)()
+	ctx := db.DefaultContext
+	_, user, target := newTarget(t)
+	digest := func(n int) string { return "sha256:" + strings.Repeat(string(rune('a'+n)), 64) }
+	create := func(n int, status hosting_model.Status) *hosting_model.Deployment {
+		deployment := &hosting_model.Deployment{
+			TargetID: target.ID, RepoID: target.RepoID, ActorID: user.ID, TagName: "v1.0." + string(rune('0'+n)),
+			CommitSHA: "c", ImageDigest: digest(n), Trigger: hosting_model.TriggerManual, Status: status,
+		}
+		require.NoError(t, hosting_model.CreateDeployment(ctx, deployment))
+		return deployment
+	}
+	create(0, hosting_model.StatusSuperseded)
+	create(1, hosting_model.StatusSuperseded)
+	create(2, hosting_model.StatusBuildFailed)
+	create(3, hosting_model.StatusSuperseded)
+	create(4, hosting_model.StatusSuperseded)
+	live := create(5, hosting_model.StatusLive)
+	create(6, hosting_model.StatusBuilding)
+	target.LiveDeploymentID = live.ID
+	require.NoError(t, hosting_model.UpdateTargetCols(ctx, target, "live_deployment_id"))
+
+	keep, err := keptDigests(ctx)
+	require.NoError(t, err)
+	for n, want := range []bool{false, false, false, true, true, true, true} {
+		assert.Equal(t, want, keep[digest(n)], "digest %d", n)
+	}
+}
+
+func TestParseMetrics(t *testing.T) {
+	metrics := parseMetrics(strings.NewReader("# HELP x y\n# TYPE x gauge\ngitw3_scaler_at_max 1\ngitw3_scaler_workers 5\ngitw3_scaler_nodes{state=\"ready\"} 5\n"))
+	assert.Equal(t, map[string]float64{"gitw3_scaler_at_max": 1, "gitw3_scaler_workers": 5}, metrics)
+}
+
+func TestCheckAlertsReportsFailedDeploys(t *testing.T) {
+	setupFakes(t)
+	ctx := db.DefaultContext
+	manager := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer manager.Close()
+	defer test.MockVariableValue(&setting.Hosting.DokployURL, manager.URL)()
+	_, user, target := newTarget(t)
+	deployment, _ := queueDeployment(t, target, user, "v9.9.9")
+	failBuild(ctx, target, deployment, "compile error")
+
+	require.NoError(t, CheckAlerts(ctx))
+	notices, err := system_model.Notices(ctx, 1, 50)
+	require.NoError(t, err)
+	found := false
+	for _, notice := range notices {
+		found = found || strings.Contains(notice.Description, "v9.9.9")
+	}
+	assert.True(t, found, "failed deploy raises an admin notice")
 }

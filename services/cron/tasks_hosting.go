@@ -29,4 +29,18 @@ func initHostingTasks() {
 	}, func(ctx context.Context, _ *user_model.User, _ Config) error {
 		return hosting_service.RefillDomainPool(ctx)
 	})
+	RegisterTaskFatal("hosting_alerts", &BaseConfig{
+		Enabled:    true,
+		RunAtStart: false,
+		Schedule:   "@every 5m",
+	}, func(ctx context.Context, _ *user_model.User, _ Config) error {
+		return hosting_service.CheckAlerts(ctx)
+	})
+	RegisterTaskFatal("hosting_registry_gc", &BaseConfig{
+		Enabled:    true,
+		RunAtStart: false,
+		Schedule:   "@weekly",
+	}, func(ctx context.Context, _ *user_model.User, _ Config) error {
+		return hosting_service.CollectRegistryGarbage(ctx)
+	})
 }

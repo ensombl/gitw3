@@ -172,3 +172,9 @@ func GetTargetByW3DSDeployment(ctx context.Context, w3dsDeploymentID string) (*T
 	}
 	return target, nil
 }
+
+// ListAllTargets returns every target on the instance.
+func ListAllTargets(ctx context.Context) ([]*Target, error) {
+	targets := make([]*Target, 0, 16)
+	return targets, db.GetEngine(ctx).Asc("id").Find(&targets)
+}

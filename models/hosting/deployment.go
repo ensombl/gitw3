@@ -218,3 +218,25 @@ func UpdateDeploymentCols(ctx context.Context, deployment *Deployment, cols ...s
 	_, err := db.GetEngine(ctx).ID(deployment.ID).Cols(cols...).Update(deployment)
 	return err
 }
+
+// CountDeploymentsByStatus returns how many deployments are in each status.
+func CountDeploymentsByStatus(ctx context.Context) (map[Status]int64, error) {
+	rows := make([]struct {
+		Status Status
+		Count  int64
+	}, 0, 12)
+	err := db.GetEngine(ctx).Table("hosting_deployment").Select("status, COUNT(*) AS count").GroupBy("status").Find(&rows)
+	counts := make(map[Status]int64, len(rows))
+	for _, row := range rows {
+		counts[row.Status] = row.Count
+	}
+	return counts, err
+}
+
+// ListDeploymentsFailedSince returns deployments that failed after a time.
+func ListDeploymentsFailedSince(ctx context.Context, since timeutil.TimeStamp) ([]*Deployment, error) {
+	deployments := make([]*Deployment, 0, 4)
+	return deployments, db.GetEngine(ctx).
+		In("status", []Status{StatusBuildFailed, StatusDeployFailed, StatusRolledBack}).
+		And("updated_unix > ?", since).Find(&deployments)
+}

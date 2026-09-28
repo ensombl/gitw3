@@ -53,7 +53,11 @@ var Hosting = struct {
 	BuildQueueAlert time.Duration
 	HealthTimeout   time.Duration
 	KeepDigests     int
-	HTTPTimeout     time.Duration
+	// ScalerMetricsURL is the scaler's /metrics endpoint, used for "node count at max" alerts.
+	ScalerMetricsURL string
+	// RegistryAlertBytes raises an alert when the deployments registry grows past it (0 disables).
+	RegistryAlertBytes int64
+	HTTPTimeout        time.Duration
 
 	Scan struct {
 		Policy   string
@@ -105,6 +109,8 @@ func loadHostingFrom(rootCfg ConfigProvider) {
 	Hosting.SourceURLTTL = section.Key("SOURCE_URL_TTL").MustDuration(30 * time.Minute)
 	Hosting.BuildQueueAlert = section.Key("BUILD_QUEUE_ALERT").MustDuration(15 * time.Minute)
 	Hosting.HealthTimeout = section.Key("HEALTH_TIMEOUT").MustDuration(10 * time.Minute)
+	Hosting.ScalerMetricsURL = section.Key("SCALER_METRICS_URL").MustString("")
+	Hosting.RegistryAlertBytes = section.Key("REGISTRY_ALERT_BYTES").MustInt64(0)
 	Hosting.KeepDigests = section.Key("KEEP_DIGESTS").MustInt(10)
 	Hosting.HTTPTimeout = section.Key("HTTP_TIMEOUT").MustDuration(15 * time.Second)
 

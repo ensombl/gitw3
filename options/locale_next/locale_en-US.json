@@ -458,6 +458,8 @@
 	"admin.dashboard.stop_endless_tasks": "Stop endless actions tasks",
 	"admin.dashboard.hosting_sync_deployments": "Advance managed hosting deployments",
 	"admin.dashboard.hosting_domain_pool": "Refill the managed hosting domain pool",
+	"admin.dashboard.hosting_alerts": "Check managed hosting alerts",
+	"admin.dashboard.hosting_registry_gc": "Remove unused managed hosting images",
 	"admin.dashboard.cancel_abandoned_jobs": "Cancel abandoned actions jobs",
 	"admin.dashboard.start_schedule_tasks": "Start schedule actions tasks",
 	"admin.dashboard.rebuild_issue_indexer": "Rebuild issue indexer",

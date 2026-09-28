@@ -55,6 +55,7 @@ import (
 	auth_method "forgejo.org/services/auth/method"
 	"forgejo.org/services/context"
 	"forgejo.org/services/forms"
+	hosting_service "forgejo.org/services/hosting"
 	"forgejo.org/services/lfs"
 
 	_ "forgejo.org/modules/session" // to registers all internal adapters
@@ -380,6 +381,9 @@ func Routes() *web.Route {
 
 	if setting.Metrics.Enabled {
 		prometheus.MustRegister(metrics.NewCollector())
+		if setting.Hosting.Enabled {
+			prometheus.MustRegister(hosting_service.NewCollector())
+		}
 		routes.Get("/metrics", gzipMid, Metrics)
 	}
 
