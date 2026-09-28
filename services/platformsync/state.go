@@ -84,23 +84,27 @@ const (
 )
 
 type DeploymentJob struct {
-	ID                        string           `json:"id"`
-	RepositoryID              int64            `json:"repositoryId"`
-	PlatformEName             string           `json:"platformEName"`
-	DeploymentEName           string           `json:"deploymentEName"`
-	VersionEName              string           `json:"versionEName"`
-	DeploymentName            string           `json:"deploymentName"`
-	Environment               string           `json:"environment"`
-	DeployerEName             string           `json:"deployerEName"`
-	Version                   string           `json:"version"`
-	ReleaseTag                string           `json:"releaseTag"`
-	CommitSHA                 string           `json:"commitSha"`
-	PublicKey                 string           `json:"publicKey"`
-	RegistryEntropy           string           `json:"registryEntropy"`
-	Namespace                 string           `json:"namespace"`
-	BundlePayload             string           `json:"bundlePayload"`
-	WalletSignature           string           `json:"walletSignature,omitempty"`
-	KeyBindingCertificate     string           `json:"keyBindingCertificate,omitempty"`
+	ID                    string `json:"id"`
+	RepositoryID          int64  `json:"repositoryId"`
+	PlatformEName         string `json:"platformEName"`
+	DeploymentEName       string `json:"deploymentEName"`
+	VersionEName          string `json:"versionEName"`
+	DeploymentName        string `json:"deploymentName"`
+	Environment           string `json:"environment"`
+	DeployerEName         string `json:"deployerEName"`
+	Version               string `json:"version"`
+	ReleaseTag            string `json:"releaseTag"`
+	CommitSHA             string `json:"commitSha"`
+	PublicKey             string `json:"publicKey"`
+	RegistryEntropy       string `json:"registryEntropy"`
+	Namespace             string `json:"namespace"`
+	BundlePayload         string `json:"bundlePayload"`
+	WalletSignature       string `json:"walletSignature,omitempty"`
+	KeyBindingCertificate string `json:"keyBindingCertificate,omitempty"`
+	// VersionSignature is the deployment key signature over VersionPayload,
+	// set when a later release is published without a new wallet signature.
+	VersionSignature          string           `json:"versionSignature,omitempty"`
+	VersionPayload            string           `json:"versionPayload,omitempty"`
 	ActivatesPlatform         bool             `json:"activatesPlatform,omitempty"`
 	DeploymentKeyDocumentID   string           `json:"deploymentKeyDocumentId,omitempty"`
 	SoftwareVersionDocumentID string           `json:"softwareVersionDocumentId,omitempty"`

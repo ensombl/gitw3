@@ -578,6 +578,7 @@ func (c *w3dsClient) publishDeployment(ctx context.Context, job *DeploymentJob) 
 }
 
 func (c *w3dsClient) ensureDeploymentBinding(ctx context.Context, endpoint string, headers map[string]string, document w3ds.DeploymentBindingDocument, job *DeploymentJob) (string, error) {
+	owner := deploymentBindingSigner(document, job)
 	graphql := map[string]any{
 		"query": `query ExistingDeploymentBindings($type: BindingDocumentType!) {
 	bindingDocuments(type: $type, first: 100) { edges { node { id parsed } } }
@@ -614,7 +615,7 @@ func (c *w3dsClient) ensureDeploymentBinding(ctx context.Context, endpoint strin
 			continue
 		}
 		for _, signature := range edge.Node.Parsed.Signatures {
-			if signature.Signature == job.WalletSignature && signature.SignedPayload == job.BundlePayload {
+			if signature.Signature == owner.Signature && signature.SignedPayload == owner.Payload {
 				return edge.Node.ID, nil
 			}
 		}
@@ -626,8 +627,8 @@ func (c *w3dsClient) ensureDeploymentBinding(ctx context.Context, endpoint strin
 		"variables": map[string]any{"input": map[string]any{
 			"subject": document.Subject, "type": document.Type, "data": document.Data,
 			"ownerSignature": map[string]any{
-				"signer": job.DeployerEName, "signature": job.WalletSignature,
-				"timestamp": job.UpdatedAt.Format(time.RFC3339), "scope": "bundle", "signedPayload": job.BundlePayload,
+				"signer": owner.Signer, "signature": owner.Signature,
+				"timestamp": job.UpdatedAt.Format(time.RFC3339), "scope": owner.Scope, "signedPayload": owner.Payload,
 			},
 		}},
 	}
@@ -1020,4 +1021,22 @@ func (c *w3dsClient) postJSON(ctx context.Context, endpoint string, input, outpu
 func responseError(operation string, response *http.Response) error {
 	data, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
 	return fmt.Errorf("%s returned %d: %s", operation, response.StatusCode, safeResponseBody(data))
+}
+
+type bindingSigner struct {
+	Signer    string
+	Signature string
+	Scope     string
+	Payload   string
+}
+
+// deploymentBindingSigner picks who signs a deployment binding. The first
+// version is covered by the deployer's wallet signature over the whole
+// bundle; later versions of a managed deployment are signed by the
+// deployment's own key, which the wallet authorised in that first bundle.
+func deploymentBindingSigner(document w3ds.DeploymentBindingDocument, job *DeploymentJob) bindingSigner {
+	if document.Type == "software_version" && job.VersionSignature != "" {
+		return bindingSigner{Signer: job.DeploymentEName, Signature: job.VersionSignature, Scope: "deployment_version", Payload: job.VersionPayload}
+	}
+	return bindingSigner{Signer: job.DeployerEName, Signature: job.WalletSignature, Scope: "bundle", Payload: job.BundlePayload}
 }

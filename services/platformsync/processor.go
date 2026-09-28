@@ -49,6 +49,15 @@ type FinalizeDeploymentRequest struct {
 	KeyBindingCertificate string `json:"keyBindingCertificate"`
 }
 
+type DeploymentVersionRequest struct {
+	Version    string `json:"version"`
+	ReleaseTag string `json:"releaseTag"`
+	CommitSHA  string `json:"commitSha"`
+	// Signature is the deployment key's signature over
+	// w3ds.DeploymentVersionPayload for this version.
+	Signature string `json:"signature"`
+}
+
 type BootstrapPlatformRequest struct {
 	RepositoryID  int64  `json:"repositoryId"`
 	FullName      string `json:"fullName"`
@@ -218,6 +227,44 @@ func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeployme
 		return nil, err
 	}
 	return job, nil
+}
+
+// PublishDeploymentVersion moves a wallet-authorised deployment to a new
+// certified release. The deployment key the wallet bound in the first
+// bundle signs the version change, so no new wallet interaction is needed.
+func (p *Processor) PublishDeploymentVersion(ctx context.Context, input DeploymentVersionRequest, job *DeploymentJob) error {
+	if job == nil || job.WalletSignature == "" {
+		return errors.New("deployment has not been authorised by its deployer yet")
+	}
+	input.CommitSHA = strings.ToLower(strings.TrimSpace(input.CommitSHA))
+	if input.Version == "" || input.ReleaseTag == "" || input.CommitSHA == "" || input.Signature == "" {
+		return errors.New("complete version details are required")
+	}
+	payload, err := w3ds.DeploymentVersionPayload(job.DeploymentEName, input.Version, input.ReleaseTag, input.CommitSHA)
+	if err != nil {
+		return err
+	}
+	if !w3ds.VerifyDeploymentKeySignature(job.PublicKey, payload, input.Signature) {
+		return errors.New("version signature does not match the deployment key")
+	}
+	if job.Version == input.Version && job.ReleaseTag == input.ReleaseTag && job.CommitSHA == input.CommitSHA {
+		return nil
+	}
+	if err := p.requireDeploymentCertification(ctx, job.RepositoryID, job.PlatformEName, input.Version); err != nil {
+		return err
+	}
+	versionEName, err := w3ds.SoftwareVersionEName(job.PlatformEName, input.Version)
+	if err != nil {
+		return err
+	}
+	job.Version, job.ReleaseTag, job.CommitSHA, job.VersionEName = input.Version, input.ReleaseTag, input.CommitSHA, versionEName
+	job.VersionSignature, job.VersionPayload = input.Signature, payload
+	job.SoftwareVersionDocumentID = ""
+	job.Status = DeploymentPublishing
+	job.Attempts = 0
+	job.LastError = ""
+	job.NextAttempt = time.Now().UTC()
+	return p.store.SaveDeployment(job)
 }
 
 func (p *Processor) FinalizeDeployment(input FinalizeDeploymentRequest, job *DeploymentJob) error {

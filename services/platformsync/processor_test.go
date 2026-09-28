@@ -845,3 +845,57 @@ func TestProcessorPublishesSubmissionProof(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, history, 1)
 }
+
+func TestProcessorPublishesDeploymentVersionWithDeploymentKey(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, fake.server.Client())
+	publicKey, keyFile, err := w3ds.GenerateDeploymentKey()
+	require.NoError(t, err)
+	platformEName := "@0699e093-2dd9-59cc-a416-7dc69623ebfd"
+	fake.mu.Lock()
+	fake.manifest.EName = &platformEName
+	fake.mu.Unlock()
+	job := &DeploymentJob{
+		ID: "managed-1", RepositoryID: 42, PlatformEName: platformEName, DeploymentEName: "@deployment",
+		DeployerEName: "@deployer", Version: "1.2.3", ReleaseTag: "v1.2.3", CommitSHA: strings.Repeat("a", 40),
+		PublicKey: publicKey, WalletSignature: "wallet-signature", Status: DeploymentCompleted,
+	}
+	require.NoError(t, store.SaveDeployment(job))
+	require.NoError(t, store.Save(&Job{RepositoryID: 42, EName: platformEName, Status: StatusPublished}))
+
+	commit := strings.Repeat("b", 40)
+	payload, err := w3ds.DeploymentVersionPayload(job.DeploymentEName, "1.3.0", "v1.3.0", commit)
+	require.NoError(t, err)
+	signature, err := w3ds.SignWithDeploymentKey(keyFile, payload)
+	require.NoError(t, err)
+	input := DeploymentVersionRequest{Version: "1.3.0", ReleaseTag: "v1.3.0", CommitSHA: commit, Signature: signature}
+
+	forged := input
+	forged.Version = "1.4.0"
+	require.Error(t, processor.PublishDeploymentVersion(context.Background(), forged, job), "signature covers the version")
+
+	err = processor.PublishDeploymentVersion(context.Background(), input, job)
+	require.ErrorIs(t, err, ErrDeploymentCertificationRequired)
+
+	fake.mu.Lock()
+	fake.accreditations = []w3ds.AccreditationDecision{
+		{PlatformEName: platformEName, PlatformVersion: "1.3.0", Decision: "granted", CreatedAt: "2026-08-30T00:00:00Z"},
+	}
+	fake.mu.Unlock()
+	require.NoError(t, processor.PublishDeploymentVersion(context.Background(), input, job))
+	stored, err := store.GetDeployment(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, DeploymentPublishing, stored.Status)
+	assert.Equal(t, "1.3.0", stored.Version)
+	assert.Equal(t, payload, stored.VersionPayload)
+	expectedVersion, err := w3ds.SoftwareVersionEName(platformEName, "1.3.0")
+	require.NoError(t, err)
+	assert.Equal(t, expectedVersion, stored.VersionEName)
+
+	signer := deploymentBindingSigner(w3ds.DeploymentBindingDocument{Type: "software_version"}, stored)
+	assert.Equal(t, "@deployment", signer.Signer)
+	assert.Equal(t, signature, signer.Signature)
+	signer = deploymentBindingSigner(w3ds.DeploymentBindingDocument{Type: "deployment_key"}, stored)
+	assert.Equal(t, "@deployer", signer.Signer)
+}
