@@ -16,6 +16,7 @@ import (
 	quota_model "forgejo.org/models/quota"
 	repo_model "forgejo.org/models/repo"
 	"forgejo.org/models/unit"
+	user_model "forgejo.org/models/user"
 	"forgejo.org/modules/avatar"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/metrics"
@@ -54,6 +55,7 @@ import (
 	auth_method "forgejo.org/services/auth/method"
 	"forgejo.org/services/context"
 	"forgejo.org/services/forms"
+	hosting_service "forgejo.org/services/hosting"
 	"forgejo.org/services/lfs"
 
 	_ "forgejo.org/modules/session" // to registers all internal adapters
@@ -232,6 +234,8 @@ func webAuth(authMethod auth_service.Method) func(*context.Context) {
 		if ctx.Doer == nil {
 			// ensure the session uid is deleted
 			_ = ctx.Session.Delete("uid")
+		} else {
+			ctx.Data["SimpleMode"] = user_model.IsSimpleMode(ctx, ctx.Doer)
 		}
 	}
 }
@@ -377,6 +381,9 @@ func Routes() *web.Route {
 
 	if setting.Metrics.Enabled {
 		prometheus.MustRegister(metrics.NewCollector())
+		if setting.Hosting.Enabled {
+			prometheus.MustRegister(hosting_service.NewCollector())
+		}
 		routes.Get("/metrics", gzipMid, Metrics)
 	}
 
@@ -712,6 +719,8 @@ func registerRoutes(m *web.Route) {
 	m.Methods("POST, OPTIONS", "/w3ds/ppa/callback", ignoreCSRF, repo.W3DSPPACallback)
 	m.Methods("POST, OPTIONS", "/w3ds/migrations/callback", ignoreCSRF, repo.PlatformMigrationCallback)
 	m.Methods("POST, OPTIONS", "/w3ds/deploy/callback", ignoreCSRF, repo.DeploymentCallback)
+	m.Post("/-/hosting/callback", ignoreCSRF, repo.HostingBuildCallback)
+	m.Get("/-/hosting/source/{job}", repo.HostingBuildSource)
 
 	m.Group("/login/oauth", func() {
 		m.Group("", func() {
@@ -872,6 +881,7 @@ func registerRoutes(m *web.Route) {
 		m.Post("/logout", auth.SignOut)
 		m.Get("/task/{task}", reqSignIn, user.TaskStatus)
 		m.Get("/stopwatches", reqSignIn, user.GetStopwatches)
+		m.Post("/simple-mode", reqSignIn, user.ToggleSimpleMode)
 		m.Get("/search_candidates", ignExploreSignIn, user.SearchCandidates)
 		m.Group("/oauth2", func() {
 			m.Get("/{provider}", auth.SignInOAuth)
@@ -1708,6 +1718,24 @@ func registerRoutes(m *web.Route) {
 			m.Get("", reqSignIn, repo.Deploy)
 			m.Post("", context.RepoMustNotBeArchived(), reqSignIn, web.Bind(forms.CreateDeploymentForm{}), repo.CreateDeployment)
 			m.Get("/{deployment}/status", reqSignIn, repo.DeploymentStatus)
+			m.Group("/managed", func() {
+				m.Post("", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingDeploy)
+				m.Get("/subdomain", repo.HostingCheckSubdomain)
+				m.Get("/{deployment}/status", repo.HostingDeploymentStatus)
+				m.Get("/{deployment}/log", repo.HostingBuildLog)
+				m.Post("/{deployment}/cancel", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingCancel)
+				m.Post("/{deployment}/rollback", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingRollback)
+				m.Group("/targets/{target}", func() {
+					m.Post("/env", repo.HostingSetEnv)
+					m.Post("/env/delete", repo.HostingDeleteEnv)
+					m.Post("/auto-deploy", repo.HostingSetAutoDeploy)
+					m.Post("/subdomain", repo.HostingSetSubdomain)
+					m.Post("/domains", repo.HostingAddDomain)
+					m.Post("/domains/{domain}/verify", repo.HostingVerifyDomain)
+					m.Post("/domains/{domain}/delete", repo.HostingRemoveDomain)
+					m.Post("/delete", repo.HostingDeleteTarget)
+				}, context.RepoMustNotBeArchived(), reqRepoAdmin)
+			}, reqSignIn)
 		}, repo.MustBeNotEmpty, context.RepoRef(), reqRepoCodeReader)
 
 		m.Group("/activity_author_data", func() {

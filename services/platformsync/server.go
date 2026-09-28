@@ -50,6 +50,7 @@ func NewServer(config Config, store *Store, processors ...*Processor) *Server {
 	server.mux.HandleFunc("POST /api/v1/platforms/migrations/activate", server.handleActivateMigration)
 	server.mux.HandleFunc("POST /api/v1/deployments/prepare", server.handlePrepareDeployment)
 	server.mux.HandleFunc("POST /api/v1/deployments/{deploymentID}/finalize", server.handleFinalizeDeployment)
+	server.mux.HandleFunc("POST /api/v1/deployments/{deploymentID}/versions", server.handleDeploymentVersion)
 	server.mux.HandleFunc("GET /api/v1/deployments/{deploymentID}", server.handleDeploymentStatus)
 	server.mux.HandleFunc("GET /healthz", func(response http.ResponseWriter, _ *http.Request) {
 		response.WriteHeader(http.StatusNoContent)
@@ -219,6 +220,37 @@ func (s *Server) handleFinalizeDeployment(response http.ResponseWriter, request 
 	writeDeploymentJSON(response, http.StatusAccepted, job)
 }
 
+func (s *Server) handleDeploymentVersion(response http.ResponseWriter, request *http.Request) {
+	if !s.authorized(request) {
+		http.Error(response, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if s.processor == nil {
+		http.Error(response, "deployment publisher unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	job, err := s.store.GetDeployment(request.PathValue("deploymentID"))
+	if err != nil {
+		http.Error(response, "could not load deployment", http.StatusInternalServerError)
+		return
+	}
+	if job == nil {
+		http.NotFound(response, request)
+		return
+	}
+	request.Body = http.MaxBytesReader(response, request.Body, maxWebhookBody)
+	var input DeploymentVersionRequest
+	if err := json.NewDecoder(request.Body).Decode(&input); err != nil {
+		http.Error(response, "invalid deployment version", http.StatusBadRequest)
+		return
+	}
+	if err := s.processor.PublishDeploymentVersion(request.Context(), input, job); err != nil {
+		http.Error(response, err.Error(), http.StatusConflict)
+		return
+	}
+	writeDeploymentJSON(response, http.StatusAccepted, job)
+}
+
 func (s *Server) handleDeploymentStatus(response http.ResponseWriter, request *http.Request) {
 	if !s.authorized(request) {
 		http.Error(response, "unauthorized", http.StatusUnauthorized)
@@ -303,7 +335,11 @@ func (s *Server) handleWebhook(response http.ResponseWriter, request *http.Reque
 		response.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if err := s.store.Schedule(payload.Repository.ID, payload.Repository.FullName, payload.Repository.DefaultBranch, payload.After, archive); err != nil {
+	// Hash the signed event payload itself so a redelivery still coalesces even
+	// if Forgejo assigns it a new delivery identifier.
+	digest := sha256.Sum256(append([]byte(event+":"), body...))
+	eventKey := hex.EncodeToString(digest[:])
+	if err := s.store.ScheduleEvent(payload.Repository.ID, payload.Repository.FullName, payload.Repository.DefaultBranch, payload.After, archive, eventKey); err != nil {
 		http.Error(response, "could not schedule publication", http.StatusInternalServerError)
 		return
 	}
@@ -337,6 +373,9 @@ func (s *Server) handleStatus(response http.ResponseWriter, request *http.Reques
 		"releaseTag":        job.ReleaseTag,
 		"releaseVersion":    job.ReleaseVersion,
 		"lastError":         job.LastError,
+		"lastErrorStage":    job.LastErrorStage,
+		"lastErrorCode":     job.LastErrorCode,
+		"lastErrorPath":     job.LastErrorPath,
 		"attempts":          job.Attempts,
 		"decision":          job.Decision,
 		"decisions":         job.Decisions,

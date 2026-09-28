@@ -1,0 +1,35 @@
+#cloud-config
+# Swarm manager: Dokploy (which brings Traefik), a read-only Docker socket
+# proxy for GitW3 status checks and, later, the scaler.
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - sqlite3
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-gitw3.conf
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin prohibit-password
+  - path: /etc/docker/daemon.json
+    content: |
+      {"log-driver": "json-file", "log-opts": {"max-size": "20m", "max-file": "3"}}
+
+runcmd:
+  - systemctl restart ssh || systemctl restart sshd
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
+%{ if primary ~}
+  - PRIVATE_IP=$(curl -fsS http://169.254.169.254/metadata/v1/interfaces/private/0/ipv4/address)
+  # Dokploy initialises the swarm itself; advertise on the VPC address so
+  # swarm traffic never leaves the private network.
+  - curl -fsSL https://dokploy.com/install.sh -o /root/dokploy-install.sh
+  - ADVERTISE_ADDR="$PRIVATE_IP" sh /root/dokploy-install.sh
+  - docker node update --label-add gitw3.role=manager "$(hostname)"
+  # Managers run the control plane only; apps are constrained to workers.
+  - docker node update --availability active "$(hostname)"
+%{ else ~}
+  - echo "Join this node as a manager: docker swarm join --token <manager-token> <primary-private-ip>:2377" > /root/JOIN-ME
+%{ endif ~}

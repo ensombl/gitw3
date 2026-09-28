@@ -40,6 +40,11 @@ publication does not wait for a deployment and does not require an application k
 the default branch update the same public User-profile MetaEnvelope. Deleting the manifest or repository
 archives the profile so the Marketplace hides it.
 
+`authorEnames` means the current W3DS-linked Forgejo maintainers who have write access to the
+repository: the owner, direct collaborators, and organization team members. GitW3 reads that set from
+Forgejo's native repository-permissions endpoint in one request. Commit authors without repository
+write access are not treated as platform publishers, and publication never scans Git history.
+
 GitW3 loads the selectable `domains` from the published ontology at
 `https://ontology.w3ds.metastate.foundation/domains`. Multiple domains may be selected. They are
 published as both `domains` and `requestedDomains` in the platform profile so each release-specific PPA
@@ -84,9 +89,11 @@ configure:
 | `PLATFORM_SYNC_INTERNAL_TOKEN` | Secret used by GitW3 to read publication status. |
 | `PLATFORM_SYNC_REGISTRY_URL` | W3DS Registry base URL; defaults to the production Registry. |
 | `PLATFORM_SYNC_REGISTRY_SHARED_SECRET` | Registry service credential required to inspect, transfer, and manage migrated PlatformProfiles. |
+| `PLATFORM_SYNC_PLATFORM_TOKEN` | Optional pre-issued eVault platform bearer token. When set, the publisher does not call the legacy Registry token-mint endpoint. |
 | `PLATFORM_SYNC_PROVISIONER_URL` | W3DS Provisioner base URL; defaults to the production Provisioner. |
 | `PLATFORM_SYNC_VERIFICATION_ID` | Approved production provisioning verification identifier. |
 | `PLATFORM_SYNC_PUBLISHER_URL` | Certified platform URL used to request eVault tokens. |
+| `PLATFORM_SYNC_TRUSTED_PPA_ISSUERS` | Comma-separated PPA hosts or origins whose signed decisions count as certification; defaults to `ppa.w3ds.metastate.foundation`. A decision counts only if its JWS verifies against `https://<issuer>/.well-known/jwks.json`. Unsigned records, and records from other issuers, are ignored even when they sit in the platform eVault. |
 
 The bot token must be able to read private platform repositories and update their manifest after
 provisioning. Do not reuse a human administrator token.

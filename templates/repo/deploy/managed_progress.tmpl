@@ -1,0 +1,10 @@
+<div class="managed-progress tw-hidden" data-managed-progress hidden aria-live="polite">
+	<ol class="managed-steps">
+		<li data-managed-step="build">{{svg "octicon-package"}} <span>{{ctx.Locale.Tr "platform.hosting.step_build"}}</span></li>
+		<li data-managed-step="sign">{{svg "octicon-shield-check"}} <span>{{ctx.Locale.Tr "platform.hosting.step_sign"}}</span></li>
+		<li data-managed-step="rollout">{{svg "octicon-sync"}} <span>{{ctx.Locale.Tr "platform.hosting.step_rollout"}}</span></li>
+		<li data-managed-step="live">{{svg "octicon-globe"}} <span>{{ctx.Locale.Tr "platform.hosting.step_live"}}</span></li>
+	</ol>
+	<p class="managed-progress-status" data-managed-status></p>
+	<a class="managed-live-url tw-hidden" data-managed-live-url target="_blank" rel="noopener noreferrer" hidden></a>
+</div>

@@ -43,6 +43,10 @@ var (
 	Webhook = deriveKey("webhook")
 	// Used for the `mirror` table.
 	PullMirror = deriveKey("pullmirror")
+	// Used for the `hosting_env_var` table and deployment env snapshots.
+	HostingEnvVar = deriveKey("hosting_env_var")
+	// Used for the `hosting_target` table deployment private keys.
+	HostingDeploymentKey = deriveKey("hosting_deployment_key")
 )
 
 var (

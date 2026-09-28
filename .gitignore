@@ -59,6 +59,7 @@ cpu.out
 /build/lint-locale-usage/lint-locale-usage
 /gitea
 /platform-manifest-sync
+/gitw3-scaler
 /gitea-vet
 /debug
 /integrations.test

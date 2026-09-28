@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"forgejo.org/modules/w3ds"
 
@@ -68,6 +69,55 @@ func TestServerSchedulesReleaseWebhooks(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, job)
 	assert.Empty(t, job.TargetSHA)
+}
+
+func TestServerCoalescesRepositoryPushAndReleaseDuplicates(t *testing.T) {
+	tests := []struct {
+		name    string
+		event   string
+		payload map[string]any
+	}{
+		{
+			name: "repository", event: "repository",
+			payload: map[string]any{"action": "created", "repository": map[string]any{"id": 42, "full_name": "alice/platform", "default_branch": "main"}},
+		},
+		{
+			name: "push", event: "push",
+			payload: map[string]any{"ref": "refs/heads/main", "after": "commit-sha", "repository": map[string]any{"id": 42, "full_name": "alice/platform", "default_branch": "main"}},
+		},
+		{
+			name: "release", event: "release",
+			payload: map[string]any{"action": "published", "release": map[string]any{"id": 7, "tag_name": "v1.0.0"}, "repository": map[string]any{"id": 42, "full_name": "alice/platform", "default_branch": "main"}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := openTestStore(t)
+			config := testConfig("https://gitw3.example.com", "")
+			server := NewServer(config, store)
+
+			response := httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, signedWebhookRequest(t, config.WebhookSecret, test.event, test.payload))
+			require.Equal(t, http.StatusAccepted, response.Code)
+			job, err := store.Get(42)
+			require.NoError(t, err)
+			job.Status = StatusFailed
+			job.Attempts = 3
+			job.LastError = "diagnostic to preserve"
+			job.NextAttempt = time.Now().UTC().Add(time.Hour)
+			require.NoError(t, store.Save(job))
+			originalNextAttempt := job.NextAttempt
+
+			response = httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, signedWebhookRequest(t, config.WebhookSecret, test.event, test.payload))
+			require.Equal(t, http.StatusAccepted, response.Code)
+			duplicate, err := store.Get(42)
+			require.NoError(t, err)
+			assert.Equal(t, 3, duplicate.Attempts)
+			assert.Equal(t, "diagnostic to preserve", duplicate.LastError)
+			assert.Equal(t, originalNextAttempt, duplicate.NextAttempt)
+		})
+	}
 }
 
 func TestServerRejectsInvalidSignature(t *testing.T) {

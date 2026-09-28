@@ -1,0 +1,31 @@
+<div class="deployment-ai-prompt-box managed-ai-prompt">
+	<div class="deployment-ai-prompt-toolbar">
+		<span>{{svg "octicon-copilot" 16}} {{ctx.Locale.Tr "platform.hosting.ai_prompt_label"}}</span>
+		<button type="button" class="ui small primary button" data-clipboard-target="#managed-ai-prompt">{{svg "octicon-copy" 16}} {{ctx.Locale.Tr "platform.deploy.ai_copy"}}</button>
+	</div>
+	<pre id="managed-ai-prompt" tabindex="0"><code>Get this repository ({{.Repository.FullName}}) ready to deploy on GitW3 managed hosting. Inspect the project first, then make the smallest set of changes that works.
+
+How GitW3 runs apps:
+- It builds the Dockerfile at the repository root with Docker BuildKit (linux/amd64) and runs the image as a container behind HTTPS.
+- The app must serve HTTP on the port in the PORT environment variable (GitW3 sets it; default 3000) and listen on 0.0.0.0, not localhost.
+- Containers are stateless and can be restarted or replaced at any time: nothing written to the container's disk survives a deploy. Keep data in an external database or storage service.
+- GitW3 also sets GITW3_URL (the app's public https URL), GITW3_RELEASE and GITW3_COMMIT. Secrets such as API keys are added later in GitW3, never committed.
+- GitW3 manages the app's W3DS deployment key automatically. If the app needs to sign as its W3DS deployment, read the key from the file named by W3DS_DEPLOYMENT_KEY_FILE (or the JSON in W3DS_DEPLOYMENT_KEY_JSON for multi-service apps). Never generate, commit or print a key yourself.
+
+Please:
+1. Work out how the app is built and started (language, framework, package manager, build command, start command, static site or server).
+2. Add a production Dockerfile at the repository root:
+   - Use a small official base image and a multi-stage build when there is a build step.
+   - Install dependencies from the lockfile, build, and copy only what is needed to run.
+   - Run as a non-root user.
+   - Start the server so it listens on 0.0.0.0:$PORT (for a static site, serve the built files with a small web server that honours $PORT).
+   - EXPOSE the default port and set ENV PORT to it.
+3. Add a .dockerignore that excludes .git, node_modules or other dependency folders, build output, local .env files and secrets.
+4. Make sure no secret, token, password or .env file is committed or copied into the image. Read configuration from environment variables instead and list the variables the app needs in the README.
+5. If the app has a health endpoint (or you add one at /healthz), mention it in the README.
+6. Build and run the image locally to check it starts and answers on http://localhost:3000 (docker build -t app . &amp;&amp; docker run -e PORT=3000 -p 3000:3000 app). Fix anything that fails.
+7. Commit the changes, then publish a version so GitW3 can deploy it:
+   git tag v1.0.0 &amp;&amp; git push origin HEAD --tags
+   Use the next version number (v1.0.1, v1.1.0, ...) for later updates.
+8. Finish with a short summary: what you changed, the environment variables the app needs, and anything I must set up myself.</code></pre>
+</div>

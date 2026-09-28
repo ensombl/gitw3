@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"forgejo.org/modules/w3ds"
 )
 
 const (
@@ -25,12 +27,15 @@ type Config struct {
 	InternalToken        string
 	RegistryURL          string
 	RegistrySharedSecret string
+	PlatformToken        string
 	ProvisionerURL       string
 	VerificationID       string
 	PublisherURL         string
-	RequestTimeout       time.Duration
-	ReconcilePeriod      time.Duration
-	AccreditationPeriod  time.Duration
+	// TrustedPPAIssuers are the PPA services whose signed decisions certify releases.
+	TrustedPPAIssuers   []string
+	RequestTimeout      time.Duration
+	ReconcilePeriod     time.Duration
+	AccreditationPeriod time.Duration
 }
 
 // ConfigFromEnv loads the standalone service configuration.
@@ -44,9 +49,11 @@ func ConfigFromEnv() (Config, error) {
 		InternalToken:        os.Getenv("PLATFORM_SYNC_INTERNAL_TOKEN"),
 		RegistryURL:          strings.TrimRight(envOr("PLATFORM_SYNC_REGISTRY_URL", ProductionRegistryURL), "/"),
 		RegistrySharedSecret: os.Getenv("PLATFORM_SYNC_REGISTRY_SHARED_SECRET"),
+		PlatformToken:        os.Getenv("PLATFORM_SYNC_PLATFORM_TOKEN"),
 		ProvisionerURL:       strings.TrimRight(envOr("PLATFORM_SYNC_PROVISIONER_URL", ProductionProvisionerURL), "/"),
 		VerificationID:       os.Getenv("PLATFORM_SYNC_VERIFICATION_ID"),
 		PublisherURL:         os.Getenv("PLATFORM_SYNC_PUBLISHER_URL"),
+		TrustedPPAIssuers:    trustedPPAIssuers(),
 		RequestTimeout:       20 * time.Second,
 		ReconcilePeriod:      2 * time.Second,
 		AccreditationPeriod:  10 * time.Second,
@@ -85,4 +92,14 @@ func envOr(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// trustedPPAIssuers reads PLATFORM_SYNC_TRUSTED_PPA_ISSUERS, a comma
+// separated list of PPA hosts or origins, defaulting to the MetaState PPA.
+func trustedPPAIssuers() []string {
+	raw := strings.TrimSpace(os.Getenv("PLATFORM_SYNC_TRUSTED_PPA_ISSUERS"))
+	if raw == "" {
+		return w3ds.DefaultTrustedPPAIssuers
+	}
+	return w3ds.NormalizePPAIssuers(strings.Split(raw, ","))
 }

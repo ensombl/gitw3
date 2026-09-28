@@ -37,8 +37,11 @@ type fakePlatformInfrastructure struct {
 	successfulProvisions   int
 	resolveMissing         bool
 	published              []map[string]any
+	profiles               map[string]map[string]any
 	accreditations         []w3ds.AccreditationDecision
-	server                 *httptest.Server
+	// forgedAccreditations are written straight into the eVault, unsigned.
+	forgedAccreditations []map[string]any
+	server               *httptest.Server
 }
 
 func newFakePlatformInfrastructure(t *testing.T) *fakePlatformInfrastructure {
@@ -52,6 +55,7 @@ func newFakePlatformInfrastructure(t *testing.T) *fakePlatformInfrastructure {
 		manifest:       manifest,
 		manifestExists: true,
 		release:        &platformRelease{TagName: "v0.1.0", Version: "0.1.0"},
+		profiles:       make(map[string]map[string]any),
 	}
 	fake.server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		fake.handle(t, response, request)
@@ -95,22 +99,12 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 		f.manifest = &manifest
 		f.mu.Unlock()
 		json.NewEncoder(response).Encode(map[string]any{"content": map[string]string{"sha": "updated"}})
-	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/repos/alice/platform/commits":
-		assert.Contains(t, []string{"commit-1", "commit-2"}, request.URL.Query().Get("sha"))
-		if request.URL.Query().Get("page") == "1" {
-			json.NewEncoder(response).Encode([]map[string]any{
-				{"author": map[string]string{"login": "alice"}, "committer": map[string]string{"login": "alice"}},
-				{"author": map[string]string{"login": "bob"}, "committer": map[string]string{"login": "platform-sync"}},
-			})
-		} else {
-			json.NewEncoder(response).Encode([]any{})
-		}
-	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/alice":
-		json.NewEncoder(response).Encode(map[string]any{"login": "alice", "login_name": "@alice.w3id"})
-	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/bob":
-		json.NewEncoder(response).Encode(map[string]any{"login": "bob", "login_name": "@bob.w3id"})
-	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/users/platform-sync":
-		json.NewEncoder(response).Encode(map[string]any{"login": "platform-sync", "login_name": ""})
+	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/repos/alice/platform/assignees":
+		json.NewEncoder(response).Encode([]map[string]any{
+			{"login": "alice", "login_name": "@alice.w3id"},
+			{"login": "bob", "login_name": "@bob.w3id"},
+			{"login": "platform-sync", "login_name": ""},
+		})
 	case request.Method == http.MethodGet && request.URL.Path == "/api/v1/repos/alice/platform/releases/latest":
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -209,7 +203,10 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 			f.mu.Lock()
 			edges := make([]map[string]any, 0, len(f.accreditations))
 			for _, decision := range f.accreditations {
-				edges = append(edges, map[string]any{"node": map[string]any{"parsed": decision}})
+				edges = append(edges, map[string]any{"node": map[string]any{"parsed": ppaRecord(decision)}})
+			}
+			for _, forged := range f.forgedAccreditations {
+				edges = append(edges, map[string]any{"node": map[string]any{"parsed": forged}})
 			}
 			f.mu.Unlock()
 			json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"metaEnvelopes": map[string]any{
@@ -217,13 +214,30 @@ func (f *fakePlatformInfrastructure) handle(t *testing.T, response http.Response
 			}}})
 			return
 		}
+		if strings.Contains(input["query"].(string), "ExistingPlatformProfile") {
+			variables := input["variables"].(map[string]any)
+			id := variables["id"].(string)
+			f.mu.Lock()
+			profile := f.profiles[id]
+			f.mu.Unlock()
+			if profile == nil {
+				json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"profile": nil}})
+				return
+			}
+			json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"profile": map[string]any{
+				"id": id, "ontology": w3ds.UserProfileOntology, "parsed": profile,
+			}}})
+			return
+		}
 		assert.NotContains(t, input["query"], "errors { message }")
 		variables := input["variables"].(map[string]any)
 		profile := variables["input"].(map[string]any)["payload"].(map[string]any)
+		id := variables["id"].(string)
 		f.mu.Lock()
 		f.published = append(f.published, profile)
+		f.profiles[id] = profile
 		f.mu.Unlock()
-		json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"updateMetaEnvelopeById": map[string]any{"metaEnvelope": map[string]string{"id": variables["id"].(string)}}}})
+		json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"update": map[string]any{"metaEnvelope": map[string]string{"id": id}, "errors": []any{}}}})
 	default:
 		http.Error(response, request.Method+" "+request.URL.Path, http.StatusNotFound)
 	}
@@ -244,6 +258,7 @@ func testConfig(baseURL, statePath string) Config {
 		RequestTimeout:      time.Second,
 		ReconcilePeriod:     time.Millisecond,
 		AccreditationPeriod: time.Millisecond,
+		TrustedPPAIssuers:   []string{testPPAURL()},
 	}
 }
 
@@ -459,7 +474,7 @@ func TestProcessorPreparesAndFinalizesDeployment(t *testing.T) {
 			switch {
 			case strings.Contains(query, "PlatformAccreditations"):
 				_ = json.NewEncoder(response).Encode(map[string]any{"data": map[string]any{"metaEnvelopes": map[string]any{
-					"edges":    []any{map[string]any{"node": map[string]any{"parsed": certificationDecision}}},
+					"edges":    []any{map[string]any{"node": map[string]any{"parsed": ppaRecord(certificationDecision)}}},
 					"pageInfo": map[string]any{"hasNextPage": false, "endCursor": nil},
 				}}})
 			case strings.Contains(query, "ExistingDeploymentBindings"):
@@ -835,4 +850,90 @@ func TestProcessorPublishesSubmissionProof(t *testing.T) {
 	history, ok := fake.published[1]["submissionHistory"].([]any)
 	require.True(t, ok)
 	require.Len(t, history, 1)
+}
+
+func TestProcessorPublishesDeploymentVersionWithDeploymentKey(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, fake.server.Client())
+	publicKey, keyFile, err := w3ds.GenerateDeploymentKey()
+	require.NoError(t, err)
+	platformEName := "@0699e093-2dd9-59cc-a416-7dc69623ebfd"
+	fake.mu.Lock()
+	fake.manifest.EName = &platformEName
+	fake.mu.Unlock()
+	job := &DeploymentJob{
+		ID: "managed-1", RepositoryID: 42, PlatformEName: platformEName, DeploymentEName: "@deployment",
+		DeployerEName: "@deployer", Version: "1.2.3", ReleaseTag: "v1.2.3", CommitSHA: strings.Repeat("a", 40),
+		PublicKey: publicKey, WalletSignature: "wallet-signature", Status: DeploymentCompleted,
+	}
+	require.NoError(t, store.SaveDeployment(job))
+	require.NoError(t, store.Save(&Job{RepositoryID: 42, EName: platformEName, Status: StatusPublished}))
+
+	commit := strings.Repeat("b", 40)
+	payload, err := w3ds.DeploymentVersionPayload(job.DeploymentEName, "1.3.0", "v1.3.0", commit)
+	require.NoError(t, err)
+	signature, err := w3ds.SignWithDeploymentKey(keyFile, payload)
+	require.NoError(t, err)
+	input := DeploymentVersionRequest{Version: "1.3.0", ReleaseTag: "v1.3.0", CommitSHA: commit, Signature: signature}
+
+	forged := input
+	forged.Version = "1.4.0"
+	require.Error(t, processor.PublishDeploymentVersion(context.Background(), forged, job), "signature covers the version")
+
+	err = processor.PublishDeploymentVersion(context.Background(), input, job)
+	require.ErrorIs(t, err, ErrDeploymentCertificationRequired)
+
+	fake.mu.Lock()
+	fake.accreditations = []w3ds.AccreditationDecision{
+		{PlatformEName: platformEName, PlatformVersion: "1.3.0", Decision: "granted", CreatedAt: "2026-08-30T00:00:00Z"},
+	}
+	fake.mu.Unlock()
+	require.NoError(t, processor.PublishDeploymentVersion(context.Background(), input, job))
+	stored, err := store.GetDeployment(job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, DeploymentPublishing, stored.Status)
+	assert.Equal(t, "1.3.0", stored.Version)
+	assert.Equal(t, payload, stored.VersionPayload)
+	expectedVersion, err := w3ds.SoftwareVersionEName(platformEName, "1.3.0")
+	require.NoError(t, err)
+	assert.Equal(t, expectedVersion, stored.VersionEName)
+
+	signer := deploymentBindingSigner(w3ds.DeploymentBindingDocument{Type: "software_version"}, stored)
+	assert.Equal(t, "@deployment", signer.Signer)
+	assert.Equal(t, signature, signer.Signature)
+	signer = deploymentBindingSigner(w3ds.DeploymentBindingDocument{Type: "deployment_key"}, stored)
+	assert.Equal(t, "@deployer", signer.Signer)
+}
+
+func TestProcessorIgnoresUnsignedAccreditations(t *testing.T) {
+	fake := newFakePlatformInfrastructure(t)
+	store := openTestStore(t)
+	processor := NewProcessor(testConfig(fake.server.URL, ""), store, fake.server.Client())
+	require.NoError(t, store.Save(&Job{RepositoryID: 42, EName: "@guided.w3id", Status: StatusPublished}))
+
+	fake.mu.Lock()
+	// The platform owner can write to their own eVault, so a plain record
+	// claiming a grant (or one pointing at an attacker's JWKS) must not count.
+	fake.forgedAccreditations = []map[string]any{
+		{"platformEName": "@guided.w3id", "platformVersion": "1.2.3", "decision": "granted", "createdAt": "2026-09-01T00:00:00Z"},
+		{"platformEName": "@guided.w3id", "platformVersion": "1.2.3", "decision": "granted", "jws": "e30.e30.e30", "issuerJwksUri": "https://evil.example/.well-known/jwks.json"},
+	}
+	fake.mu.Unlock()
+	certifications, err := processor.CheckDeploymentCertifications(context.Background(), CheckDeploymentCertificationsRequest{
+		RepositoryID: 42, PlatformEName: "@guided.w3id", Versions: []string{"1.2.3"},
+	})
+	require.NoError(t, err)
+	assert.False(t, certifications["1.2.3"].Certified)
+
+	fake.mu.Lock()
+	fake.accreditations = []w3ds.AccreditationDecision{
+		{PlatformEName: "@guided.w3id", PlatformVersion: "1.2.3", Decision: "granted", CreatedAt: "2026-08-01T00:00:00Z"},
+	}
+	fake.mu.Unlock()
+	certifications, err = processor.CheckDeploymentCertifications(context.Background(), CheckDeploymentCertificationsRequest{
+		RepositoryID: 42, PlatformEName: "@guided.w3id", Versions: []string{"1.2.3"},
+	})
+	require.NoError(t, err)
+	assert.True(t, certifications["1.2.3"].Certified, "a decision signed by the trusted PPA counts")
 }

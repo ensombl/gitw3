@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,6 +47,15 @@ type FinalizeDeploymentRequest struct {
 	SignerEName           string `json:"signerEName"`
 	Signature             string `json:"signature"`
 	KeyBindingCertificate string `json:"keyBindingCertificate"`
+}
+
+type DeploymentVersionRequest struct {
+	Version    string `json:"version"`
+	ReleaseTag string `json:"releaseTag"`
+	CommitSHA  string `json:"commitSha"`
+	// Signature is the deployment key's signature over
+	// w3ds.DeploymentVersionPayload for this version.
+	Signature string `json:"signature"`
 }
 
 type BootstrapPlatformRequest struct {
@@ -217,6 +227,44 @@ func (p *Processor) PrepareDeployment(ctx context.Context, input PrepareDeployme
 		return nil, err
 	}
 	return job, nil
+}
+
+// PublishDeploymentVersion moves a wallet-authorised deployment to a new
+// certified release. The deployment key the wallet bound in the first
+// bundle signs the version change, so no new wallet interaction is needed.
+func (p *Processor) PublishDeploymentVersion(ctx context.Context, input DeploymentVersionRequest, job *DeploymentJob) error {
+	if job == nil || job.WalletSignature == "" {
+		return errors.New("deployment has not been authorised by its deployer yet")
+	}
+	input.CommitSHA = strings.ToLower(strings.TrimSpace(input.CommitSHA))
+	if input.Version == "" || input.ReleaseTag == "" || input.CommitSHA == "" || input.Signature == "" {
+		return errors.New("complete version details are required")
+	}
+	payload, err := w3ds.DeploymentVersionPayload(job.DeploymentEName, input.Version, input.ReleaseTag, input.CommitSHA)
+	if err != nil {
+		return err
+	}
+	if !w3ds.VerifyDeploymentKeySignature(job.PublicKey, payload, input.Signature) {
+		return errors.New("version signature does not match the deployment key")
+	}
+	if job.Version == input.Version && job.ReleaseTag == input.ReleaseTag && job.CommitSHA == input.CommitSHA {
+		return nil
+	}
+	if err := p.requireDeploymentCertification(ctx, job.RepositoryID, job.PlatformEName, input.Version); err != nil {
+		return err
+	}
+	versionEName, err := w3ds.SoftwareVersionEName(job.PlatformEName, input.Version)
+	if err != nil {
+		return err
+	}
+	job.Version, job.ReleaseTag, job.CommitSHA, job.VersionEName = input.Version, input.ReleaseTag, input.CommitSHA, versionEName
+	job.VersionSignature, job.VersionPayload = input.Signature, payload
+	job.SoftwareVersionDocumentID = ""
+	job.Status = DeploymentPublishing
+	job.Attempts = 0
+	job.LastError = ""
+	job.NextAttempt = time.Now().UTC()
+	return p.store.SaveDeployment(job)
 }
 
 func (p *Processor) FinalizeDeployment(input FinalizeDeploymentRequest, job *DeploymentJob) error {
@@ -476,12 +524,6 @@ func (p *Processor) BootstrapPlatformIdentity(ctx context.Context, input Bootstr
 
 // Reconcile processes the latest default-branch state and is safe to repeat.
 func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
-	job.Status = StatusPublishing
-	job.LastError = ""
-	if err := p.store.Save(job); err != nil {
-		return err
-	}
-
 	manifest, fileSHA, err := p.forgejo.manifest(ctx, job.FullName, job.DefaultBranch)
 	if errors.Is(err, ErrManifestNotFound) {
 		if job.EName == "" || job.Manifest == nil {
@@ -500,11 +542,20 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		job.Archive = true
 		manifest = job.Manifest
 	} else if err != nil {
-		return err
+		return atStage("manifest fetch", err)
 	}
 
 	if err := manifest.Validate(false); err != nil {
-		return fmt.Errorf("validate %s: %w", job.FullName, err)
+		return atStage("manifest validation", fmt.Errorf("validate %s: %w", job.FullName, err))
+	}
+	// A valid manifest is the first meaningful progress in reconciliation. Keep
+	// the previous diagnostic attached while the new attempt is in flight; it
+	// is cleared only after success or replaced by the worker on a new failure.
+	if job.Status != StatusPublishing {
+		job.Status = StatusPublishing
+		if err := p.store.Save(job); err != nil {
+			return err
+		}
 	}
 	if job.PlatformName != "" && manifest.PlatformName != job.PlatformName {
 		return errors.New("platformName is immutable after first publication")
@@ -601,7 +652,7 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 				manifestChanged = true
 			}
 		case err != nil:
-			return err
+			return atStage("release fetch", err)
 		default:
 			releaseChanged := job.ReleaseVersion != release.Version
 			job.ReleaseTag = release.TagName
@@ -653,16 +704,12 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		job.CreatedAt = time.Now().UTC()
 	}
 	if !job.Archive {
-		ref := job.TargetSHA
-		if ref == "" {
-			ref = job.DefaultBranch
-		}
-		if manifest.Migration != nil && len(job.AuthorENames) == 0 {
-			job.AuthorENames = append([]string(nil), manifest.Migration.SourceAuthorENames...)
+		if manifest.Migration != nil {
+			job.AuthorENames = mergeENames(job.AuthorENames, manifest.Migration.SourceAuthorENames)
 		} else {
-			authorENames, err := p.forgejo.authorENames(ctx, job.FullName, ref)
+			authorENames, err := p.forgejo.authorENames(ctx, job.FullName)
 			if err != nil {
-				return err
+				return atStage("maintainer discovery", err)
 			}
 			job.AuthorENames = authorENames
 		}
@@ -673,9 +720,15 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 
 	job.Manifest = manifest
 	job.PlatformName = manifest.PlatformName
-	job.LastSHA = job.TargetSHA
+	if job.TargetSHA != "" {
+		job.LastSHA = job.TargetSHA
+	}
 	job.Attempts = 0
 	job.LastError = ""
+	job.LastErrorStage = ""
+	job.LastErrorCode = ""
+	job.LastErrorPath = ""
+	job.FailureScheduleKey = ""
 	job.ProvisioningKey = ""
 	job.NextAttempt = time.Time{}
 	if job.Archive {
@@ -684,6 +737,24 @@ func (p *Processor) Reconcile(ctx context.Context, job *Job) error {
 		job.Status = StatusPublished
 	}
 	return p.store.Save(job)
+}
+
+func mergeENames(groups ...[]string) []string {
+	seen := make(map[string]struct{})
+	for _, group := range groups {
+		for _, ename := range group {
+			ename = strings.TrimSpace(ename)
+			if strings.HasPrefix(ename, "@") && len(ename) > 1 {
+				seen[ename] = struct{}{}
+			}
+		}
+	}
+	merged := make([]string, 0, len(seen))
+	for ename := range seen {
+		merged = append(merged, ename)
+	}
+	sort.Strings(merged)
+	return merged
 }
 
 // RefreshAccreditation reads the decision for the currently published version from the platform eVault.
@@ -750,13 +821,13 @@ func (w *Worker) reconcileDeployments(ctx context.Context) {
 		if err := w.processor.ReconcileDeployment(ctx, job); err != nil {
 			job.Attempts++
 			job.Status = DeploymentFailed
-			job.LastError = err.Error()
+			job.LastError = redactSensitiveText(err.Error())
 			delay := time.Duration(math.Min(math.Pow(2, float64(job.Attempts)), 300)) * time.Second
 			job.NextAttempt = time.Now().UTC().Add(delay)
 			if saveErr := w.store.SaveDeployment(job); saveErr != nil {
 				slog.Error("save failed deployment", "deployment_id", job.ID, "error", saveErr)
 			}
-			slog.Warn("deployment publication will retry", "deployment_id", job.ID, "attempt", job.Attempts, "error", err)
+			slog.Warn("deployment publication will retry", "deployment_id", job.ID, "attempt", job.Attempts, "error", redactSensitiveText(err.Error()))
 		}
 	}
 }
@@ -769,15 +840,20 @@ func (w *Worker) reconcileReady(ctx context.Context) {
 	}
 	for _, job := range jobs {
 		if err := w.processor.Reconcile(ctx, job); err != nil {
+			if job.FailureScheduleKey != job.LastScheduleKey {
+				job.Attempts = 0
+			}
 			job.Attempts++
 			job.Status = StatusFailed
-			job.LastError = err.Error()
+			job.LastError = redactSensitiveText(err.Error())
+			job.LastErrorStage, job.LastErrorCode, job.LastErrorPath = publicationErrorMetadata(err)
+			job.FailureScheduleKey = job.LastScheduleKey
 			delay := time.Duration(math.Min(math.Pow(2, float64(job.Attempts)), 300)) * time.Second
 			job.NextAttempt = time.Now().UTC().Add(delay)
 			if saveErr := w.store.Save(job); saveErr != nil {
 				slog.Error("save failed platform publication", "repository_id", job.RepositoryID, "error", saveErr)
 			}
-			slog.Warn("platform publication will retry", "repository_id", job.RepositoryID, "attempt", job.Attempts, "error", err)
+			slog.Warn("platform publication will retry", "repository_id", job.RepositoryID, "attempt", job.Attempts, "error", redactSensitiveText(err.Error()))
 		}
 	}
 }
@@ -790,7 +866,7 @@ func (w *Worker) refreshAccreditations(ctx context.Context) {
 	}
 	for _, job := range jobs {
 		if err := w.processor.RefreshAccreditation(ctx, job); err != nil {
-			slog.Warn("refresh platform PPA decision", "repository_id", job.RepositoryID, "version", job.Manifest.Version, "error", err)
+			slog.Warn("refresh platform PPA decision", "repository_id", job.RepositoryID, "version", job.Manifest.Version, "error", redactSensitiveText(err.Error()))
 		}
 	}
 }

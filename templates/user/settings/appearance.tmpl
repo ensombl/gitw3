@@ -1,6 +1,17 @@
 {{template "user/settings/layout_head" (dict "ctxData" . "pageClass" "user settings sshkeys")}}
 	<div class="user-setting-content">
 
+		<!-- Simple Mode -->
+		<h4 class="ui top attached header">
+			{{ctx.Locale.Tr "platform.simple_mode.title"}}
+		</h4>
+		<div class="ui attached segment">
+			<p>{{ctx.Locale.Tr "platform.simple_mode.help"}}</p>
+			<button class="ui primary button link-action" data-url="{{AppSubUrl}}/user/simple-mode?enabled={{not .SimpleMode}}">
+				{{if .SimpleMode}}{{ctx.Locale.Tr "platform.simple_mode.switch_advanced"}}{{else}}{{ctx.Locale.Tr "platform.simple_mode.switch_simple"}}{{end}}
+			</button>
+		</div>
+
 		<!-- Theme -->
 		<h4 class="ui top attached header">
 			{{ctx.Locale.Tr "settings.manage_themes"}}

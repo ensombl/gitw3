@@ -15,3 +15,8 @@ relativetime.
 # templates/repo/settings/webhook/link_menu.tmpl, templates/webhook/new.tmpl: repo.settings.web_hook_name_
 # tests/integration/repo_archive_text_test.go
 repo.settings.
+
+# routers/web/repo/hosting.go, templates/repo/deploy/managed.tmpl: deployment status labels and blocked states
+platform.hosting.status.
+platform.hosting.blocked.
+platform.hosting.failure.

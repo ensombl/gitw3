@@ -1,0 +1,19 @@
+do_token          = "dop_v1_..."
+spaces_access_id  = "DO00..."
+spaces_secret_key = "..."
+
+region               = "ams3"
+vpn_cidrs            = ["100.64.0.0/10"]
+ssh_key_fingerprints = ["aa:bb:cc:..."]
+
+forgejo_url = "https://git.example.com"
+apps_domain = "apps.example.com"
+
+# Optional: create *.apps.example.com in Cloudflare.
+cloudflare_api_token = ""
+cloudflare_zone_id   = ""
+
+# Second apply, after bootstrap.sh printed them:
+builder_runner_token    = ""
+swarm_worker_join_token = ""
+initial_workers         = 1

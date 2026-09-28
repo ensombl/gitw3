@@ -4,13 +4,10 @@
 package repo
 
 import (
-	"bytes"
 	gocontext "context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -31,6 +28,7 @@ import (
 	"forgejo.org/modules/web"
 	"forgejo.org/services/context"
 	"forgejo.org/services/forms"
+	hosting_service "forgejo.org/services/hosting"
 
 	"github.com/google/uuid"
 )
@@ -83,6 +81,12 @@ func Deploy(ctx *context.Context) {
 	ctx.Data["Title"] = ctx.Tr("platform.deploy.title")
 	ctx.Data["PageIsDeploy"] = true
 	ctx.Data["IsW3DSPlatform"] = manifest != nil
+	ctx.Data["HostingEnabled"] = hosting_service.Enabled()
+	ctx.Data["DeployTab"] = deployTab(ctx)
+	if ctx.Data["DeployTab"] == deployTabManaged {
+		renderManagedDeploy(ctx, manifest)
+		return
+	}
 	if manifest == nil {
 		ctx.Data["DeployUnavailable"] = true
 		ctx.HTML(http.StatusOK, tplRepoDeploy)
@@ -138,10 +142,10 @@ func Deploy(ctx *context.Context) {
 	ctx.HTML(http.StatusOK, tplRepoDeploy)
 }
 
-func deploymentReleases(ctx *context.Context) ([]deploymentReleaseView, error) {
+func deploymentReleases(ctx *context.Context, includeTags ...bool) ([]deploymentReleaseView, error) {
 	releases, err := db.Find[repo_model.Release](ctx, repo_model.FindReleasesOptions{
 		ListOptions: db.ListOptions{ListAll: true}, RepoID: ctx.Repo.Repository.ID,
-		IncludeDrafts: false, IncludeTags: false, IsPreRelease: optional.Some(false),
+		IncludeDrafts: false, IncludeTags: len(includeTags) > 0 && includeTags[0], IsPreRelease: optional.Some(false),
 	})
 	if err != nil {
 		return nil, err
@@ -333,6 +337,7 @@ func DeploymentCallback(ctx *context.Context) {
 	if err != nil {
 		log.Warn("Queue signed deployment %s for publication: %v", deployment.ID, err)
 	}
+	hosting_service.OnW3DSDeploymentSigned(ctx, deployment.ID)
 	ctx.JSON(http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -465,39 +470,7 @@ func callDeploymentPublisher(ctx gocontext.Context, method, path string, input a
 }
 
 func callPlatformPublisher(ctx gocontext.Context, method, path string, input, output any) error {
-	if !setting.PlatformManifestSync.Enabled || setting.PlatformManifestSync.URL == "" || setting.PlatformManifestSync.InternalToken == "" {
-		return errors.New("deployment publisher is not configured")
-	}
-	var body io.Reader
-	if input != nil {
-		payload, err := json.Marshal(input)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(payload)
-	}
-	request, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(setting.PlatformManifestSync.URL, "/")+path, body)
-	if err != nil {
-		return err
-	}
-	request.Header.Set("Authorization", "Bearer "+setting.PlatformManifestSync.InternalToken)
-	request.Header.Set("Accept", "application/json")
-	if input != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	response, err := (&http.Client{Timeout: setting.PlatformManifestSync.SignatureTimeout}).Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		message, _ := io.ReadAll(io.LimitReader(response.Body, 2048))
-		return fmt.Errorf("publisher returned %d: %s", response.StatusCode, strings.TrimSpace(string(message)))
-	}
-	if err := json.NewDecoder(response.Body).Decode(output); err != nil {
-		return err
-	}
-	return nil
+	return hosting_service.CallPublisher(ctx, method, path, input, output)
 }
 
 func deploymentJSONError(ctx *context.Context, status int, message string) {

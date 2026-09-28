@@ -1,0 +1,7 @@
+{{/* . is a dict: ctxData, Name (input name), Value, Target (target name or "") */}}
+<div class="managed-address" data-managed-subdomain data-check-url="{{.ctxData.RepoLink}}/deploy/managed/subdomain" data-target="{{.Target}}">
+	<span class="managed-address-scheme">https://</span>
+	<input name="{{.Name}}" value="{{.Value}}" required minlength="3" maxlength="40" pattern="[a-z][a-z0-9\-]{1,38}[a-z0-9]" autocomplete="off" spellcheck="false" autocapitalize="none" aria-label="{{ctx.Locale.Tr "platform.hosting.address"}}">
+	<span class="managed-address-suffix">.{{.ctxData.ManagedBaseDomain}}</span>
+</div>
+<p class="managed-address-status" data-managed-subdomain-status aria-live="polite"></p>

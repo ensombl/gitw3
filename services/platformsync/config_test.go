@@ -46,3 +46,12 @@ func TestConfigAllowsW3DSOverride(t *testing.T) {
 	assert.Equal(t, "http://localhost:4321", config.RegistryURL)
 	assert.Equal(t, "http://localhost:3001", config.ProvisionerURL)
 }
+
+func TestConfigLoadsPreIssuedPlatformToken(t *testing.T) {
+	setRequiredConfigEnvironment(t)
+	t.Setenv("PLATFORM_SYNC_PLATFORM_TOKEN", "pre-issued-token")
+
+	config, err := ConfigFromEnv()
+	require.NoError(t, err)
+	assert.Equal(t, "pre-issued-token", config.PlatformToken)
+}

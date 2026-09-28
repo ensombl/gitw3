@@ -866,6 +866,10 @@ backend: go-check generate-backend $(EXECUTABLE)
 platform-manifest-sync: | verify-version
 	CGO_ENABLED=0 $(GO) build $(GOFLAGS) -o platform-manifest-sync ./cmd/platform-manifest-sync
 
+.PHONY: gitw3-scaler
+gitw3-scaler: | verify-version
+	CGO_ENABLED=1 $(GO) build $(GOFLAGS) -o gitw3-scaler ./cmd/gitw3-scaler
+
 # We generate the backend before the frontend in case we in future we want to generate things in the frontend from generated files in backend
 .PHONY: generate
 generate: generate-backend

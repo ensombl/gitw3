@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"forgejo.org/modules/w3ds"
@@ -63,6 +64,11 @@ type Job struct {
 	Status               Status                       `json:"status"`
 	Attempts             int                          `json:"attempts"`
 	LastError            string                       `json:"lastError,omitempty"`
+	LastErrorStage       string                       `json:"lastErrorStage,omitempty"`
+	LastErrorCode        string                       `json:"lastErrorCode,omitempty"`
+	LastErrorPath        string                       `json:"lastErrorPath,omitempty"`
+	LastScheduleKey      string                       `json:"lastScheduleKey,omitempty"`
+	FailureScheduleKey   string                       `json:"failureScheduleKey,omitempty"`
 	NextAttempt          time.Time                    `json:"nextAttempt"`
 	CreatedAt            time.Time                    `json:"createdAt"`
 	UpdatedAt            time.Time                    `json:"updatedAt"`
@@ -78,23 +84,27 @@ const (
 )
 
 type DeploymentJob struct {
-	ID                        string           `json:"id"`
-	RepositoryID              int64            `json:"repositoryId"`
-	PlatformEName             string           `json:"platformEName"`
-	DeploymentEName           string           `json:"deploymentEName"`
-	VersionEName              string           `json:"versionEName"`
-	DeploymentName            string           `json:"deploymentName"`
-	Environment               string           `json:"environment"`
-	DeployerEName             string           `json:"deployerEName"`
-	Version                   string           `json:"version"`
-	ReleaseTag                string           `json:"releaseTag"`
-	CommitSHA                 string           `json:"commitSha"`
-	PublicKey                 string           `json:"publicKey"`
-	RegistryEntropy           string           `json:"registryEntropy"`
-	Namespace                 string           `json:"namespace"`
-	BundlePayload             string           `json:"bundlePayload"`
-	WalletSignature           string           `json:"walletSignature,omitempty"`
-	KeyBindingCertificate     string           `json:"keyBindingCertificate,omitempty"`
+	ID                    string `json:"id"`
+	RepositoryID          int64  `json:"repositoryId"`
+	PlatformEName         string `json:"platformEName"`
+	DeploymentEName       string `json:"deploymentEName"`
+	VersionEName          string `json:"versionEName"`
+	DeploymentName        string `json:"deploymentName"`
+	Environment           string `json:"environment"`
+	DeployerEName         string `json:"deployerEName"`
+	Version               string `json:"version"`
+	ReleaseTag            string `json:"releaseTag"`
+	CommitSHA             string `json:"commitSha"`
+	PublicKey             string `json:"publicKey"`
+	RegistryEntropy       string `json:"registryEntropy"`
+	Namespace             string `json:"namespace"`
+	BundlePayload         string `json:"bundlePayload"`
+	WalletSignature       string `json:"walletSignature,omitempty"`
+	KeyBindingCertificate string `json:"keyBindingCertificate,omitempty"`
+	// VersionSignature is the deployment key signature over VersionPayload,
+	// set when a later release is published without a new wallet signature.
+	VersionSignature          string           `json:"versionSignature,omitempty"`
+	VersionPayload            string           `json:"versionPayload,omitempty"`
 	ActivatesPlatform         bool             `json:"activatesPlatform,omitempty"`
 	DeploymentKeyDocumentID   string           `json:"deploymentKeyDocumentId,omitempty"`
 	SoftwareVersionDocumentID string           `json:"softwareVersionDocumentId,omitempty"`
@@ -293,25 +303,62 @@ func (s *Store) Published(limit int) ([]*Job, error) {
 }
 
 func (s *Store) Schedule(repositoryID int64, fullName, defaultBranch, sha string, archive bool) error {
-	job, err := s.Get(repositoryID)
-	if err != nil {
-		return err
+	eventKey := fmt.Sprintf("schedule:%s:%t", strings.ToLower(strings.TrimSpace(sha)), archive)
+	return s.ScheduleEvent(repositoryID, fullName, defaultBranch, sha, archive, eventKey)
+}
+
+// ScheduleEvent coalesces duplicate webhook deliveries without erasing the
+// failure and backoff that make a stuck publication diagnosable. A new target
+// wakes the durable job immediately, while retaining the previous error until
+// reconciliation either succeeds or produces a more recent one.
+func (s *Store) ScheduleEvent(repositoryID int64, fullName, defaultBranch, sha string, archive bool, eventKey string) error {
+	if repositoryID <= 0 || strings.TrimSpace(fullName) == "" || strings.TrimSpace(defaultBranch) == "" {
+		return errors.New("valid platform schedule is required")
 	}
-	now := time.Now().UTC()
-	if job == nil {
-		job = &Job{RepositoryID: repositoryID, CreatedAt: now}
-	}
-	job.FullName = fullName
-	job.DefaultBranch = defaultBranch
-	job.TargetSHA = sha
-	job.Archive = archive
-	job.LastError = ""
-	job.Attempts = 0
-	job.NextAttempt = now
-	if job.EName == "" {
-		job.Status = StatusIdentityPending
-	} else {
-		job.Status = StatusPublishing
-	}
-	return s.Save(job)
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(jobsBucket))
+		key := jobKey(repositoryID)
+		var job *Job
+		if data := bucket.Get(key); data != nil {
+			var decoded Job
+			if err := json.Unmarshal(data, &decoded); err != nil {
+				return err
+			}
+			job = &decoded
+		}
+
+		now := time.Now().UTC()
+		if job == nil {
+			job = &Job{RepositoryID: repositoryID, CreatedAt: now, Status: StatusIdentityPending}
+		} else {
+			if eventKey != "" && eventKey == job.LastScheduleKey {
+				return nil
+			}
+			if sha != "" && strings.EqualFold(sha, job.TargetSHA) && archive == job.Archive {
+				return nil
+			}
+		}
+
+		job.FullName = fullName
+		job.DefaultBranch = defaultBranch
+		if sha != "" {
+			job.TargetSHA = sha
+		}
+		job.Archive = archive
+		job.LastScheduleKey = eventKey
+		job.NextAttempt = now
+		if job.Status != StatusFailed {
+			if job.EName == "" {
+				job.Status = StatusIdentityPending
+			} else {
+				job.Status = StatusPublishing
+			}
+		}
+		job.UpdatedAt = now
+		data, err := json.Marshal(job)
+		if err != nil {
+			return err
+		}
+		return bucket.Put(key, data)
+	})
 }

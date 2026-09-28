@@ -1,0 +1,78 @@
+# GitW3 worker autoscaler, pinned to the primary manager.
+#   printf '%s' "$SCOPED_DO_TOKEN" | docker secret create gitw3_scaler_do_token -
+#   docker stack deploy -c scaler.stack.yml gitw3-scaler
+#
+# The scaler reaches Docker only through its own socket proxy on an internal
+# network; the proxy exposes nodes, services, tasks and swarm, nothing else.
+version: "3.8"
+
+services:
+  scaler:
+    image: gitw3-scaler:latest
+    environment:
+      DOCKER_HOST: tcp://proxy:2375
+      DO_TOKEN_FILE: /run/secrets/gitw3_scaler_do_token
+      DO_REGION: ams3
+      DO_SIZE: s-2vcpu-4gb
+      VPC_UUID: "<terraform output vpc_uuid>"
+      SSH_KEYS: "<fingerprint>"
+      WORKER_TAG: gitw3-worker
+      MANAGER_PRIVATE_IP: "<terraform output manager_private_ips[0]>"
+      MIN_WORKERS: "1"
+      MAX_WORKERS: "5"
+      CPU_HIGH: "0.75"
+      CPU_LOW: "0.30"
+      STATE_PATH: /data/scaler.db
+    secrets:
+      - gitw3_scaler_do_token
+    volumes:
+      - state:/data
+    networks:
+      - scaler
+      - egress
+    ports:
+      # Metrics for alerting; restricted to the VPN by the manager firewall.
+      - target: 9180
+        published: 9180
+        mode: host
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+          - node.labels.gitw3.role == manager
+      restart_policy:
+        condition: any
+
+  proxy:
+    image: docker.io/tecnativa/docker-socket-proxy:0.3.0
+    environment:
+      NODES: "1"
+      SERVICES: "1"
+      TASKS: "1"
+      SWARM: "1"
+      POST: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - scaler
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+          - node.labels.gitw3.role == manager
+
+networks:
+  scaler:
+    driver: overlay
+    internal: true
+    attachable: false
+  egress:
+    driver: overlay
+
+volumes:
+  state:
+
+secrets:
+  gitw3_scaler_do_token:
+    external: true

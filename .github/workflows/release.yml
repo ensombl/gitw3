@@ -41,6 +41,9 @@ jobs:
       - name: Install frontend dependencies
         run: make deps-frontend
 
+      - name: Verify source-controlled GitW3 theme
+        run: ./branding/check-theme.sh
+
       # Applied to the working tree, so it reaches both the binary built below and the
       # container image — the Docker build uses this same tree as its build context.
       - name: Apply GitW3 branding
@@ -61,6 +64,9 @@ jobs:
           ./"$name" --version
           ./"$name" --version | grep -q '^gitw3 version' \
             || { echo "::error::branding did not apply — refusing to publish"; exit 1; }
+          ./branding/check-theme.sh \
+            public/assets/css/theme-forgejo-light.css \
+            public/assets/css/theme-forgejo-dark.css
           sha256sum "$name" > "$name.sha256"
 
       - uses: docker/setup-buildx-action@v4
