@@ -79,6 +79,19 @@ resource "digitalocean_firewall" "manager" {
     source_tags = [digitalocean_tag.all["forgejo"].id]
   }
 
+  # Scaler metrics for alerting and GitW3.
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "9180"
+    source_addresses = var.vpn_cidrs
+  }
+
+  inbound_rule {
+    protocol    = "tcp"
+    port_range  = "9180"
+    source_tags = [digitalocean_tag.all["forgejo"].id]
+  }
+
   # Public app traffic through Traefik.
   inbound_rule {
     protocol         = "tcp"
