@@ -23,11 +23,9 @@ import (
 )
 
 const (
-	maxConfigSize       = 64 << 10
-	maxComposeSize      = 256 << 10
-	deploymentKeyMount  = "/run/secrets/w3ds-deployment-key.json"
-	deploymentKeyEnvVar = "W3DS_DEPLOYMENT_KEY_FILE"
-	// deploymentKeyJSONEnvVar carries the key file content to compose services.
+	maxConfigSize  = 64 << 10
+	maxComposeSize = 256 << 10
+	// deploymentKeyJSONEnvVar carries the app's w3ds-deployment-key.json content.
 	deploymentKeyJSONEnvVar = "W3DS_DEPLOYMENT_KEY_JSON"
 )
 
@@ -180,9 +178,6 @@ func provisionTarget(ctx context.Context, repo *repo_model.Repository, target *h
 		})
 	} else {
 		target.DokployAppID, _, err = c.Dokploy.CreateApp(ctx, appSpec(repo, target, spec))
-		if err == nil {
-			err = c.Dokploy.AddFileMount(ctx, target.DokployAppID, deploymentKeyMount, keyFile)
-		}
 	}
 	if err != nil {
 		return fmt.Errorf("create Dokploy app: %w", err)

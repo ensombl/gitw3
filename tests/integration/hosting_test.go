@@ -45,7 +45,6 @@ func (f *hostingFakes) CreateApp(_ context.Context, spec hosting_service.AppSpec
 func (f *hostingFakes) UpdateApp(context.Context, string, hosting_service.AppSpec) error { return nil }
 func (f *hostingFakes) DeleteApp(context.Context, string) error                          { return nil }
 func (f *hostingFakes) SetEnv(context.Context, string, map[string]string) error          { return nil }
-func (f *hostingFakes) AddFileMount(context.Context, string, string, string) error       { return nil }
 func (f *hostingFakes) DeployImage(_ context.Context, appID, ref, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

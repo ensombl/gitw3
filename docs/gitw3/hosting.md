@@ -102,8 +102,7 @@ GitW3 injects these environment variables:
 - `PORT`, unless the app sets its own
 - `GITW3_URL`, `GITW3_RELEASE`, `GITW3_COMMIT`, `GITW3_TARGET`
 - `W3DS_DEPLOYMENT_ENAME`
-- `W3DS_DEPLOYMENT_KEY_FILE`, which points at the mounted `w3ds-deployment-key.json` (single-image apps)
-- `W3DS_DEPLOYMENT_KEY_JSON`, the same key file content, for compose services
+- `W3DS_DEPLOYMENT_KEY_JSON`, the app's `w3ds-deployment-key.json` content (set on every service; file mounts cannot reach worker nodes)
 
 The deployment key is fully managed: GitW3 generates it on the first deploy, stores it encrypted, has
 the deployer's wallet authorise it once, and signs every later version with it. For compose apps, GitW3
