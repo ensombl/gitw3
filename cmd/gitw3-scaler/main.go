@@ -112,7 +112,7 @@ func load() (*settings, error) {
 		errs = append(errs, errors.New("CPU_LOW must be below CPU_HIGH"))
 	}
 	var sshKeys []string
-	for _, key := range strings.Split(env("SSH_KEYS", ""), ",") {
+	for key := range strings.SplitSeq(env("SSH_KEYS", ""), ",") {
 		if key = strings.TrimSpace(key); key != "" {
 			sshKeys = append(sshKeys, key)
 		}

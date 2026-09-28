@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -57,10 +58,7 @@ func (l *Loop) Metrics() Metrics {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	metrics := l.metrics
-	metrics.States = make(map[NodeState]int, len(l.metrics.States))
-	for state, count := range l.metrics.States {
-		metrics.States[state] = count
-	}
+	metrics.States = maps.Clone(l.metrics.States)
 	return metrics
 }
 

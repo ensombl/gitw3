@@ -6,7 +6,6 @@ package hosting
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	user_model "forgejo.org/models/user"
 	w3ds_model "forgejo.org/models/w3ds"
 	hosting_module "forgejo.org/modules/hosting"
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/setting"
 	api "forgejo.org/modules/structs"

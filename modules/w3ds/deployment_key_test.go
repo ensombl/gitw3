@@ -4,9 +4,10 @@
 package w3ds
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
+
+	"forgejo.org/modules/json"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

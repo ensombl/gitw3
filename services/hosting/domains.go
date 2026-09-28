@@ -43,9 +43,9 @@ func routable(spec *hosting_module.Target) bool {
 	return spec.Kind != hosting_module.KindCompose || spec.Service != ""
 }
 
-func attachPoolDomain(ctx context.Context, target *hosting_model.Target, spec *hosting_module.Target) (*hosting_model.Domain, error) {
+func attachPoolDomain(ctx context.Context, target *hosting_model.Target, spec *hosting_module.Target) error {
 	if !routable(spec) {
-		return nil, nil
+		return nil
 	}
 	domain, err := hosting_model.ClaimPoolDomain(ctx, target.ID)
 	if errors.Is(err, hosting_model.ErrPoolEmpty) {
@@ -53,12 +53,9 @@ func attachPoolDomain(ctx context.Context, target *hosting_model.Target, spec *h
 		domain, err = provisionPoolDomain(ctx, hosting_model.DomainAssigned, target.ID)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("assign a domain: %w", err)
+		return fmt.Errorf("assign a domain: %w", err)
 	}
-	if err := routeDomain(ctx, target, spec, domain); err != nil {
-		return nil, err
-	}
-	return domain, nil
+	return routeDomain(ctx, target, spec, domain)
 }
 
 func routeDomain(ctx context.Context, target *hosting_model.Target, spec *hosting_module.Target, domain *hosting_model.Domain) error {
@@ -81,8 +78,7 @@ func rerouteDomains(ctx context.Context, target *hosting_model.Target, spec *hos
 		return err
 	}
 	if len(domains) == 0 {
-		_, err := attachPoolDomain(ctx, target, spec)
-		return err
+		return attachPoolDomain(ctx, target, spec)
 	}
 	for _, domain := range domains {
 		if !domain.IsRoutable() {

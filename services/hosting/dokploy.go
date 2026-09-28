@@ -6,7 +6,6 @@ package hosting
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
 )
 

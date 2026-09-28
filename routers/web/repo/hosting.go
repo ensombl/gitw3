@@ -279,7 +279,7 @@ func HostingDeploymentStatus(ctx *context.Context) {
 		"id": deployment.ID, "status": deployment.Status, "tag": deployment.TagName,
 		"error": deployment.Error, "warning": deployment.Warning,
 		"final": deployment.Status.IsFinal() || deployment.Status == hosting_model.StatusLive,
-		"label": ctx.Locale.TrString("platform.hosting.status_" + string(deployment.Status)),
+		"label": ctx.Locale.TrString("platform.hosting.status." + string(deployment.Status)),
 	}
 	if deployment.Status == hosting_model.StatusLive {
 		response["url"] = hosting_service.PublicURL(ctx, target)

@@ -5,7 +5,6 @@ package hosting
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	hosting_model "forgejo.org/models/hosting"
 	repo_model "forgejo.org/models/repo"
 	hosting_module "forgejo.org/modules/hosting"
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/setting"
 	api "forgejo.org/modules/structs"

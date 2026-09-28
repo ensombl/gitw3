@@ -7,11 +7,11 @@ package hosting
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"forgejo.org/models/db"
 	hosting_module "forgejo.org/modules/hosting"
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/keying"
 	"forgejo.org/modules/timeutil"
 	"forgejo.org/modules/util"

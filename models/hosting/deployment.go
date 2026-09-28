@@ -5,11 +5,11 @@ package hosting
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 
 	"forgejo.org/models/db"
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/keying"
 	"forgejo.org/modules/timeutil"
 	"forgejo.org/modules/util"

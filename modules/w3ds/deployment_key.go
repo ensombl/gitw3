@@ -10,12 +10,13 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 	"strings"
 	"time"
+
+	"forgejo.org/modules/json"
 )
 
 // DeploymentKeyFormat matches the w3ds-deployment-key.json files the

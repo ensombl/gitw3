@@ -6,7 +6,6 @@ package scaler
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"forgejo.org/modules/json"
 )
 
 // DropletSpec is what the scaler asks DigitalOcean for.

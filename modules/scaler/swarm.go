@@ -6,7 +6,6 @@ package scaler
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"forgejo.org/modules/json"
 )
 
 // SwarmClient is the scaler's view of the swarm manager.

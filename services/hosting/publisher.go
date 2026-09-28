@@ -6,7 +6,6 @@ package hosting
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/w3ds"
 )

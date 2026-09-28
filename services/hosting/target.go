@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 	"strconv"
 	"time"
 
@@ -86,22 +87,13 @@ func LoadReleaseConfig(ctx context.Context, repo *repo_model.Repository, commitS
 		if err != nil {
 			return nil, fmt.Errorf("target %q: %w", target.Name, err)
 		}
-		if target.Service != "" && !containsString(file.Services(), target.Service) {
+		if target.Service != "" && !slices.Contains(file.Services(), target.Service) {
 			return nil, fmt.Errorf("target %q: service %q is not in %s", target.Name, target.Service, target.Compose)
 		}
 		result.Compose[target.Name] = file
 		result.Builds[target.Name] = builds
 	}
 	return result, nil
-}
-
-func containsString(values []string, value string) bool {
-	for _, candidate := range values {
-		if candidate == value {
-			return true
-		}
-	}
-	return false
 }
 
 // dokployAppName is the Swarm service or stack name of a target.
@@ -179,7 +171,7 @@ func provisionTarget(ctx context.Context, repo *repo_model.Repository, target *h
 	if err := hosting_model.UpdateTargetCols(ctx, target, "public_key", "private_key_enc", "dokploy_app_id", "dokploy_compose_id"); err != nil {
 		return err
 	}
-	if _, err := attachPoolDomain(ctx, target, spec); err != nil {
+	if err := attachPoolDomain(ctx, target, spec); err != nil {
 		return err
 	}
 	if spec.Domain != "" {

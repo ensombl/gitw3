@@ -9,9 +9,9 @@
 	{{if .ManagedBlocked}}
 		<div class="w3ds-empty-state">
 			{{svg "octicon-rocket" 48}}
-			<h2>{{ctx.Locale.Tr (printf "platform.hosting.blocked_%s" .ManagedBlocked)}}</h2>
-			<p>{{ctx.Locale.Tr (printf "platform.hosting.blocked_%s_help" .ManagedBlocked)}}</p>
-			{{if eq .ManagedBlocked "not_platform"}}<a class="ui primary button" href="{{.RepoLink}}/w3ds/welcome">{{ctx.Locale.Tr "platform.hosting.blocked_not_platform_action"}}</a>{{end}}
+			<h2>{{ctx.Locale.Tr (printf "platform.hosting.blocked.%s" .ManagedBlocked)}}</h2>
+			<p>{{ctx.Locale.Tr (printf "platform.hosting.blocked.%s_help" .ManagedBlocked)}}</p>
+			{{if eq .ManagedBlocked "not_platform"}}<a class="ui primary button" href="{{.RepoLink}}/w3ds/welcome">{{ctx.Locale.Tr "platform.hosting.blocked.not_platform_action"}}</a>{{end}}
 		</div>
 	{{else}}
 		<section class="w3ds-section managed-deploy-card">
@@ -141,7 +141,7 @@
 							{{range .Deployments}}
 								<tr>
 									<td><strong>{{.TagName}}</strong>{{if eq .Trigger "rollback"}} <span class="ui mini label">{{ctx.Locale.Tr "platform.hosting.trigger_rollback"}}</span>{{else if eq .Trigger "release"}} <span class="ui mini label">{{ctx.Locale.Tr "platform.hosting.trigger_release"}}</span>{{end}}</td>
-									<td><span class="ui mini label {{if eq .Status "live"}}green{{else if or (eq .Status "build_failed") (eq .Status "deploy_failed") (eq .Status "rolled_back")}}red{{else if or (eq .Status "superseded") (eq .Status "cancelled")}}{{else}}blue{{end}}">{{ctx.Locale.Tr (printf "platform.hosting.status_%s" .Status)}}</span></td>
+									<td><span class="ui mini label {{if eq .Status "live"}}green{{else if or (eq .Status "build_failed") (eq .Status "deploy_failed") (eq .Status "rolled_back")}}red{{else if or (eq .Status "superseded") (eq .Status "cancelled")}}{{else}}blue{{end}}">{{ctx.Locale.Tr (printf "platform.hosting.status.%s" .Status)}}</span></td>
 									<td class="text grey">{{DateUtils.TimeSince .StartedUnix}}</td>
 									<td class="managed-history-error">{{if .Error}}{{.Error}}{{else if .Warning}}{{svg "octicon-alert"}} {{.Warning}}{{end}}</td>
 									<td class="right aligned managed-history-actions">

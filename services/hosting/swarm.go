@@ -5,13 +5,13 @@ package hosting
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
 )
 

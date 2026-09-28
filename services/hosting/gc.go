@@ -7,6 +7,7 @@ import (
 	"context"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	hosting_model "forgejo.org/models/hosting"
@@ -42,7 +43,7 @@ func keptDigests(ctx context.Context) (map[string]bool, error) {
 			digests := []string{deployment.ImageDigest}
 			if images, err := deployment.Images(); err == nil {
 				for _, ref := range images {
-					if _, digest, ok := cutDigest(ref); ok {
+					if digest, ok := digestOf(ref); ok {
 						digests = append(digests, digest)
 					}
 				}
@@ -65,13 +66,10 @@ func keptDigests(ctx context.Context) (map[string]bool, error) {
 	return keep, nil
 }
 
-func cutDigest(ref string) (string, string, bool) {
-	for i := len(ref) - 1; i >= 0; i-- {
-		if ref[i] == '@' {
-			return ref[:i], ref[i+1:], true
-		}
-	}
-	return "", "", false
+// digestOf returns the digest of a digest-pinned image reference.
+func digestOf(ref string) (string, bool) {
+	_, digest, ok := strings.Cut(ref, "@")
+	return digest, ok
 }
 
 // CollectRegistryGarbage deletes build images that no target can roll back
@@ -134,7 +132,7 @@ func keepJobImage(ctx context.Context, jobID int64, keep map[string]bool) bool {
 		return false
 	}
 	for _, ref := range images {
-		if _, digest, ok := cutDigest(ref); ok && keep[digest] {
+		if digest, ok := digestOf(ref); ok && keep[digest] {
 			return true
 		}
 	}

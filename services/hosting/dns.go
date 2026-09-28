@@ -6,12 +6,12 @@ package hosting
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
 )
 
@@ -62,7 +62,9 @@ type cloudflareResponse struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 	} `json:"errors"`
-	Result json.RawMessage `json:"result"`
+	Result struct {
+		ID string `json:"id"`
+	} `json:"result"`
 }
 
 func (c *cloudflareDNS) do(ctx context.Context, method, path string, input any) (*cloudflareResponse, error) {
@@ -107,13 +109,10 @@ func (c *cloudflareDNS) CreateRecord(ctx context.Context, fqdn string) (string, 
 	if err != nil {
 		return "", err
 	}
-	var record struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(response.Result, &record); err != nil || record.ID == "" {
+	if response.Result.ID == "" {
 		return "", fmt.Errorf("cloudflare: record for %s has no id", fqdn)
 	}
-	return record.ID, nil
+	return response.Result.ID, nil
 }
 
 func (c *cloudflareDNS) DeleteRecord(ctx context.Context, recordID string) error {

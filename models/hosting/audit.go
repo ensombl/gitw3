@@ -5,9 +5,9 @@ package hosting
 
 import (
 	"context"
-	"encoding/json"
 
 	"forgejo.org/models/db"
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/log"
 	"forgejo.org/modules/timeutil"
 )

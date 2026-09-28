@@ -5,7 +5,6 @@ package hosting
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"forgejo.org/models/unittest"
 	user_model "forgejo.org/models/user"
 	hosting_module "forgejo.org/modules/hosting"
+	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
 	"forgejo.org/modules/test"
 
@@ -97,9 +97,9 @@ func TestBuildCallbackDeploysDigest(t *testing.T) {
 	f.registry.images["user2-repo1-web@"+testDigest] = true
 
 	body, signature := signedCallback(t, BuildCallback{JobID: job.ID, Nonce: job.Nonce, Status: "success", Digests: map[string]string{"": testDigest}})
-	assert.ErrorIs(t, HandleBuildCallback(ctx, body, "sha256=deadbeef"), ErrCallbackUnauthorized)
+	require.ErrorIs(t, HandleBuildCallback(ctx, body, "sha256=deadbeef"), ErrCallbackUnauthorized)
 	require.NoError(t, HandleBuildCallback(ctx, body, signature))
-	assert.ErrorIs(t, HandleBuildCallback(ctx, body, signature), ErrCallbackReplayed)
+	require.ErrorIs(t, HandleBuildCallback(ctx, body, signature), ErrCallbackReplayed)
 
 	deployment = reload(t, deployment.ID)
 	assert.Equal(t, hosting_model.StatusDeploying, deployment.Status)
@@ -135,7 +135,7 @@ func TestBuildCallbackRejectsUnknownDigest(t *testing.T) {
 	// The digest exists, but under another app's image name.
 	f.registry.images["someone-else-web@"+testDigest] = true
 	body, signature := signedCallback(t, BuildCallback{JobID: job.ID, Nonce: job.Nonce, Status: "success", Digests: map[string]string{"": testDigest}})
-	assert.ErrorIs(t, HandleBuildCallback(ctx, body, signature), ErrCallbackRejected)
+	require.ErrorIs(t, HandleBuildCallback(ctx, body, signature), ErrCallbackRejected)
 	assert.Equal(t, hosting_model.StatusBuildFailed, reload(t, deployment.ID).Status)
 	assert.Empty(t, f.dokploy.images)
 }

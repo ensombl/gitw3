@@ -166,7 +166,7 @@ func TestSourceURL(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	query := SignSourceURL("secret", 7, now, time.Minute)
 	var exp, sig string
-	for _, part := range strings.Split(query, "&") {
+	for part := range strings.SplitSeq(query, "&") {
 		key, value, _ := strings.Cut(part, "=")
 		if key == "exp" {
 			exp = value

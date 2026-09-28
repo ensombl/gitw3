@@ -6,6 +6,7 @@ package hosting
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strconv"
 
 	hosting_model "forgejo.org/models/hosting"
@@ -148,9 +149,7 @@ func deployToCluster(ctx context.Context, target *hosting_model.Target, deployme
 // variables win for PORT; GITW3_* names are reserved.
 func withPlatformEnv(ctx context.Context, target *hosting_model.Target, spec *hosting_module.Target, deployment *hosting_model.Deployment, env map[string]string) map[string]string {
 	runtime := make(map[string]string, len(env)+6)
-	for key, value := range env {
-		runtime[key] = value
-	}
+	maps.Copy(runtime, env)
 	if _, ok := runtime["PORT"]; !ok && spec.Port > 0 {
 		runtime["PORT"] = strconv.Itoa(spec.Port)
 	}

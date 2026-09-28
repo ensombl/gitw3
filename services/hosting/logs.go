@@ -53,8 +53,8 @@ func BuildLog(ctx context.Context, deployment *hosting_model.Deployment) (string
 func redactLog(log string) string {
 	lines := strings.Split(log, "\n")
 	for i, line := range lines {
-		if index := strings.Index(line, "&sig="); index >= 0 {
-			lines[i] = line[:index] + "&sig=[redacted]"
+		if before, _, found := strings.Cut(line, "&sig="); found {
+			lines[i] = before + "&sig=[redacted]"
 		}
 	}
 	return strings.Join(lines, "\n")
