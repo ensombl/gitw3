@@ -3,7 +3,7 @@
 # build node and is reached through BUILDKIT_HOST.
 FROM docker.io/library/debian:bookworm-slim
 
-ARG TRIVY_VERSION=0.56.2
+ARG TRIVY_VERSION=0.74.0
 ARG BUILDX_VERSION=0.18.0
 
 RUN apt-get update \
