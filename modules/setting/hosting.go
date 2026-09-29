@@ -28,8 +28,6 @@ var Hosting = struct {
 
 	DokployURL    string
 	DokployAPIKey string
-	// DokployRegistryID is the Dokploy registry entry holding the pull token for the deployments org.
-	DokployRegistryID string
 	// DokployEnvironmentID is the Dokploy project environment that holds every managed app.
 	DokployEnvironmentID string
 	// DokployServerID pins applications to a Dokploy server; empty means the local manager.
@@ -48,11 +46,15 @@ var Hosting = struct {
 	BuilderRef      string
 	RegistryOwner   string
 	RegistryHost    string
-	CallbackSecret  string
-	SourceURLTTL    time.Duration
-	BuildQueueAlert time.Duration
-	HealthTimeout   time.Duration
-	KeepDigests     int
+	// RegistryPullUser and RegistryPullToken are the read-only credentials the
+	// cluster pulls app images with (the deployments-pull bot).
+	RegistryPullUser  string
+	RegistryPullToken string
+	CallbackSecret    string
+	SourceURLTTL      time.Duration
+	BuildQueueAlert   time.Duration
+	HealthTimeout     time.Duration
+	KeepDigests       int
 	// ScalerMetricsURL is the scaler's /metrics endpoint, used for "node count at max" alerts.
 	ScalerMetricsURL string
 	// RegistryAlertBytes raises an alert when the deployments registry grows past it (0 disables).
@@ -91,7 +93,6 @@ func loadHostingFrom(rootCfg ConfigProvider) {
 	Hosting.Enabled = section.Key("ENABLED").MustBool(false)
 	Hosting.DokployURL = strings.TrimRight(section.Key("DOKPLOY_URL").MustString(""), "/")
 	Hosting.DokployAPIKey = section.Key("DOKPLOY_API_KEY").MustString("")
-	Hosting.DokployRegistryID = section.Key("DOKPLOY_REGISTRY_ID").MustString("")
 	Hosting.DokployEnvironmentID = section.Key("DOKPLOY_ENVIRONMENT_ID").MustString("")
 	Hosting.DokployServerID = section.Key("DOKPLOY_SERVER_ID").MustString("")
 	Hosting.PlacementConstraints = section.Key("PLACEMENT_CONSTRAINTS").Strings(",")
@@ -105,6 +106,8 @@ func loadHostingFrom(rootCfg ConfigProvider) {
 	Hosting.BuilderRef = section.Key("BUILDER_REF").MustString("")
 	Hosting.RegistryOwner = section.Key("REGISTRY_OWNER").MustString("deployments")
 	Hosting.RegistryHost = section.Key("REGISTRY_HOST").MustString("")
+	Hosting.RegistryPullUser = section.Key("REGISTRY_PULL_USER").MustString("deployments-pull")
+	Hosting.RegistryPullToken = section.Key("REGISTRY_PULL_TOKEN").MustString("")
 	Hosting.CallbackSecret = section.Key("CALLBACK_SECRET").MustString("")
 	Hosting.SourceURLTTL = section.Key("SOURCE_URL_TTL").MustDuration(30 * time.Minute)
 	Hosting.BuildQueueAlert = section.Key("BUILD_QUEUE_ALERT").MustDuration(15 * time.Minute)

@@ -5,6 +5,7 @@ package hosting
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -230,6 +231,27 @@ func TestRolloutRolledBack(t *testing.T) {
 	require.NoError(t, SyncDeployments(ctx))
 	assert.Equal(t, hosting_model.StatusRolledBack, reload(t, deployment.ID).Status)
 	assert.Contains(t, reload(t, deployment.ID).Error, "Cannot find module", "the crash reason reaches the user")
+}
+
+func TestRolloutRejectedByDokploy(t *testing.T) {
+	f := setupFakes(t)
+	ctx := db.DefaultContext
+	_, user, target := newTarget(t)
+	deployment, job := queueDeployment(t, target, user, "v2.0.0")
+	f.registry.images["user2-repo1-web@"+testDigest] = true
+	body, signature := signedCallback(t, BuildCallback{JobID: job.ID, Nonce: job.Nonce, Status: "success", Digests: map[string]string{"": testDigest}})
+	require.NoError(t, HandleBuildCallback(ctx, body, signature))
+	require.Equal(t, hosting_model.StatusDeploying, reload(t, deployment.ID).Status)
+
+	// A failed job of an earlier deployment does not fail this one.
+	f.dokploy.lastDeploy = [2]string{fmt.Sprintf("GitW3 v1.0.0 (#%d)", deployment.ID+100), "error"}
+	require.NoError(t, SyncDeployments(ctx))
+	assert.Equal(t, hosting_model.StatusDeploying, reload(t, deployment.ID).Status)
+
+	f.dokploy.lastDeploy = [2]string{fmt.Sprintf("GitW3 v2.0.0 (#%d)", deployment.ID), "error"}
+	require.NoError(t, SyncDeployments(ctx))
+	assert.Equal(t, hosting_model.StatusDeployFailed, reload(t, deployment.ID).Status)
+	assert.Contains(t, reload(t, deployment.ID).Error, "could not start this release")
 }
 
 func TestW3DSVersionGate(t *testing.T) {

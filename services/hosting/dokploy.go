@@ -64,6 +64,30 @@ type DomainSpec struct {
 type AppState struct {
 	AppName string
 	Status  string // idle, running, done, error
+	// LastDeployTitle and LastDeployStatus describe Dokploy's newest deploy
+	// job of the app, which GitW3 titles with its deployment ID.
+	LastDeployTitle  string
+	LastDeployStatus string
+}
+
+// DeployFailed reports whether Dokploy's job for the given GitW3 deployment
+// failed before handing the service to Swarm (for example a failed pull).
+func (s *AppState) DeployFailed(deploymentID int64) bool {
+	return s.LastDeployStatus == "error" && strings.HasSuffix(s.LastDeployTitle, "(#"+strconv.FormatInt(deploymentID, 10)+")")
+}
+
+type dokployDeploy struct {
+	Title  string `json:"title"`
+	Status string `json:"status"`
+}
+
+// newestDeploy returns the most recently created deploy job; Dokploy lists
+// them newest first.
+func newestDeploy(deploys []dokployDeploy) dokployDeploy {
+	if len(deploys) == 0 {
+		return dokployDeploy{}
+	}
+	return deploys[0]
 }
 
 // DokployClient is the subset of Dokploy the deploy service uses.
@@ -89,7 +113,6 @@ type dokployHTTPClient struct {
 	apiKey        string
 	environmentID string
 	serverID      string
-	registryID    string
 	http          *http.Client
 }
 
@@ -100,7 +123,6 @@ func NewDokployClient() DokployClient {
 		apiKey:        setting.Hosting.DokployAPIKey,
 		environmentID: setting.Hosting.DokployEnvironmentID,
 		serverID:      setting.Hosting.DokployServerID,
-		registryID:    setting.Hosting.DokployRegistryID,
 		http:          &http.Client{Timeout: setting.Hosting.HTTPTimeout},
 	}
 }
@@ -206,9 +228,11 @@ func (c *dokployHTTPClient) UpdateApp(ctx context.Context, appID string, spec Ap
 			"Monitor": int64(10 * time.Second), "MaxFailureRatio": 0, "Order": "start-first",
 		},
 	}
-	if c.registryID != "" {
-		input["registryId"] = c.registryID
-	}
+	// A Dokploy registry on an app means "push the image there after pulling
+	// it", which fails for digest references. Pull credentials go on the
+	// Docker provider instead (DeployImage), so clear any registry set by
+	// earlier versions.
+	input["registryId"] = nil
 	if len(setting.Hosting.PlacementConstraints) > 0 {
 		input["placementSwarm"] = map[string]any{"Constraints": setting.Hosting.PlacementConstraints}
 	}
@@ -248,13 +272,18 @@ func (c *dokployHTTPClient) SetEnv(ctx context.Context, appID string, env map[st
 }
 
 func (c *dokployHTTPClient) DeployImage(ctx context.Context, appID, imageRef, title string) error {
-	// Registry credentials come from the Dokploy registry entry (registryId),
-	// so no credentials are sent with the image reference.
-	// Dokploy requires the credential fields to be present, even as null.
-	if err := c.call(ctx, http.MethodPost, "application.saveDockerProvider", map[string]any{
+	// Dokploy pulls with these credentials and hands them to Swarm so workers
+	// can pull too. It requires the fields to be present, even as null.
+	provider := map[string]any{
 		"applicationId": appID, "dockerImage": imageRef,
 		"username": nil, "password": nil, "registryUrl": nil,
-	}, nil); err != nil {
+	}
+	if setting.Hosting.RegistryPullToken != "" {
+		provider["username"] = setting.Hosting.RegistryPullUser
+		provider["password"] = setting.Hosting.RegistryPullToken
+		provider["registryUrl"] = setting.HostingRegistryHost()
+	}
+	if err := c.call(ctx, http.MethodPost, "application.saveDockerProvider", provider, nil); err != nil {
 		return err
 	}
 	return c.call(ctx, http.MethodPost, "application.deploy", map[string]any{
@@ -264,13 +293,15 @@ func (c *dokployHTTPClient) DeployImage(ctx context.Context, appID, imageRef, ti
 
 func (c *dokployHTTPClient) AppState(ctx context.Context, appID string) (*AppState, error) {
 	var app struct {
-		AppName           string `json:"appName"`
-		ApplicationStatus string `json:"applicationStatus"`
+		AppName           string          `json:"appName"`
+		ApplicationStatus string          `json:"applicationStatus"`
+		Deployments       []dokployDeploy `json:"deployments"`
 	}
 	if err := c.call(ctx, http.MethodGet, "application.one", url.Values{"applicationId": {appID}}, &app); err != nil {
 		return nil, err
 	}
-	return &AppState{AppName: app.AppName, Status: app.ApplicationStatus}, nil
+	last := newestDeploy(app.Deployments)
+	return &AppState{AppName: app.AppName, Status: app.ApplicationStatus, LastDeployTitle: last.Title, LastDeployStatus: last.Status}, nil
 }
 
 func (c *dokployHTTPClient) CreateCompose(ctx context.Context, spec ComposeSpec) (string, string, error) {
@@ -309,13 +340,15 @@ func (c *dokployHTTPClient) DeployStack(ctx context.Context, composeID, compose 
 
 func (c *dokployHTTPClient) ComposeState(ctx context.Context, composeID string) (*AppState, error) {
 	var compose struct {
-		AppName       string `json:"appName"`
-		ComposeStatus string `json:"composeStatus"`
+		AppName       string          `json:"appName"`
+		ComposeStatus string          `json:"composeStatus"`
+		Deployments   []dokployDeploy `json:"deployments"`
 	}
 	if err := c.call(ctx, http.MethodGet, "compose.one", url.Values{"composeId": {composeID}}, &compose); err != nil {
 		return nil, err
 	}
-	return &AppState{AppName: compose.AppName, Status: compose.ComposeStatus}, nil
+	last := newestDeploy(compose.Deployments)
+	return &AppState{AppName: compose.AppName, Status: compose.ComposeStatus, LastDeployTitle: last.Title, LastDeployStatus: last.Status}, nil
 }
 
 func (c *dokployHTTPClient) AddDomain(ctx context.Context, spec DomainSpec) (string, error) {
