@@ -344,6 +344,30 @@ func HostingBuildLog(ctx *context.Context) {
 	_, _ = ctx.Resp.Write([]byte(output))
 }
 
+// HostingAppLog shows what a deployed app wrote to stdout and stderr. App
+// output can hold user data, so it needs the same access as deploying.
+func HostingAppLog(ctx *context.Context) {
+	target := managedTargetFromPath(ctx)
+	if target == nil {
+		return
+	}
+	output, err := hosting_service.AppLog(ctx, target)
+	switch {
+	case errors.Is(err, hosting_service.ErrAppLogsUnavailable):
+		output = ctx.Locale.TrString("platform.hosting.app_logs_unavailable")
+	case err != nil:
+		log.Warn("App logs of hosting target %d: %v", target.ID, err)
+		if output == "" {
+			output = ctx.Locale.TrString("platform.hosting.app_logs_failed")
+		}
+	case output == "":
+		output = ctx.Locale.TrString("platform.hosting.app_logs_empty")
+	}
+	ctx.Resp.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	ctx.Resp.Header().Set("Cache-Control", "no-store")
+	_, _ = ctx.Resp.Write([]byte(output))
+}
+
 // HostingCancel cancels a deployment that has not started rolling out.
 func HostingCancel(ctx *context.Context) {
 	deployment := managedDeployment(ctx)

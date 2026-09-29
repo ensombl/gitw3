@@ -254,6 +254,20 @@ func TestRolloutRejectedByDokploy(t *testing.T) {
 	assert.Contains(t, reload(t, deployment.ID).Error, "could not start this release")
 }
 
+func TestAppLog(t *testing.T) {
+	f := setupFakes(t)
+	_, _, target := newTarget(t)
+	f.swarm.logs = map[string]string{f.dokploy.apps[target.DokployAppID].AppName: "listening on 0.0.0.0:3000"}
+
+	logs, err := AppLog(db.DefaultContext, target)
+	require.NoError(t, err)
+	assert.Equal(t, "listening on 0.0.0.0:3000", logs)
+
+	target.DokployAppID = ""
+	_, err = AppLog(db.DefaultContext, target)
+	assert.ErrorIs(t, err, ErrAppLogsUnavailable)
+}
+
 func TestW3DSVersionGate(t *testing.T) {
 	f := setupFakes(t)
 	defer test.MockVariableValue(&setting.Hosting.RequireW3DS, true)()

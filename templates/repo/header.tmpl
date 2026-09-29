@@ -108,6 +108,13 @@
 						{{svg "octicon-tag"}} {{ctx.Locale.Tr "repo.releases"}}
 					</a>
 				{{end}}
+				{{/* Last, so Deploy stays the main tab. The repository root redirects
+				to Deploy in Simple Mode, so this opens the file tree directly. */}}
+				{{if and (.Permission.CanRead $.UnitTypeCode) (not .IsEmptyRepo)}}
+					<a class="{{if .PageIsViewCode}}active {{end}}item" href="{{.RepoLink}}/src/branch/{{PathEscapeSegments .Repository.DefaultBranch}}">
+						{{svg "octicon-code"}} {{ctx.Locale.Tr "repo.code"}}
+					</a>
+				{{end}}
 				{{else}}
 				{{if .Permission.CanRead $.UnitTypeCode}}
 					<a class="{{if .PageIsViewCode}}active {{end}}item" href="{{.RepoLink}}{{if and (ne .BranchName .Repository.DefaultBranch) (not $.PageIsWiki)}}/src/{{.BranchNameSubURL}}{{end}}">

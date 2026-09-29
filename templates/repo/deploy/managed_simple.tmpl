@@ -35,6 +35,9 @@
 					</button>
 				</form>
 			{{end}}
+			{{if and $.CanManagedDeploy $app.Target.DokployAppID}}
+				<button type="button" class="ui basic button managed-app-logs" data-managed-log="{{$.RepoLink}}/deploy/managed/targets/{{$app.Target.Name}}/logs" data-managed-log-title="{{ctx.Locale.Tr "platform.hosting.app_logs"}}" data-managed-log-live>{{svg "octicon-terminal"}} {{ctx.Locale.Tr "platform.hosting.app_logs"}}</button>
+			{{end}}
 		</section>
 
 		{{if and $.CanManageHosting $app.Subdomain}}

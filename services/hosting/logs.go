@@ -5,14 +5,46 @@ package hosting
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	actions_model "forgejo.org/models/actions"
 	hosting_model "forgejo.org/models/hosting"
+	repo_model "forgejo.org/models/repo"
 	"forgejo.org/modules/actions"
 )
 
-const maxBuildLogLines = 5000
+const (
+	maxBuildLogLines = 5000
+	appLogLines      = 300
+)
+
+// ErrAppLogsUnavailable means the cluster's logs cannot be read: no Swarm
+// proxy is configured, or the app was never deployed.
+var ErrAppLogsUnavailable = errors.New("app logs are unavailable")
+
+// AppLog returns what a running app wrote to stdout and stderr, newest last.
+func AppLog(ctx context.Context, target *hosting_model.Target) (string, error) {
+	c := current()
+	if c.Swarm == nil {
+		return "", ErrAppLogsUnavailable
+	}
+	if target.DokployComposeID != "" {
+		repo, err := repo_model.GetRepositoryByID(ctx, target.RepoID)
+		if err != nil {
+			return "", err
+		}
+		return c.Swarm.Logs(ctx, "", dokployAppName(repo, target), appLogLines)
+	}
+	if target.DokployAppID == "" {
+		return "", ErrAppLogsUnavailable
+	}
+	state, err := c.Dokploy.AppState(ctx, target.DokployAppID)
+	if err != nil {
+		return "", err
+	}
+	return c.Swarm.Logs(ctx, state.AppName, "", appLogLines)
+}
 
 // BuildLog returns the builder output of a deployment. The builder repo is
 // private to operators, so app owners read their logs through GitW3 instead
