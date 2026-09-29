@@ -5,6 +5,7 @@ package repo
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -296,13 +297,20 @@ func HostingDeploymentStatus(ctx *context.Context) {
 	response := map[string]any{
 		"id": deployment.ID, "status": deployment.Status, "tag": deployment.TagName,
 		"error": deployment.Error, "warning": deployment.Warning,
-		"final": deployment.Status.IsFinal() || deployment.Status == hosting_model.StatusLive,
-		"label": ctx.Locale.TrString("platform.hosting.status." + string(deployment.Status)),
+		"final":       deployment.Status.IsFinal() || deployment.Status == hosting_model.StatusLive,
+		"label":       ctx.Locale.TrString("platform.hosting.status." + string(deployment.Status)),
+		"headline":    ctx.Locale.TrString("platform.hosting.progress." + string(deployment.Status)),
+		"detail":      ctx.Locale.TrString("platform.hosting.progress." + string(deployment.Status) + "_help"),
+		"startedUnix": deployment.StartedUnix,
+		"logUrl":      fmt.Sprintf("%s/deploy/managed/%d/log", ctx.Repo.RepoLink, deployment.ID),
 	}
 	if deployment.Status == hosting_model.StatusLive {
 		response["url"] = hosting_service.PublicURL(ctx, target)
 	}
-	if deployment.Status == hosting_model.StatusAwaitingSignature {
+	// The wallet can approve the deployment record while the build runs, so the
+	// request is offered for as long as it is pending, not only once the build
+	// is waiting for it.
+	if !deployment.Status.IsFinal() && deployment.Status != hosting_model.StatusLive {
 		if signing := hosting_service.SigningRequestFor(ctx, target); signing != nil {
 			uri, err := deploymentSigningURI(strings.TrimRight(setting.AppURL, "/")+"/w3ds/deploy/callback",
 				signing.SigningPayload, signing.Message, signing.DeploymentEName, signing.VersionEName)

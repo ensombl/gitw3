@@ -19,57 +19,306 @@
 }
 
 .managed-progress {
-  margin-top: 1.5rem;
+  margin: 1.5rem auto 0;
+  max-width: 40rem;
+  padding: 1.25rem;
+  border: 1px solid var(--color-secondary);
+  border-radius: var(--border-radius-medium);
+  background: var(--color-box-body);
+  text-align: start;
+}
+
+.managed-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.managed-progress-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  background: var(--color-primary-alpha-20);
+  color: var(--color-primary);
+}
+
+.managed-progress-icon > span {
+  display: none;
+}
+
+.managed-progress[data-state="busy"] .managed-icon-busy {
+  display: inline-flex;
+  animation: managed-bob 1.6s ease-in-out infinite;
+}
+
+.managed-progress[data-state="done"] .managed-icon-done,
+.managed-progress[data-state="failed"] .managed-icon-failed {
+  display: inline-flex;
+}
+
+.managed-progress[data-state="done"] .managed-progress-icon {
+  background: var(--color-green-badge-bg);
+  color: var(--color-green);
+  animation: managed-pop 0.4s ease-out;
+}
+
+.managed-progress[data-state="failed"] .managed-progress-icon {
+  background: var(--color-red-badge-bg);
+  color: var(--color-red);
+}
+
+.managed-progress-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.managed-progress-title h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.managed-progress-status {
+  margin: 0.15rem 0 0;
+  color: var(--color-text-light-1);
+  overflow-wrap: anywhere;
+}
+
+.managed-progress-elapsed {
+  flex: none;
+  color: var(--color-text-light-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.managed-progress-bar {
+  height: 4px;
+  margin: 1rem 0 1.25rem;
+  border-radius: 2px;
+  background: var(--color-secondary);
+  overflow: hidden;
+}
+
+.managed-progress-bar > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--color-primary);
+  transition: width 0.6s ease;
+}
+
+.managed-progress[data-state="busy"] .managed-progress-bar > span {
+  background-image: linear-gradient(90deg, transparent 0, rgb(255 255 255 / 35%) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: managed-shimmer 1.5s linear infinite;
+}
+
+.managed-progress[data-state="done"] .managed-progress-bar > span {
+  background-color: var(--color-green);
+}
+
+.managed-progress[data-state="failed"] .managed-progress-bar > span {
+  background-color: var(--color-red);
 }
 
 .managed-steps {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.5rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .managed-steps li {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 0.8rem;
-  border: 1px solid var(--color-secondary);
-  border-radius: var(--border-radius);
+  gap: 0.8rem;
+  padding-bottom: 1rem;
   color: var(--color-text-light-2);
 }
 
-.managed-steps li.active {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+.managed-steps li:last-child {
+  padding-bottom: 0;
 }
 
-.managed-steps li.active svg {
-  animation: managed-pulse 1.4s ease-in-out infinite;
+/* The line joining one step's marker to the next. */
+.managed-steps li:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 2rem;
+  bottom: 0;
+  inset-inline-start: calc(1rem - 1px);
+  width: 2px;
+  background: var(--color-secondary);
+}
+
+.managed-steps li.completed:not(:last-child)::before {
+  background: var(--color-green);
+}
+
+.managed-step-marker {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid var(--color-secondary);
+  border-radius: 50%;
+  background: var(--color-box-body);
+}
+
+.managed-step-marker > svg {
+  display: none;
+}
+
+.managed-steps li:not(.completed, .failed) .managed-step-marker > svg:nth-child(1),
+.managed-steps li.completed .managed-step-marker > svg:nth-child(2),
+.managed-steps li.failed .managed-step-marker > svg:nth-child(3) {
+  display: block;
+}
+
+.managed-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  padding-top: 0.3rem;
+}
+
+.managed-step-body > span {
+  font-size: 0.9rem;
+}
+
+.managed-steps li.active {
+  color: var(--color-text);
+}
+
+.managed-steps li.active .managed-step-marker {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  animation: managed-ring 1.6s ease-in-out infinite;
 }
 
 .managed-steps li.completed {
+  color: var(--color-text-light-1);
+}
+
+.managed-steps li.completed .managed-step-marker {
   border-color: var(--color-green);
-  color: var(--color-green);
+  background: var(--color-green);
+  color: var(--color-white);
 }
 
 .managed-steps li.failed {
+  color: var(--color-red);
+}
+
+.managed-steps li.failed .managed-step-marker {
   border-color: var(--color-red);
   color: var(--color-red);
 }
 
-@keyframes managed-pulse {
+.managed-step-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  align-self: flex-start;
+  margin-top: 0.2rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.managed-sign-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.6rem;
+  padding: 0.9rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--border-radius-medium);
+  background: var(--color-primary-alpha-10);
+  color: var(--color-text);
+}
+
+.managed-sign-inline canvas {
+  flex: none;
+  max-width: 100%;
+  border-radius: var(--border-radius);
+  background: var(--color-white);
+}
+
+.managed-sign-inline > div {
+  flex: 1 1 12rem;
+}
+
+.managed-sign-inline p {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+}
+
+.managed-progress-done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-secondary);
+}
+
+.managed-progress-done .managed-live-url {
+  margin: 0;
+}
+
+@keyframes managed-bob {
   50% {
-    opacity: 0.35;
+    transform: translateY(-3px);
   }
 }
 
-.managed-progress-status {
-  margin: 0.75rem 0 0;
-  color: var(--color-text-light-1);
-  overflow-wrap: anywhere;
+@keyframes managed-pop {
+  0% {
+    transform: scale(0.6);
+  }
+
+  70% {
+    transform: scale(1.12);
+  }
+}
+
+@keyframes managed-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px var(--color-primary-alpha-20);
+  }
+
+  50% {
+    box-shadow: 0 0 0 7px var(--color-primary-alpha-10);
+  }
+}
+
+@keyframes managed-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .managed-progress,
+  .managed-progress * {
+    animation: none !important;
+  }
 }
 
 .managed-live-url,
@@ -182,10 +431,6 @@
 }
 
 @media (max-width: 767.98px) {
-  .managed-steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .managed-deploy-button {
     width: 100%;
   }
