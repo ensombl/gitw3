@@ -130,7 +130,7 @@
 							<div class="field {{if .Err_PlatformURL}}error{{end}}">
 								<label for="platform_url">{{ctx.Locale.Tr "platform.repo.application_url"}}</label>
 								<input id="platform_url" name="platform_url" type="url" value="{{$edit.PlatformURL}}" maxlength="2048" placeholder="https://my-platform.example">
-								<span class="help">{{ctx.Locale.Tr "platform.edit.application_help"}}</span>
+								<span class="help">{{if .PlatformURLSuggested}}{{ctx.Locale.Tr "platform.edit.application_suggested"}}{{else}}{{ctx.Locale.Tr "platform.edit.application_help"}}{{end}}</span>
 							</div>
 							<div class="field {{if .Err_PlatformLogoURL}}error{{end}}">
 								<label for="platform_logo_url">{{ctx.Locale.Tr "platform.edit.logo_url"}}</label>

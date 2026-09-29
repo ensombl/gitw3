@@ -99,7 +99,11 @@ func renderManagedDeploy(ctx *context.Context, manifest *w3ds.PlatformManifest) 
 	ctx.Data["PlatformEName"] = platformEName
 	ctx.Data["ManagedBaseDomain"] = setting.Hosting.Domains.BaseDomain
 	ctx.Data["ManagedAppReady"] = repoHasDeployConfig(ctx)
-	ctx.Data["ManagedSuggestedSubdomain"] = suggestSubdomain(ctx)
+	manifestURL := ""
+	if manifest != nil {
+		manifestURL = manifest.URL
+	}
+	ctx.Data["ManagedSuggestedSubdomain"] = suggestSubdomain(ctx, manifestURL)
 
 	views, err := hosting_service.ViewTargets(ctx, repo.ID)
 	if err != nil {
@@ -545,18 +549,42 @@ func repoHasDeployConfig(ctx *context.Context) bool {
 	return false
 }
 
-// suggestSubdomain proposes a free address named after the repository.
-func suggestSubdomain(ctx *context.Context) string {
+// suggestSubdomain proposes a free address: the one the platform manifest
+// already advertises, else one named after the repository.
+func suggestSubdomain(ctx *context.Context, manifestURL string) string {
 	repo := ctx.Repo.Repository
 	for _, candidate := range []string{
+		subdomainOf(strings.TrimRight(manifestURL, "/")),
 		hosting_module.SuggestSubdomain(repo.Name),
 		hosting_module.SuggestSubdomain(repo.OwnerName + "-" + repo.Name),
 	} {
+		if candidate == "" {
+			continue
+		}
 		if _, err := hosting_service.CheckSubdomain(ctx, candidate, 0); err == nil {
 			return candidate
 		}
 	}
 	return hosting_module.RandomName()
+}
+
+// suggestedPlatformURL is the managed hosting address of the repository's
+// app, offered as the platform's application URL until one is saved. The
+// deploy page then suggests the same address back.
+func suggestedPlatformURL(ctx *context.Context) string {
+	if !setting.Hosting.Enabled || setting.Hosting.Domains.BaseDomain == "" {
+		return ""
+	}
+	views, err := hosting_service.ViewTargets(ctx, ctx.Repo.Repository.ID)
+	if err != nil {
+		log.Warn("Load hosting targets of repository %d: %v", ctx.Repo.Repository.ID, err)
+	}
+	for _, view := range views {
+		if url := hosting_service.PublicURL(ctx, view.Target); url != "" {
+			return url
+		}
+	}
+	return "https://" + suggestSubdomain(ctx, "") + "." + setting.Hosting.Domains.BaseDomain
 }
 
 // subdomainOf returns the label of a URL under the base domain, or "".
