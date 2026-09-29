@@ -19,10 +19,14 @@ type StatusResponse = {
   id: number;
   status: string;
   label: string;
+  headline: string;
+  detail: string;
   tag: string;
   error?: string;
   warning?: string;
   url?: string;
+  logUrl?: string;
+  startedUnix?: number;
   final: boolean;
   signing?: Signing;
 };
@@ -37,12 +41,33 @@ const stepForStatus: Record<string, string> = {
   awaiting_certification: 'sign',
   deploying: 'rollout',
   live: 'live',
+  build_failed: 'build',
+  cancelled: 'build',
+  superseded: 'build',
+  deploy_failed: 'rollout',
+  rolled_back: 'rollout',
+};
+
+// Rough share of the whole deploy each status represents, for the progress bar.
+const percentForStatus: Record<string, number> = {
+  queued: 6,
+  building: 30,
+  built: 50,
+  awaiting_signature: 55,
+  awaiting_certification: 55,
+  deploying: 80,
+  live: 100,
 };
 
 function setHidden(element: Element | null | undefined, hidden: boolean) {
   if (!(element instanceof HTMLElement)) return;
   element.hidden = hidden;
   element.classList.toggle('tw-hidden', hidden);
+}
+
+function formatElapsed(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 async function errorMessage(response: Response) {
@@ -58,44 +83,92 @@ export function initManagedDeploy() {
   if (!root) return;
 
   const progress = root.querySelector<HTMLElement>('[data-managed-progress]');
-  const statusText = root.querySelector<HTMLElement>('[data-managed-status]');
-  const liveURL = root.querySelector<HTMLAnchorElement>('[data-managed-live-url]');
-  const signingDialog = root.querySelector<HTMLDialogElement>('#managed-signing-modal');
-  const signingCanvas = signingDialog?.querySelector<HTMLCanvasElement>('[data-managed-qr]');
-  const openWallet = signingDialog?.querySelector<HTMLAnchorElement>('[data-managed-open-wallet]');
+  const headline = progress?.querySelector<HTMLElement>('[data-managed-headline]');
+  const statusText = progress?.querySelector<HTMLElement>('[data-managed-status]');
+  const elapsed = progress?.querySelector<HTMLElement>('[data-managed-elapsed]');
+  const bar = progress?.querySelector<HTMLElement>('[data-managed-bar]');
+  const stepLog = progress?.querySelector<HTMLButtonElement>('[data-managed-step-log]');
+  const signPanel = progress?.querySelector<HTMLElement>('[data-managed-sign]');
+  const signingCanvas = signPanel?.querySelector<HTMLCanvasElement>('[data-managed-qr]');
+  const openWallet = signPanel?.querySelector<HTMLAnchorElement>('[data-managed-open-wallet]');
+  const done = progress?.querySelector<HTMLElement>('[data-managed-done]');
+  const liveURL = done?.querySelector<HTMLAnchorElement>('[data-managed-live-url]');
+  const liveOpen = done?.querySelector<HTMLAnchorElement>('[data-managed-live-open]');
+  const logDialog = root.querySelector<HTMLDialogElement>('#managed-log-modal');
+  const logOutput = logDialog?.querySelector<HTMLElement>('[data-managed-log-output]');
   let polling = 0;
   let shownSigning = '';
+  let startedAt = 0;
+  let ticking = 0;
 
-  const showSigning = async (signing: Signing) => {
-    if (!signingDialog || !signingCanvas || !openWallet || shownSigning === signing.uri) return;
+  const openLog = async (url: string) => {
+    if (!logDialog || !logOutput || !url) return;
+    logOutput.textContent = '…';
+    showModal(logDialog, () => {});
+    const response = await GET(url, {cache: 'no-store'});
+    logOutput.textContent = await response.text();
+    logOutput.scrollTop = logOutput.scrollHeight;
+  };
+  stepLog?.addEventListener('click', () => openLog(stepLog.dataset.url ?? ''));
+
+  // The wallet approval is shown inline in the Sign step. It can be approved
+  // while the build is still running, so it is not tied to a status.
+  const showSigning = async (signing?: Signing) => {
+    setHidden(signPanel, !signing);
+    if (!signing || !signingCanvas || !openWallet || shownSigning === signing.uri) return;
     shownSigning = signing.uri;
-    await toCanvas(signingCanvas, signing.uri, {scale: 5, margin: 4, errorCorrectionLevel: 'L'});
+    await toCanvas(signingCanvas, signing.uri, {scale: 4, margin: 2, errorCorrectionLevel: 'L'});
     openWallet.href = signing.uri;
-    if (!signingDialog.open) showModal(signingDialog, () => {});
+  };
+
+  const tick = () => {
+    if (elapsed && startedAt) elapsed.textContent = formatElapsed(Math.max(0, Math.floor(Date.now() / 1000) - startedAt));
+  };
+
+  const setBusy = (busy: boolean) => {
+    for (const form of root.querySelectorAll('[data-managed-deploy-form]')) setHidden(form, busy);
+    window.clearInterval(ticking);
+    if (busy) ticking = window.setInterval(tick, 1000);
   };
 
   const render = (result: StatusResponse) => {
     setHidden(progress, false);
-    const current = stepForStatus[result.status];
-    const currentIndex = stepOrder.indexOf(current);
-    for (const step of root.querySelectorAll<HTMLElement>('[data-managed-step]')) {
+    const live = result.status === 'live';
+    const failed = result.final && !live;
+    progress!.dataset.state = live ? 'done' : failed ? 'failed' : 'busy';
+    setBusy(!result.final);
+    if (result.startedUnix) startedAt = result.startedUnix;
+    tick();
+
+    const currentIndex = stepOrder.indexOf(stepForStatus[result.status] ?? 'build');
+    for (const step of progress!.querySelectorAll<HTMLElement>('[data-managed-step]')) {
       const index = stepOrder.indexOf(step.dataset.managedStep ?? '');
-      step.classList.toggle('active', index === currentIndex && !result.final);
-      step.classList.toggle('completed', index < currentIndex || result.status === 'live');
-      step.classList.toggle('failed', result.final && result.status !== 'live' && index === Math.max(currentIndex, 0));
+      const signingNow = step.dataset.managedStep === 'sign' && Boolean(result.signing);
+      step.classList.toggle('active', !result.final && (index === currentIndex || signingNow));
+      step.classList.toggle('completed', live || (index < currentIndex && !signingNow));
+      step.classList.toggle('failed', failed && index === currentIndex);
     }
+    if (bar) {
+      const percent = live ? 100 : percentForStatus[result.status] ?? Number.parseFloat(bar.style.width || '0');
+      bar.style.width = `${percent}%`;
+      bar.parentElement?.setAttribute('aria-valuenow', String(Math.round(percent)));
+    }
+    if (headline && (result.headline || result.label)) headline.textContent = result.headline || result.label;
     if (statusText) {
-      statusText.textContent = [result.tag, result.label, result.error || result.warning].filter(Boolean).join(' · ');
+      statusText.textContent = [result.tag, result.error || result.warning || result.detail].filter(Boolean).join(' · ');
     }
-    if (liveURL) {
-      setHidden(liveURL, !result.url);
-      if (result.url) {
-        liveURL.href = result.url;
-        liveURL.textContent = result.url;
-      }
+    if (stepLog) {
+      stepLog.dataset.url = result.logUrl ?? '';
+      setHidden(stepLog, !result.logUrl || result.status === 'queued');
     }
-    if (result.signing) showSigning(result.signing);
-    if (result.status !== 'awaiting_signature' && signingDialog?.open) signingDialog.close();
+    showSigning(result.signing);
+    setHidden(done, !(live && result.url));
+    if (live && result.url && liveURL && liveOpen) {
+      liveURL.href = result.url;
+      liveURL.textContent = result.url.replace(/^https?:\/\//, '');
+      liveOpen.href = result.url;
+      for (const badge of root.querySelectorAll('[data-managed-offline]')) setHidden(badge, true);
+    }
   };
 
   const pollOnce = async (statusURL: string, token: number) => {
@@ -106,13 +179,14 @@ export function initManagedDeploy() {
       const result = await response.json() as StatusResponse;
       render(result);
       if (result.final) {
-        window.setTimeout(() => window.location.reload(), result.status === 'live' ? 2500 : 1500);
+        // A failure is explained by the failure panel the page renders.
+        if (result.status !== 'live') window.setTimeout(() => window.location.reload(), 2000);
         return;
       }
     } catch (error) {
       if (statusText) statusText.textContent = error instanceof Error ? error.message : String(error);
     }
-    window.setTimeout(() => pollOnce(statusURL, token), 3000);
+    window.setTimeout(() => pollOnce(statusURL, token), 2500);
   };
   const poll = (statusURL: string) => pollOnce(statusURL, ++polling);
 
@@ -127,14 +201,17 @@ export function initManagedDeploy() {
       const response = await POST(form.action, {data: new FormData(form), headers: {accept: 'application/json'}});
       if (!response.ok) throw new Error(await errorMessage(response));
       const result = await response.json() as DeployResponse;
-      if (result.signing) await showSigning(result.signing);
+      startedAt = Math.floor(Date.now() / 1000);
+      render({id: result.id, status: 'queued', label: '', headline: '', detail: '', tag: '', final: false, signing: result.signing});
       poll(result.statusUrl);
     } catch (error) {
       setHidden(progress, false);
+      if (progress) progress.dataset.state = 'failed';
       if (statusText) statusText.textContent = error instanceof Error ? error.message : String(error);
       submit.disabled = false;
     } finally {
       submit.classList.remove('loading');
+      submit.disabled = false;
     }
   });
 
@@ -230,16 +307,7 @@ export function initManagedDeploy() {
     check();
   }
 
-  const logDialog = root.querySelector<HTMLDialogElement>('#managed-log-modal');
-  const logOutput = logDialog?.querySelector<HTMLElement>('[data-managed-log-output]');
   for (const button of root.querySelectorAll<HTMLButtonElement>('[data-managed-log]')) {
-    button.addEventListener('click', async () => {
-      if (!logDialog || !logOutput) return;
-      logOutput.textContent = '…';
-      showModal(logDialog, () => {});
-      const response = await GET(button.dataset.managedLog ?? '', {cache: 'no-store'});
-      logOutput.textContent = await response.text();
-      logOutput.scrollTop = logOutput.scrollHeight;
-    });
+    button.addEventListener('click', () => openLog(button.dataset.managedLog ?? ''));
   }
 }

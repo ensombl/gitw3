@@ -1,10 +1,59 @@
 <div class="managed-progress tw-hidden" data-managed-progress hidden aria-live="polite">
+	<div class="managed-progress-head">
+		<div class="managed-progress-icon" data-managed-icon>
+			<span class="managed-icon-busy">{{svg "octicon-rocket" 22}}</span>
+			<span class="managed-icon-done">{{svg "octicon-check" 22}}</span>
+			<span class="managed-icon-failed">{{svg "octicon-x" 22}}</span>
+		</div>
+		<div class="managed-progress-title">
+			<h3 data-managed-headline>{{ctx.Locale.Tr "platform.hosting.progress.starting"}}</h3>
+			<p class="managed-progress-status" data-managed-status></p>
+		</div>
+		<span class="managed-progress-elapsed" data-managed-elapsed></span>
+	</div>
+	<div class="managed-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><span data-managed-bar></span></div>
+
 	<ol class="managed-steps">
-		<li data-managed-step="build">{{svg "octicon-package"}} <span>{{ctx.Locale.Tr "platform.hosting.step_build"}}</span></li>
-		<li data-managed-step="sign">{{svg "octicon-shield-check"}} <span>{{ctx.Locale.Tr "platform.hosting.step_sign"}}</span></li>
-		<li data-managed-step="rollout">{{svg "octicon-sync"}} <span>{{ctx.Locale.Tr "platform.hosting.step_rollout"}}</span></li>
-		<li data-managed-step="live">{{svg "octicon-globe"}} <span>{{ctx.Locale.Tr "platform.hosting.step_live"}}</span></li>
+		<li data-managed-step="build">
+			<span class="managed-step-marker">{{svg "octicon-package" 16}}{{svg "octicon-check" 16}}{{svg "octicon-x" 16}}</span>
+			<div class="managed-step-body">
+				<strong>{{ctx.Locale.Tr "platform.hosting.step_build"}}</strong>
+				<span>{{ctx.Locale.Tr "platform.hosting.progress.step_build_help"}}</span>
+				<button type="button" class="managed-step-link tw-hidden" data-managed-step-log hidden>{{svg "octicon-terminal" 14}} {{ctx.Locale.Tr "platform.hosting.view_log"}}</button>
+			</div>
+		</li>
+		<li data-managed-step="sign">
+			<span class="managed-step-marker">{{svg "octicon-shield-check" 16}}{{svg "octicon-check" 16}}{{svg "octicon-x" 16}}</span>
+			<div class="managed-step-body">
+				<strong>{{ctx.Locale.Tr "platform.hosting.step_sign"}}</strong>
+				<span>{{ctx.Locale.Tr "platform.hosting.progress.step_sign_help"}}</span>
+				<div class="managed-sign-inline tw-hidden" data-managed-sign hidden>
+					<canvas data-managed-qr aria-label="{{ctx.Locale.Tr "platform.deploy.sign_qr"}}"></canvas>
+					<div>
+						<p>{{ctx.Locale.Tr "platform.hosting.sign_help"}}</p>
+						<a class="ui primary button" data-managed-open-wallet href="#">{{svg "octicon-device-mobile"}} {{ctx.Locale.Tr "platform.ppa.signing_open"}}</a>
+					</div>
+				</div>
+			</div>
+		</li>
+		<li data-managed-step="rollout">
+			<span class="managed-step-marker">{{svg "octicon-sync" 16}}{{svg "octicon-check" 16}}{{svg "octicon-x" 16}}</span>
+			<div class="managed-step-body">
+				<strong>{{ctx.Locale.Tr "platform.hosting.step_rollout"}}</strong>
+				<span>{{ctx.Locale.Tr "platform.hosting.progress.step_rollout_help"}}</span>
+			</div>
+		</li>
+		<li data-managed-step="live">
+			<span class="managed-step-marker">{{svg "octicon-globe" 16}}{{svg "octicon-check" 16}}{{svg "octicon-x" 16}}</span>
+			<div class="managed-step-body">
+				<strong>{{ctx.Locale.Tr "platform.hosting.step_live"}}</strong>
+				<span>{{ctx.Locale.Tr "platform.hosting.progress.step_live_help"}}</span>
+			</div>
+		</li>
 	</ol>
-	<p class="managed-progress-status" data-managed-status></p>
-	<a class="managed-live-url tw-hidden" data-managed-live-url target="_blank" rel="noopener noreferrer" hidden></a>
+
+	<div class="managed-progress-done tw-hidden" data-managed-done hidden>
+		<a class="managed-live-url" data-managed-live-url target="_blank" rel="noopener noreferrer"></a>
+		<a class="ui primary button" data-managed-live-open target="_blank" rel="noopener noreferrer">{{svg "octicon-link-external"}} {{ctx.Locale.Tr "platform.hosting.progress.open_app"}}</a>
+	</div>
 </div>

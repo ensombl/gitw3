@@ -13,7 +13,7 @@
 			{{if $app.Live}}
 				<span class="simple-live-badge">{{svg "octicon-dot-fill"}} {{ctx.Locale.Tr "platform.hosting.simple.live"}}</span>
 			{{else}}
-				<span class="simple-live-badge offline">{{ctx.Locale.Tr "platform.hosting.not_live"}}</span>
+				<span class="simple-live-badge offline" data-managed-offline>{{ctx.Locale.Tr "platform.hosting.not_live"}}</span>
 			{{end}}
 			{{if $app.URL}}<a class="simple-live-url" href="{{$app.URL}}" target="_blank" rel="noopener noreferrer">{{$app.URL}} {{svg "octicon-link-external" 20}}</a>{{end}}
 			<p class="simple-live-meta">{{if $app.Live}}{{ctx.Locale.Tr "platform.hosting.live_release" $app.Live.TagName}} · {{DateUtils.TimeSince $app.Live.FinishedUnix}}{{end}}</p>

@@ -5,6 +5,7 @@ package repo
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -98,7 +99,11 @@ func renderManagedDeploy(ctx *context.Context, manifest *w3ds.PlatformManifest) 
 	ctx.Data["PlatformEName"] = platformEName
 	ctx.Data["ManagedBaseDomain"] = setting.Hosting.Domains.BaseDomain
 	ctx.Data["ManagedAppReady"] = repoHasDeployConfig(ctx)
-	ctx.Data["ManagedSuggestedSubdomain"] = suggestSubdomain(ctx)
+	manifestURL := ""
+	if manifest != nil {
+		manifestURL = manifest.URL
+	}
+	ctx.Data["ManagedSuggestedSubdomain"] = suggestSubdomain(ctx, manifestURL)
 
 	views, err := hosting_service.ViewTargets(ctx, repo.ID)
 	if err != nil {
@@ -296,13 +301,20 @@ func HostingDeploymentStatus(ctx *context.Context) {
 	response := map[string]any{
 		"id": deployment.ID, "status": deployment.Status, "tag": deployment.TagName,
 		"error": deployment.Error, "warning": deployment.Warning,
-		"final": deployment.Status.IsFinal() || deployment.Status == hosting_model.StatusLive,
-		"label": ctx.Locale.TrString("platform.hosting.status." + string(deployment.Status)),
+		"final":       deployment.Status.IsFinal() || deployment.Status == hosting_model.StatusLive,
+		"label":       ctx.Locale.TrString("platform.hosting.status." + string(deployment.Status)),
+		"headline":    ctx.Locale.TrString("platform.hosting.progress." + string(deployment.Status)),
+		"detail":      ctx.Locale.TrString("platform.hosting.progress." + string(deployment.Status) + "_help"),
+		"startedUnix": deployment.StartedUnix,
+		"logUrl":      fmt.Sprintf("%s/deploy/managed/%d/log", ctx.Repo.RepoLink, deployment.ID),
 	}
 	if deployment.Status == hosting_model.StatusLive {
 		response["url"] = hosting_service.PublicURL(ctx, target)
 	}
-	if deployment.Status == hosting_model.StatusAwaitingSignature {
+	// The wallet can approve the deployment record while the build runs, so the
+	// request is offered for as long as it is pending, not only once the build
+	// is waiting for it.
+	if !deployment.Status.IsFinal() && deployment.Status != hosting_model.StatusLive {
 		if signing := hosting_service.SigningRequestFor(ctx, target); signing != nil {
 			uri, err := deploymentSigningURI(strings.TrimRight(setting.AppURL, "/")+"/w3ds/deploy/callback",
 				signing.SigningPayload, signing.Message, signing.DeploymentEName, signing.VersionEName)
@@ -537,18 +549,42 @@ func repoHasDeployConfig(ctx *context.Context) bool {
 	return false
 }
 
-// suggestSubdomain proposes a free address named after the repository.
-func suggestSubdomain(ctx *context.Context) string {
+// suggestSubdomain proposes a free address: the one the platform manifest
+// already advertises, else one named after the repository.
+func suggestSubdomain(ctx *context.Context, manifestURL string) string {
 	repo := ctx.Repo.Repository
 	for _, candidate := range []string{
+		subdomainOf(strings.TrimRight(manifestURL, "/")),
 		hosting_module.SuggestSubdomain(repo.Name),
 		hosting_module.SuggestSubdomain(repo.OwnerName + "-" + repo.Name),
 	} {
+		if candidate == "" {
+			continue
+		}
 		if _, err := hosting_service.CheckSubdomain(ctx, candidate, 0); err == nil {
 			return candidate
 		}
 	}
 	return hosting_module.RandomName()
+}
+
+// suggestedPlatformURL is the managed hosting address of the repository's
+// app, offered as the platform's application URL until one is saved. The
+// deploy page then suggests the same address back.
+func suggestedPlatformURL(ctx *context.Context) string {
+	if !setting.Hosting.Enabled || setting.Hosting.Domains.BaseDomain == "" {
+		return ""
+	}
+	views, err := hosting_service.ViewTargets(ctx, ctx.Repo.Repository.ID)
+	if err != nil {
+		log.Warn("Load hosting targets of repository %d: %v", ctx.Repo.Repository.ID, err)
+	}
+	for _, view := range views {
+		if url := hosting_service.PublicURL(ctx, view.Target); url != "" {
+			return url
+		}
+	}
+	return "https://" + suggestSubdomain(ctx, "") + "." + setting.Hosting.Domains.BaseDomain
 }
 
 // subdomainOf returns the label of a URL under the base domain, or "".

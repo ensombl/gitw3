@@ -108,6 +108,10 @@ func W3DS(ctx *context.Context) {
 			PlatformDomains:     append([]string(nil), manifest.Domains...),
 			LastCommitID:        ctx.Repo.CommitID,
 		}
+		if form.PlatformURL == "" {
+			form.PlatformURL = suggestedPlatformURL(ctx)
+			ctx.Data["PlatformURLSuggested"] = form.PlatformURL != ""
+		}
 	}
 	prepareW3DSPage(ctx, manifest, form)
 	ctx.HTML(http.StatusOK, tplRepoW3DS)
