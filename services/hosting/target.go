@@ -5,11 +5,14 @@ package hosting
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	hosting_model "forgejo.org/models/hosting"
@@ -104,9 +107,24 @@ func LoadReleaseConfig(ctx context.Context, repo *repo_model.Repository, commitS
 	return result, nil
 }
 
-// dokployAppName is the Swarm service or stack name of a target.
+// maxAppNameLength keeps app names inside Dokploy's 63-character limit,
+// leaving room for the random suffix Dokploy appends.
+const maxAppNameLength = 48
+
+// dokployAppName is the Swarm service or stack name of a target. Owners are
+// often 36-character eNames, so long names keep a readable prefix and end in
+// a hash of the full name, which stays stable across deploys.
 func dokployAppName(repo *repo_model.Repository, target *hosting_model.Target) string {
-	return hosting_module.ImageName(repo.OwnerName, repo.Name, target.Name) + "-" + strconv.FormatInt(target.ID, 36)
+	return shortAppName(hosting_module.ImageName(repo.OwnerName, repo.Name, target.Name) + "-" + strconv.FormatInt(target.ID, 36))
+}
+
+func shortAppName(name string) string {
+	if len(name) <= maxAppNameLength {
+		return name
+	}
+	sum := sha256.Sum256([]byte(name))
+	prefix := strings.TrimRight(name[:maxAppNameLength-9], "-")
+	return prefix + "-" + hex.EncodeToString(sum[:4])
 }
 
 func appSpec(repo *repo_model.Repository, target *hosting_model.Target, spec *hosting_module.Target) AppSpec {

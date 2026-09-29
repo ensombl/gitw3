@@ -45,3 +45,14 @@ func TestSwarmLogsExactServiceWithTimestamps(t *testing.T) {
 	assert.Contains(t, query, "tail=50")
 	assert.Contains(t, query, "timestamps=1")
 }
+
+func TestShortAppName(t *testing.T) {
+	assert.Equal(t, "user2-repo1-web-1", shortAppName("user2-repo1-web-1"))
+
+	long := "849c0221-6f3f-55f9-95f0-f3b0d2b3092f-profile-viewer-simplified-web-3"
+	short := shortAppName(long)
+	assert.LessOrEqual(t, len(short), maxAppNameLength, "Dokploy rejects app names over 63 characters")
+	assert.Equal(t, short, shortAppName(long), "stable across deploys")
+	assert.NotEqual(t, short, shortAppName(long+"x"))
+	assert.Regexp(t, `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, short)
+}
