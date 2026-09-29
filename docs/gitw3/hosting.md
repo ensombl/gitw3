@@ -155,7 +155,11 @@ Bring-up order:
 4. Run `GITW3_URL=… GITW3_ADMIN_TOKEN=… DOKPLOY_URL=… contrib/hosting/bootstrap.sh`.
 5. Put the printed runner token and `docker swarm join-token -q worker` into `terraform.tfvars`, then
    apply again. This registers the build runner and creates the seed worker.
-6. `docker stack deploy -c contrib/hosting/manager/socket-proxy.stack.yml gitw3-status` on the manager.
+6. On the manager:
+   - `docker stack deploy -c contrib/hosting/manager/socket-proxy.stack.yml gitw3-status`
+   - `docker swarm update --task-history-limit 2`
+   - `docker stack deploy -c contrib/hosting/manager/janitor.stack.yml gitw3-janitor`, which prunes old
+     app images and stopped containers on every node, including workers added later.
 7. Add the `[hosting]` section below to `app.ini` and restart GitW3.
 
 Exit check: a manual `docker push` from the build node and a pull on a worker both work. `curl` from the
@@ -255,6 +259,14 @@ Until the scaler runs, add workers by hand with `infra/cloud-init/worker.yaml.tf
 
   It removes other `job-*` images older than a day, and Forgejo's package cleanup then reclaims the
   blobs.
+- **Deleted apps and repositories:** deleting an app removes its Dokploy app, domains, images, variables
+  and deployment history. Deleting a repository does the same for each of its apps. The hourly
+  `hosting_cleanup` cron catches what those paths miss, such as repositories removed together with
+  their owner: it removes targets whose repository is gone, and Dokploy apps GitW3 created
+  ("Managed by GitW3 for …") that no target owns. Anything younger than an hour is left alone while it
+  may still be provisioning.
+- **Node disks:** the `gitw3-janitor` stack prunes images older than three days that no container
+  uses, plus stopped containers, on every node every six hours.
 - **Alerts:** `hosting_alerts` (every 5 minutes) raises admin notices for:
   - a build waiting longer than `BUILD_QUEUE_ALERT`
   - failed or rolled-back deploys

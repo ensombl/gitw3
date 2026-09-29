@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"forgejo.org/models/db"
 	hosting_model "forgejo.org/models/hosting"
@@ -287,6 +288,38 @@ func TestEnsureTargetRecreatesOverlongApp(t *testing.T) {
 	stored, err := hosting_model.GetTarget(ctx, target.ID)
 	require.NoError(t, err)
 	assert.Equal(t, target.DokployAppID, stored.DokployAppID)
+}
+
+func TestSweepOrphans(t *testing.T) {
+	f := setupFakes(t)
+	ctx := db.DefaultContext
+	_, _, kept := newTarget(t)
+
+	// A target whose repository was deleted without notifications (its
+	// owner was deleted, for example).
+	orphanApp, _, err := f.dokploy.CreateApp(ctx, AppSpec{AppName: "gone", Description: managedDescriptionPrefix + "gone/app"})
+	require.NoError(t, err)
+	orphan := &hosting_model.Target{RepoID: 999999, Name: "web", Kind: hosting_module.KindDockerfile, DokployAppID: orphanApp}
+	require.NoError(t, hosting_model.CreateTarget(ctx, orphan))
+	f.dokploy.created[orphanApp] = time.Now().Add(-2 * time.Hour)
+
+	// A Dokploy app GitW3 created that no target owns any more, one that is
+	// still being provisioned, and one GitW3 never managed.
+	f.dokploy.apps["stray"] = AppSpec{Description: managedDescriptionPrefix + "old/app"}
+	f.dokploy.apps["provisioning"] = AppSpec{Description: managedDescriptionPrefix + "new/app"}
+	f.dokploy.created["provisioning"] = time.Now()
+	f.dokploy.apps["foreign"] = AppSpec{Description: "an operator's own app"}
+
+	require.NoError(t, SweepOrphans(ctx))
+	_, err = hosting_model.GetTarget(ctx, orphan.ID)
+	require.ErrorIs(t, err, hosting_model.ErrTargetNotExist)
+	assert.NotContains(t, f.dokploy.apps, orphanApp)
+	assert.NotContains(t, f.dokploy.apps, "stray")
+	assert.Contains(t, f.dokploy.apps, "provisioning", "resources younger than the grace period may still be provisioning")
+	assert.Contains(t, f.dokploy.apps, "foreign", "only apps GitW3 created are swept")
+	assert.Contains(t, f.dokploy.apps, kept.DokployAppID)
+	_, err = hosting_model.GetTarget(ctx, kept.ID)
+	require.NoError(t, err)
 }
 
 func TestW3DSVersionGate(t *testing.T) {

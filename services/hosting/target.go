@@ -287,6 +287,14 @@ func DeleteTarget(ctx context.Context, target *hosting_model.Target, actor *user
 
 func removeTarget(ctx context.Context, target *hosting_model.Target) error {
 	c := current()
+	// Image names come from the repository; an orphaned target's images are
+	// left to registry GC, which drops images no target references.
+	var images []string
+	if repo, err := repo_model.GetRepositoryByID(ctx, target.RepoID); err == nil {
+		if images, err = targetImageNames(ctx, repo, target); err != nil {
+			return err
+		}
+	}
 	pending, err := hosting_model.ListPendingDeployments(ctx, target.ID, 0)
 	if err != nil {
 		return err
@@ -313,7 +321,11 @@ func removeTarget(ctx context.Context, target *hosting_model.Target) error {
 			return fmt.Errorf("delete Dokploy stack: %w", err)
 		}
 	}
-	return hosting_model.DeleteTarget(ctx, target.ID)
+	if err := hosting_model.DeleteTarget(ctx, target.ID); err != nil {
+		return err
+	}
+	deleteImages(ctx, images)
+	return nil
 }
 
 // DeleteRepoTargets removes every target of a repository that is being deleted.

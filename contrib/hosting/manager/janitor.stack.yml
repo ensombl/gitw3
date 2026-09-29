@@ -1,0 +1,29 @@
+# Keeps every swarm node's disk from filling with old app images. Each deploy
+# pulls a new digest onto the manager (Dokploy pulls first) and the workers,
+# and nothing else removes the old ones. Runs on every node, including
+# workers the scaler adds later. Images still used by a container are kept;
+# rolling back re-pulls from the registry, which keeps the last KEEP_DIGESTS.
+#   docker swarm update --task-history-limit 2
+#   docker stack deploy -c janitor.stack.yml gitw3-janitor
+version: "3.8"
+
+services:
+  prune:
+    image: docker.io/library/docker:27.5-cli
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          docker container prune --force --filter until=24h
+          docker image prune --all --force --filter until=72h
+          sleep 21600
+        done
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 64M
+      restart_policy:
+        condition: any

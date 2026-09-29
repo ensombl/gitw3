@@ -22,6 +22,13 @@ func initHostingTasks() {
 	}, func(ctx context.Context, _ *user_model.User, _ Config) error {
 		return hosting_service.SyncDeployments(ctx)
 	})
+	RegisterTaskFatal("hosting_cleanup", &BaseConfig{
+		Enabled:    true,
+		RunAtStart: false,
+		Schedule:   "@every 1h",
+	}, func(ctx context.Context, _ *user_model.User, _ Config) error {
+		return hosting_service.SweepOrphans(ctx)
+	})
 	RegisterTaskFatal("hosting_domain_pool", &BaseConfig{
 		Enabled:    true,
 		RunAtStart: true,

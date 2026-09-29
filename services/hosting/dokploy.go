@@ -90,8 +90,21 @@ func newestDeploy(deploys []dokployDeploy) dokployDeploy {
 	return deploys[0]
 }
 
+// ManagedResource is an app or stack in GitW3's Dokploy environment.
+type ManagedResource struct {
+	ID          string
+	Compose     bool
+	Description string
+	CreatedAt   time.Time
+}
+
+// managedDescriptionPrefix marks the apps and stacks GitW3 creates.
+const managedDescriptionPrefix = "Managed by GitW3 for "
+
 // DokployClient is the subset of Dokploy the deploy service uses.
 type DokployClient interface {
+	// ListManaged returns the apps and stacks of the configured environment.
+	ListManaged(ctx context.Context) ([]ManagedResource, error)
 	CreateApp(ctx context.Context, spec AppSpec) (appID, appName string, err error)
 	UpdateApp(ctx context.Context, appID string, spec AppSpec) error
 	DeleteApp(ctx context.Context, appID string) error
@@ -259,6 +272,30 @@ func (c *dokployHTTPClient) UpdateApp(ctx context.Context, appID string, spec Ap
 		}
 	}
 	return c.call(ctx, http.MethodPost, "application.update", input, nil)
+}
+
+func (c *dokployHTTPClient) ListManaged(ctx context.Context) ([]ManagedResource, error) {
+	type resource struct {
+		ApplicationID string    `json:"applicationId"`
+		ComposeID     string    `json:"composeId"`
+		Description   string    `json:"description"`
+		CreatedAt     time.Time `json:"createdAt"`
+	}
+	var environment struct {
+		Applications []resource `json:"applications"`
+		Compose      []resource `json:"compose"`
+	}
+	if err := c.call(ctx, http.MethodGet, "environment.one", url.Values{"environmentId": {c.environmentID}}, &environment); err != nil {
+		return nil, err
+	}
+	managed := make([]ManagedResource, 0, len(environment.Applications)+len(environment.Compose))
+	for _, app := range environment.Applications {
+		managed = append(managed, ManagedResource{ID: app.ApplicationID, Description: app.Description, CreatedAt: app.CreatedAt})
+	}
+	for _, stack := range environment.Compose {
+		managed = append(managed, ManagedResource{ID: stack.ComposeID, Compose: true, Description: stack.Description, CreatedAt: stack.CreatedAt})
+	}
+	return managed, nil
 }
 
 func (c *dokployHTTPClient) DeleteApp(ctx context.Context, appID string) error {
