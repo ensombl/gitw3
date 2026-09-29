@@ -267,6 +267,13 @@ Until the scaler runs, add workers by hand with `infra/cloud-init/worker.yaml.tf
   may still be provisioning.
 - **Node disks:** the `gitw3-janitor` stack prunes images older than three days that no container
   uses, plus stopped containers, on every node every six hours.
+- **GitW3 host:** `contrib/hosting/forgejo/gitw3-tidy.sh` runs daily from `gitw3-tidy.timer`. It keeps the
+  running GitW3 build and the newest `GITW3_TIDY_KEEP` (3) builds for rollback, and removes older
+  `gitw3:<commit>` images, `source-<commit>` checkouts and config backups. It caps the BuildKit cache at
+  `GITW3_TIDY_CACHE` (20gb) and skips checkouts touched in the last three hours, which may still be
+  building. `GITW3_TIDY_DRY_RUN=1` shows what it would remove. Install it with
+  `install -m 0755 gitw3-tidy.sh /usr/local/bin/`, copy the units to `/etc/systemd/system/`, and run
+  `systemctl enable --now gitw3-tidy.timer`.
 - **Alerts:** `hosting_alerts` (every 5 minutes) raises admin notices for:
   - a build waiting longer than `BUILD_QUEUE_ALERT`
   - failed or rolled-back deploys
