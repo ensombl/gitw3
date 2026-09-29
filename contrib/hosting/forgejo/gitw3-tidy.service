@@ -1,0 +1,10 @@
+[Unit]
+Description=Remove superseded GitW3 builds, images and caches
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gitw3-tidy.sh
+Nice=10
+IOSchedulingClass=idle
