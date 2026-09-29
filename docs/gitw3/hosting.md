@@ -269,8 +269,8 @@ Until the scaler runs, add workers by hand with `infra/cloud-init/worker.yaml.tf
   uses, plus stopped containers, on every node every six hours.
 - **GitW3 host:** `contrib/hosting/forgejo/gitw3-tidy.sh` runs daily from `gitw3-tidy.timer`. It keeps the
   running GitW3 build and the newest `GITW3_TIDY_KEEP` (3) builds for rollback, and removes older
-  `gitw3:<commit>` images, `source-<commit>` checkouts and config backups. It caps the BuildKit cache at
-  `GITW3_TIDY_CACHE` (20gb) and skips checkouts touched in the last three hours, which may still be
+  `gitw3:<commit>` images, `source-<commit>` checkouts and config backups. It removes BuildKit cache older than
+  `GITW3_TIDY_CACHE_AGE` (24h) and skips checkouts touched in the last three hours, which may still be
   building. `GITW3_TIDY_DRY_RUN=1` shows what it would remove. Install it with
   `install -m 0755 gitw3-tidy.sh /usr/local/bin/`, copy the units to `/etc/systemd/system/`, and run
   `systemctl enable --now gitw3-tidy.timer`.

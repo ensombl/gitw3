@@ -11,7 +11,8 @@ set -euo pipefail
 dir=${GITW3_DIR:-/opt/gitw3}
 keep_builds=${GITW3_TIDY_KEEP:-3}
 keep_backups=${GITW3_TIDY_KEEP_BACKUPS:-10}
-cache_budget=${GITW3_TIDY_CACHE:-20gb}
+# With the containerd image store, --max-used-space removes nothing; age works.
+cache_age=${GITW3_TIDY_CACHE_AGE:-24h}
 # GITW3_TIDY_DRY_RUN=1 prints what would be removed.
 dry_run=${GITW3_TIDY_DRY_RUN:-}
 cd "$dir"
@@ -71,5 +72,5 @@ if [ -d config-backups ]; then
 fi
 
 run docker image prune --force >/dev/null
-run docker builder prune --force --max-used-space "$cache_budget" >/dev/null
+run docker builder prune --all --force --filter "until=$cache_age" >/dev/null
 echo "kept builds: ${keep[*]}"
