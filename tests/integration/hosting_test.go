@@ -259,12 +259,15 @@ func TestSimpleMode(t *testing.T) {
 
 	releases := session.MakeRequest(t, NewRequest(t, "GET", repo.Link()+"/releases"), http.StatusOK)
 	tabs := NewHTMLParser(t, releases.Body).Find(".overflow-menu-items a")
-	require.Equal(t, 4, tabs.Length())
+	require.Equal(t, 5, tabs.Length(), "repo admins keep Settings (collaborators and the like)")
 	assert.Equal(t, repo.Link()+"/deploy", tabs.Eq(0).AttrOr("href", ""))
 	assert.Equal(t, repo.Link()+"/w3ds", tabs.Eq(1).AttrOr("href", ""))
 	assert.Equal(t, repo.Link()+"/releases", tabs.Eq(2).AttrOr("href", ""))
 	codeLink := tabs.Eq(3).AttrOr("href", "")
 	assert.Equal(t, repo.Link()+"/src/branch/"+repo.DefaultBranch, codeLink, "code is reachable, but not the main tab")
+
+	assert.Equal(t, repo.Link()+"/settings", tabs.Eq(4).AttrOr("href", ""))
+	session.MakeRequest(t, NewRequest(t, "GET", repo.Link()+"/settings/collaboration"), http.StatusOK)
 
 	code := session.MakeRequest(t, NewRequest(t, "GET", codeLink), http.StatusOK)
 	assert.Positive(t, NewHTMLParser(t, code.Body).Find(".overflow-menu-items a.active[href='"+codeLink+"']").Length())

@@ -115,6 +115,12 @@
 						{{svg "octicon-code"}} {{ctx.Locale.Tr "repo.code"}}
 					</a>
 				{{end}}
+				{{/* Collaborators, visibility and the like still need a home. */}}
+				{{if .Permission.IsAdmin}}
+					<a id="settings-btn" class="{{if .PageIsRepoSettings}}active {{end}}right item" href="{{.RepoLink}}/settings">
+						{{svg "octicon-tools"}} {{ctx.Locale.Tr "repo.settings"}}
+					</a>
+				{{end}}
 				{{else}}
 				{{if .Permission.CanRead $.UnitTypeCode}}
 					<a class="{{if .PageIsViewCode}}active {{end}}item" href="{{.RepoLink}}{{if and (ne .BranchName .Repository.DefaultBranch) (not $.PageIsWiki)}}/src/{{.BranchNameSubURL}}{{end}}">
