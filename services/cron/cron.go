@@ -32,6 +32,7 @@ func NewContext(original context.Context) {
 	initExtendedTasks()
 	initActionsTasks()
 	initHostingTasks()
+	initW3DSTasks()
 
 	lock.Lock()
 	for _, task := range tasks {

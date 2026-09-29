@@ -44,6 +44,7 @@ import (
 	"forgejo.org/services/forms"
 	remote_service "forgejo.org/services/remote"
 	user_service "forgejo.org/services/user"
+	"forgejo.org/services/w3dsidentity"
 
 	"code.forgejo.org/go-chi/binding"
 	"github.com/golang-jwt/jwt/v5"
@@ -1290,6 +1291,18 @@ func showLinkingLogin(ctx *context.Context, gothUser goth.User) {
 	ctx.Redirect(setting.AppSubURL + "/user/link_account")
 }
 
+// syncSignInAvatar refreshes a W3DS user's avatar from their profile at
+// every sign-in; other providers keep Forgejo's UPDATE_AVATAR behaviour.
+func syncSignInAvatar(ctx *context.Context, avatarURL string, u *user_model.User, isW3DS bool) {
+	if !isW3DS {
+		updateAvatarIfNeed(ctx, avatarURL, u, false)
+		return
+	}
+	if _, err := w3dsidentity.ApplyAvatar(ctx, u, avatarURL); err != nil {
+		log.Warn("Update W3DS avatar of %s: %v", u.Name, err)
+	}
+}
+
 func updateAvatarIfNeed(ctx *context.Context, avatarURL string, u *user_model.User, force bool) {
 	if (setting.OAuth2Client.UpdateAvatar || force) && len(avatarURL) > 0 {
 		client := &http.Client{Timeout: 15 * time.Second}
@@ -1371,7 +1384,7 @@ func updateSSHPubIfNeed(
 
 func handleOAuth2SignIn(ctx *context.Context, source *auth.Source, u *user_model.User, gothUser goth.User) {
 	isW3DS := source.Name == w3dsAuthSourceName
-	updateAvatarIfNeed(ctx, gothUser.AvatarURL, u, isW3DS)
+	syncSignInAvatar(ctx, gothUser.AvatarURL, u, isW3DS)
 	err := updateSSHPubIfNeed(ctx, source, &gothUser, u)
 	if err != nil {
 		ctx.ServerError("updateSSHPubIfNeed", err)
@@ -1602,11 +1615,9 @@ func enrichW3DSUserFromAAAS(ctx go_context.Context, authSource *auth.Source, got
 		}
 		gothUser.Name = string(displayName)
 	}
-	if profile.AvatarURL != "" && len(profile.AvatarURL) <= 2048 {
-		avatarURL, err := url.Parse(profile.AvatarURL)
-		if err == nil && (avatarURL.Scheme == "http" || avatarURL.Scheme == "https") && avatarURL.Host != "" {
-			gothUser.AvatarURL = avatarURL.String()
-		}
+	// Already limited to photos GitW3 can load: http(s) URLs or data:image URIs.
+	if profile.AvatarURL != "" {
+		gothUser.AvatarURL = profile.AvatarURL
 	}
 }
 
