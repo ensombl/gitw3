@@ -446,6 +446,21 @@ func HostingSetAutoDeploy(ctx *context.Context) {
 	ctx.JSON(http.StatusOK, map[string]any{"ok": true, "enabled": target.AutoDeploy})
 }
 
+// HostingSetDeployOnPush turns deploy-every-push on or off for a target.
+func HostingSetDeployOnPush(ctx *context.Context) {
+	target := managedTargetFromPath(ctx)
+	if target == nil {
+		return
+	}
+	target.DeployOnPush = ctx.FormBool("enabled")
+	if err := hosting_model.UpdateTargetCols(ctx, target, "deploy_on_push"); err != nil {
+		hostingJSONError(ctx, err)
+		return
+	}
+	hosting_model.Audit(ctx, ctx.Doer.ID, target.RepoID, target.ID, 0, hosting_model.AuditTargetUpdated, map[string]any{"deployOnPush": target.DeployOnPush})
+	ctx.JSON(http.StatusOK, map[string]any{"ok": true, "enabled": target.DeployOnPush})
+}
+
 // HostingAddDomain attaches a custom domain to a target.
 func HostingAddDomain(ctx *context.Context) {
 	target := managedTargetFromPath(ctx)

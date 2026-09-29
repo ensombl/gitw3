@@ -1730,6 +1730,7 @@ func registerRoutes(m *web.Route) {
 					m.Post("/env", repo.HostingSetEnv)
 					m.Post("/env/delete", repo.HostingDeleteEnv)
 					m.Post("/auto-deploy", repo.HostingSetAutoDeploy)
+					m.Post("/deploy-on-push", repo.HostingSetDeployOnPush)
 					m.Post("/subdomain", repo.HostingSetSubdomain)
 					m.Post("/domains", repo.HostingAddDomain)
 					m.Post("/domains/{domain}/verify", repo.HostingVerifyDomain)

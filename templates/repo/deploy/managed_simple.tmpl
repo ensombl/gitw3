@@ -35,6 +35,16 @@
 					</button>
 				</form>
 			{{end}}
+			{{/* Once live (the wallet has signed), every push can ship. */}}
+			{{if and $.CanManageHosting $app.Live}}
+				<div class="simple-deploy-on-push">
+					<label class="managed-auto-deploy" data-tooltip-content="{{ctx.Locale.Tr "platform.hosting.deploy_on_push_help"}}">
+						<input type="checkbox" data-managed-auto-deploy="{{$.RepoLink}}/deploy/managed/targets/{{$app.Target.Name}}/deploy-on-push" {{if $app.Target.DeployOnPush}}checked{{end}}>
+						<span>{{ctx.Locale.Tr "platform.hosting.deploy_on_push" $.Repository.DefaultBranch}}</span>
+					</label>
+					<p class="help">{{ctx.Locale.Tr "platform.hosting.deploy_on_push_help"}}</p>
+				</div>
+			{{end}}
 			{{if and $.CanManagedDeploy $app.Target.DokployAppID}}
 				<button type="button" class="ui basic button managed-app-logs" data-managed-log="{{$.RepoLink}}/deploy/managed/targets/{{$app.Target.Name}}/logs" data-managed-log-title="{{ctx.Locale.Tr "platform.hosting.app_logs"}}" data-managed-log-live>{{svg "octicon-terminal"}} {{ctx.Locale.Tr "platform.hosting.app_logs"}}</button>
 			{{end}}

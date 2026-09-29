@@ -30,6 +30,9 @@ type Target struct {
 	DokployComposeID string `xorm:"VARCHAR(128)"`
 	Replicas         int    `xorm:"NOT NULL DEFAULT 1"`
 	AutoDeploy       bool   `xorm:"INDEX NOT NULL DEFAULT false"`
+	// DeployOnPush turns every push to the default branch into the next patch
+	// release, which then deploys.
+	DeployOnPush bool `xorm:"INDEX NOT NULL DEFAULT false"`
 	// W3DSDeploymentID links the wallet-signed W3DS deployment record created
 	// on the first managed deploy; later versions are signed with the target's
 	// deployment key instead of the wallet.
@@ -124,9 +127,16 @@ func ListTargets(ctx context.Context, repoID int64) ([]*Target, error) {
 	return targets, db.GetEngine(ctx).Where("repo_id = ?", repoID).Asc("name").Find(&targets)
 }
 
+// ListAutoDeployTargets returns the targets that deploy new releases by
+// themselves; deploying every push implies deploying its release.
 func ListAutoDeployTargets(ctx context.Context, repoID int64) ([]*Target, error) {
 	targets := make([]*Target, 0, 4)
-	return targets, db.GetEngine(ctx).Where("repo_id = ? AND auto_deploy = ?", repoID, true).Find(&targets)
+	return targets, db.GetEngine(ctx).Where("repo_id = ? AND (auto_deploy = ? OR deploy_on_push = ?)", repoID, true, true).Find(&targets)
+}
+
+// HasDeployOnPushTarget reports whether pushes to the repository deploy.
+func HasDeployOnPushTarget(ctx context.Context, repoID int64) (bool, error) {
+	return db.GetEngine(ctx).Where("repo_id = ? AND deploy_on_push = ?", repoID, true).Exist(new(Target))
 }
 
 // UpdateTargetCols persists the named columns of a target.

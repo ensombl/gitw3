@@ -13,6 +13,7 @@ import (
 	"forgejo.org/modules/git"
 	"forgejo.org/modules/graceful"
 	"forgejo.org/modules/log"
+	repo_module "forgejo.org/modules/repository"
 	notify_service "forgejo.org/services/notify"
 )
 
@@ -78,6 +79,11 @@ func autoDeploy(ctx context.Context, rel *repo_model.Release) {
 			}
 		}
 	}()
+}
+
+// PushCommits deploys a push to the default branch where an app asks for it.
+func (*notifier) PushCommits(_ context.Context, pusher *user_model.User, repo *repo_model.Repository, opts *repo_module.PushUpdateOptions, _ *repo_module.PushCommits) {
+	deployPush(pusher, repo, opts)
 }
 
 // CreateRef publishes a pushed version tag of a W3DS platform as a release.
