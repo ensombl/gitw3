@@ -12,12 +12,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	auth_model "forgejo.org/models/auth"
 	hosting_model "forgejo.org/models/hosting"
 	repo_model "forgejo.org/models/repo"
 	"forgejo.org/models/unittest"
 	user_model "forgejo.org/models/user"
+	"forgejo.org/modules/git"
 	hosting_module "forgejo.org/modules/hosting"
 	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
@@ -271,6 +273,48 @@ func TestSimpleMode(t *testing.T) {
 	session.MakeRequest(t, NewRequest(t, "GET", repo.Link()), http.StatusOK)
 	dashboard = session.MakeRequest(t, NewRequest(t, "GET", "/"), http.StatusOK)
 	assert.Equal(t, 1, NewHTMLParser(t, dashboard.Body).Find("#dashboard-repo-list").Length())
+}
+
+func TestHostingPublishesVersionTags(t *testing.T) {
+	onApplicationRun(t, func(t *testing.T, u *url.URL) {
+		setupHosting(t)
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo, _, cleanup := tests.CreateDeclarativeRepo(t, owner, "tagged-app", nil, nil, []*files_service.ChangeRepoFile{
+			{Operation: "create", TreePath: "Dockerfile", ContentReader: strings.NewReader("FROM scratch\nEXPOSE 8080\n")},
+			{Operation: "create", TreePath: ".w3ds/platform.json", ContentReader: strings.NewReader(`{"schemaVersion":1,"platformName":"tagged-app","displayName":"tagged-app","description":"d","version":"0.1.0","ename":"","url":"","logoUrl":"","domains":["identity"],"inSubmission":false,"isDraft":true}`)},
+		})
+		defer cleanup()
+		released := func(tag string) bool {
+			rel := unittest.AssertExistsAndLoadBean(t, &repo_model.Release{RepoID: repo.ID, TagName: tag})
+			return !rel.IsTag
+		}
+
+		// git tag v0.1.0 && git push --tags is all a vibe coder does.
+		dstPath := t.TempDir()
+		u.Path = NewAPITestContext(t, owner.Name, repo.Name, auth_model.AccessTokenScopeReadRepository).GitPath()
+		u.User = url.UserPassword(owner.Name, userPassword)
+		doGitClone(dstPath, u)(t)
+		for _, tag := range []string{"v0.1.0", "not-a-version"} {
+			_, _, err := git.NewCommand(git.DefaultContext, "tag").AddDynamicArguments(tag).RunStdString(&git.RunOpts{Dir: dstPath})
+			require.NoError(t, err)
+		}
+		_, _, err := git.NewCommand(git.DefaultContext, "push", "--tags").RunStdString(&git.RunOpts{Dir: dstPath})
+		require.NoError(t, err)
+		assert.Eventually(t, func() bool { return released("v0.1.0") }, 15*time.Second, 200*time.Millisecond,
+			"a version tag of a W3DS platform becomes a release the PPA can certify")
+		assert.False(t, released("not-a-version"))
+
+		// A tag that is still only a tag is published when it is deployed.
+		session := loginUser(t, owner.Name)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+		createNewTagUsingAPI(t, token, owner.Name, repo.Name, "v0.2.0", repo.DefaultBranch, "")
+		require.False(t, released("v0.2.0"))
+		tag := unittest.AssertExistsAndLoadBean(t, &repo_model.Release{RepoID: repo.ID, TagName: "v0.2.0"})
+		session.MakeRequest(t, NewRequestWithValues(t, "POST", repo.Link()+"/deploy/managed", map[string]string{
+			"release_id": fmt.Sprint(tag.ID),
+		}), http.StatusCreated)
+		assert.True(t, released("v0.2.0"))
+	})
 }
 
 func TestHostingSimpleDeployPage(t *testing.T) {

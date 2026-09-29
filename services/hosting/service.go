@@ -38,6 +38,9 @@ var ErrDisabled = errors.New("managed hosting is not enabled on this instance")
 
 // Init wires the deploy service when hosting is enabled.
 func Init(ctx context.Context) error {
+	// Publishing version tags as releases serves every W3DS platform, hosted
+	// or not; the hosting handlers check Enabled themselves.
+	notify_service.RegisterNotifier(newNotifier())
 	if !setting.Hosting.Enabled {
 		return nil
 	}
@@ -49,7 +52,6 @@ func Init(ctx context.Context) error {
 		DNS:       NewDNSProvider(),
 		Publisher: NewPublisher(),
 	})
-	notify_service.RegisterNotifier(newNotifier())
 	log.Info("Managed hosting enabled: Dokploy %s, builder %s", setting.Hosting.DokployURL, setting.Hosting.BuilderRepo)
 	return nil
 }

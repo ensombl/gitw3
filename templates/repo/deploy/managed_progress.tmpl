@@ -27,6 +27,12 @@
 			<div class="managed-step-body">
 				<strong>{{ctx.Locale.Tr "platform.hosting.step_sign"}}</strong>
 				<span>{{ctx.Locale.Tr "platform.hosting.progress.step_sign_help"}}</span>
+				<div class="managed-sign-inline tw-hidden" data-managed-certify hidden>
+					<div>
+						<p>{{ctx.Locale.Tr "platform.hosting.progress.certify_help"}}</p>
+						<a class="ui primary button" href="{{.RepoLink}}/w3ds">{{svg "octicon-shield-check"}} {{ctx.Locale.Tr "platform.hosting.progress.certify_action"}}</a>
+					</div>
+				</div>
 				<div class="managed-sign-inline tw-hidden" data-managed-sign hidden>
 					<canvas data-managed-qr aria-label="{{ctx.Locale.Tr "platform.deploy.sign_qr"}}"></canvas>
 					<div>
