@@ -89,6 +89,7 @@ export function initManagedDeploy() {
   const bar = progress?.querySelector<HTMLElement>('[data-managed-bar]');
   const stepLog = progress?.querySelector<HTMLButtonElement>('[data-managed-step-log]');
   const signPanel = progress?.querySelector<HTMLElement>('[data-managed-sign]');
+  const certifyPanel = progress?.querySelector<HTMLElement>('[data-managed-certify]');
   const signingCanvas = signPanel?.querySelector<HTMLCanvasElement>('[data-managed-qr]');
   const openWallet = signPanel?.querySelector<HTMLAnchorElement>('[data-managed-open-wallet]');
   const done = progress?.querySelector<HTMLElement>('[data-managed-done]');
@@ -181,6 +182,7 @@ export function initManagedDeploy() {
       setHidden(stepLog, !result.logUrl || result.status === 'queued');
     }
     showSigning(result.signing);
+    setHidden(certifyPanel, result.status !== 'awaiting_certification');
     setHidden(done, !(live && result.url));
     if (live && result.url && liveURL && liveOpen) {
       liveURL.href = result.url;
