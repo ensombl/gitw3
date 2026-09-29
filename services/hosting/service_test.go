@@ -268,6 +268,26 @@ func TestAppLog(t *testing.T) {
 	assert.ErrorIs(t, err, ErrAppLogsUnavailable)
 }
 
+func TestEnsureTargetRecreatesOverlongApp(t *testing.T) {
+	f := setupFakes(t)
+	ctx := db.DefaultContext
+	repo, user, target := newTarget(t)
+	spec := webSpec()
+	oldID := target.DokployAppID
+	app := f.dokploy.apps[oldID]
+	app.AppName = strings.Repeat("a", 64)
+	f.dokploy.apps[oldID] = app
+
+	target, err := EnsureTarget(ctx, repo, spec, user, "")
+	require.NoError(t, err)
+	assert.NotEqual(t, oldID, target.DokployAppID, "an app Swarm cannot start is replaced")
+	assert.NotContains(t, f.dokploy.apps, oldID)
+	assert.LessOrEqual(t, len(f.dokploy.apps[target.DokployAppID].AppName), maxAppNameLength)
+	stored, err := hosting_model.GetTarget(ctx, target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, target.DokployAppID, stored.DokployAppID)
+}
+
 func TestW3DSVersionGate(t *testing.T) {
 	f := setupFakes(t)
 	defer test.MockVariableValue(&setting.Hosting.RequireW3DS, true)()

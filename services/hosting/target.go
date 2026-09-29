@@ -237,6 +237,9 @@ func syncTargetSpec(ctx context.Context, repo *repo_model.Repository, target *ho
 		return err
 	}
 	if target.DokployAppID != "" {
+		if err := recreateOverlongApp(ctx, repo, target, spec); err != nil {
+			return err
+		}
 		if err := current().Dokploy.UpdateApp(ctx, target.DokployAppID, appSpec(repo, target, spec)); err != nil {
 			return fmt.Errorf("update Dokploy app: %w", err)
 		}
@@ -245,6 +248,32 @@ func syncTargetSpec(ctx context.Context, repo *repo_model.Repository, target *ho
 		return rerouteDomains(ctx, target, spec)
 	}
 	return nil
+}
+
+// maxSwarmServiceName is Docker's limit on service names.
+const maxSwarmServiceName = 63
+
+// recreateOverlongApp replaces a Dokploy app created before app names were
+// shortened: with Dokploy's suffix its service name exceeds Swarm's limit,
+// so it can never start. The new app gets a short name and the target's
+// domains.
+func recreateOverlongApp(ctx context.Context, repo *repo_model.Repository, target *hosting_model.Target, spec *hosting_module.Target) error {
+	c := current()
+	state, err := c.Dokploy.AppState(ctx, target.DokployAppID)
+	if err != nil || len(state.AppName) <= maxSwarmServiceName {
+		return nil
+	}
+	log.Info("Recreating Dokploy app %s of target %d: its name %q is too long for Swarm", target.DokployAppID, target.ID, state.AppName)
+	if err := c.Dokploy.DeleteApp(ctx, target.DokployAppID); err != nil && !isDokployNotFound(err) {
+		return fmt.Errorf("delete Dokploy app: %w", err)
+	}
+	if target.DokployAppID, _, err = c.Dokploy.CreateApp(ctx, appSpec(repo, target, spec)); err != nil {
+		return fmt.Errorf("create Dokploy app: %w", err)
+	}
+	if err := hosting_model.UpdateTargetCols(ctx, target, "dokploy_app_id"); err != nil {
+		return err
+	}
+	return rerouteDomains(ctx, target, spec)
 }
 
 // DeleteTarget tears a target down: domains, Dokploy app and database rows.
