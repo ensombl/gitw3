@@ -1723,6 +1723,7 @@ func registerRoutes(m *web.Route) {
 				m.Get("/subdomain", repo.HostingCheckSubdomain)
 				m.Get("/{deployment}/status", repo.HostingDeploymentStatus)
 				m.Get("/{deployment}/log", repo.HostingBuildLog)
+				m.Get("/targets/{target}/logs", reqRepoCodeWriter, repo.HostingAppLog)
 				m.Post("/{deployment}/cancel", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingCancel)
 				m.Post("/{deployment}/rollback", context.RepoMustNotBeArchived(), reqRepoCodeWriter, repo.HostingRollback)
 				m.Group("/targets/{target}", func() {

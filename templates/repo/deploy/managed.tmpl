@@ -72,6 +72,9 @@
 							{{if .Live}}{{ctx.Locale.Tr "platform.hosting.live_release" .Live.TagName}} · {{DateUtils.TimeSince .Live.FinishedUnix}}{{else}}{{ctx.Locale.Tr "platform.hosting.not_live"}}{{end}}
 						</div>
 					</div>
+					{{if and $.CanManagedDeploy .Target.DokployAppID}}
+						<button type="button" class="ui basic button managed-app-logs" data-managed-log="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/logs" data-managed-log-title="{{ctx.Locale.Tr "platform.hosting.app_logs"}}" data-managed-log-live>{{svg "octicon-terminal"}} {{ctx.Locale.Tr "platform.hosting.app_logs"}}</button>
+					{{end}}
 					{{if and $.CanManageHosting (not $.SimpleMode)}}
 						<label class="managed-auto-deploy">
 							<input type="checkbox" data-managed-auto-deploy="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/auto-deploy" {{if .Target.AutoDeploy}}checked{{end}}>

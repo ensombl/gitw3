@@ -96,18 +96,37 @@ export function initManagedDeploy() {
   const liveOpen = done?.querySelector<HTMLAnchorElement>('[data-managed-live-open]');
   const logDialog = root.querySelector<HTMLDialogElement>('#managed-log-modal');
   const logOutput = logDialog?.querySelector<HTMLElement>('[data-managed-log-output]');
+  const logTitle = logDialog?.querySelector<HTMLElement>('[data-managed-log-title]');
+  const buildLogTitle = logTitle?.textContent ?? '';
   let polling = 0;
   let shownSigning = '';
   let startedAt = 0;
   let ticking = 0;
 
-  const openLog = async (url: string) => {
+  let logRequest = 0;
+  // Opens the log window; a live log (a running app) refreshes while it is
+  // open and stays scrolled to the newest lines unless the reader scrolled up.
+  const openLog = (url: string, title = buildLogTitle, live = false) => {
     if (!logDialog || !logOutput || !url) return;
+    const request = ++logRequest;
+    if (logTitle) logTitle.textContent = title;
     logOutput.textContent = '…';
     showModal(logDialog, () => {});
-    const response = await GET(url, {cache: 'no-store'});
-    logOutput.textContent = await response.text();
-    logOutput.scrollTop = logOutput.scrollHeight;
+    const refresh = async (first: boolean) => {
+      if (request !== logRequest || (!first && !logDialog.open)) return;
+      const atBottom = first || logOutput.scrollTop + logOutput.clientHeight >= logOutput.scrollHeight - 8;
+      try {
+        const response = await GET(url, {cache: 'no-store'});
+        const text = await response.text();
+        if (request !== logRequest) return;
+        logOutput.textContent = text;
+      } catch (error) {
+        logOutput.textContent = error instanceof Error ? error.message : String(error);
+      }
+      if (atBottom) logOutput.scrollTop = logOutput.scrollHeight;
+      if (live) window.setTimeout(() => refresh(false), 4000);
+    };
+    refresh(true);
   };
   stepLog?.addEventListener('click', () => openLog(stepLog.dataset.url ?? ''));
 
@@ -308,6 +327,7 @@ export function initManagedDeploy() {
   }
 
   for (const button of root.querySelectorAll<HTMLButtonElement>('[data-managed-log]')) {
-    button.addEventListener('click', () => openLog(button.dataset.managedLog ?? ''));
+    button.addEventListener('click', () => openLog(button.dataset.managedLog ?? '',
+      button.dataset.managedLogTitle || buildLogTitle, button.hasAttribute('data-managed-log-live')));
   }
 }

@@ -202,10 +202,16 @@ func (f *fakeDNS) DeleteRecord(_ context.Context, id string) error {
 type fakeSwarm struct {
 	services  []ServiceStatus
 	diagnosis string
+	// logs maps a service name (or stack namespace) to its log output.
+	logs map[string]string
 }
 
 func (f *fakeSwarm) Diagnose(context.Context, string, string) (string, error) {
 	return f.diagnosis, nil
+}
+
+func (f *fakeSwarm) Logs(_ context.Context, name, stack string, _ int) (string, error) {
+	return f.logs[name+stack], nil
 }
 
 func (f *fakeSwarm) Services(context.Context, string, string) ([]ServiceStatus, error) {

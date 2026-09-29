@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +46,8 @@ type SwarmClient interface {
 	// Diagnose explains why a rollout failed: the error of the latest failed
 	// task and the last log lines of the service, for the person deploying.
 	Diagnose(ctx context.Context, name, stackNamespace string) (string, error)
+	// Logs returns the newest log lines of an app's services, oldest first.
+	Logs(ctx context.Context, name, stackNamespace string, lines int) (string, error)
 }
 
 // EvaluateRollout decides whether a deploy of the given image digests is done.
@@ -210,7 +213,8 @@ type dockerTaskDetail struct {
 
 const diagnoseLogLines = 30
 
-func (c *swarmProxyClient) Diagnose(ctx context.Context, name, stackNamespace string) (string, error) {
+// findServices returns the service called name, or every service of a stack.
+func (c *swarmProxyClient) findServices(ctx context.Context, name, stackNamespace string) ([]dockerService, error) {
 	filters := map[string][]string{}
 	if stackNamespace != "" {
 		filters["label"] = []string{"com.docker.stack.namespace=" + stackNamespace}
@@ -220,13 +224,25 @@ func (c *swarmProxyClient) Diagnose(ctx context.Context, name, stackNamespace st
 	encoded, _ := json.Marshal(filters)
 	var services []dockerService
 	if err := c.get(ctx, "/services", url.Values{"filters": {string(encoded)}}, &services); err != nil {
+		return nil, err
+	}
+	// The name filter matches prefixes; keep the exact service only.
+	matched := services[:0]
+	for _, service := range services {
+		if stackNamespace != "" || service.Spec.Name == name {
+			matched = append(matched, service)
+		}
+	}
+	return matched, nil
+}
+
+func (c *swarmProxyClient) Diagnose(ctx context.Context, name, stackNamespace string) (string, error) {
+	services, err := c.findServices(ctx, name, stackNamespace)
+	if err != nil {
 		return "", err
 	}
 	var out strings.Builder
 	for _, service := range services {
-		if stackNamespace == "" && service.Spec.Name != name {
-			continue
-		}
 		taskFilters, _ := json.Marshal(map[string][]string{"service": {service.ID}})
 		var tasks []dockerTaskDetail
 		if err := c.get(ctx, "/tasks", url.Values{"filters": {string(taskFilters)}}, &tasks); err != nil {
@@ -252,17 +268,44 @@ func (c *swarmProxyClient) Diagnose(ctx context.Context, name, stackNamespace st
 			fmt.Fprintf(&out, ", exit code %d", code)
 		}
 		out.WriteString("\n")
-		if logs, err := c.serviceLogs(ctx, service.ID); err == nil && logs != "" {
+		if logs, err := c.serviceLogs(ctx, service.ID, diagnoseLogLines, false); err == nil && logs != "" {
 			fmt.Fprintf(&out, "Last log lines:\n%s\n", logs)
 		}
 	}
 	return strings.TrimSpace(out.String()), nil
 }
 
+func (c *swarmProxyClient) Logs(ctx context.Context, name, stackNamespace string, lines int) (string, error) {
+	services, err := c.findServices(ctx, name, stackNamespace)
+	if err != nil {
+		return "", err
+	}
+	var out strings.Builder
+	for _, service := range services {
+		logs, err := c.serviceLogs(ctx, service.ID, lines, true)
+		if err != nil {
+			return out.String(), err
+		}
+		if logs == "" {
+			continue
+		}
+		// Label each service of a stack; a single app needs no heading.
+		if stackNamespace != "" {
+			fmt.Fprintf(&out, "== %s ==\n", strings.TrimPrefix(service.Spec.Name, stackNamespace+"_"))
+		}
+		out.WriteString(logs)
+		out.WriteString("\n")
+	}
+	return strings.TrimRight(out.String(), "\n"), nil
+}
+
 // serviceLogs returns the last log lines of a service, demultiplexing
 // Docker's stdout/stderr stream framing.
-func (c *swarmProxyClient) serviceLogs(ctx context.Context, serviceID string) (string, error) {
-	query := url.Values{"stdout": {"1"}, "stderr": {"1"}, "tail": {fmt.Sprint(diagnoseLogLines)}}
+func (c *swarmProxyClient) serviceLogs(ctx context.Context, serviceID string, lines int, timestamps bool) (string, error) {
+	query := url.Values{"stdout": {"1"}, "stderr": {"1"}, "tail": {strconv.Itoa(lines)}}
+	if timestamps {
+		query.Set("timestamps", "1")
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/services/"+url.PathEscape(serviceID)+"/logs?"+query.Encode(), nil)
 	if err != nil {
 		return "", err

@@ -101,6 +101,10 @@ func (f *hostingFakes) Services(context.Context, string, string) ([]hosting_serv
 
 func (f *hostingFakes) Diagnose(context.Context, string, string) (string, error) { return "", nil }
 
+func (f *hostingFakes) Logs(context.Context, string, string, int) (string, error) {
+	return "listening on 0.0.0.0:3000", nil
+}
+
 func (f *hostingFakes) Call(context.Context, string, string, any, any) error { return nil }
 
 func setupHosting(t *testing.T) *hostingFakes {
@@ -222,12 +226,18 @@ func testHostingManagedDeployFlow(t *testing.T, _ *url.URL) {
 
 	page = session.MakeRequest(t, NewRequest(t, "GET", repo.Link()+"/deploy"), http.StatusOK)
 	assert.Contains(t, page.Body.String(), live.URL)
+	logsURL := repo.Link() + "/deploy/managed/targets/" + target.Name + "/logs"
+	assert.Positive(t, NewHTMLParser(t, page.Body).Find("[data-managed-log='"+logsURL+"']").Length())
+	logs := session.MakeRequest(t, NewRequest(t, "GET", logsURL), http.StatusOK)
+	assert.Equal(t, "listening on 0.0.0.0:3000", logs.Body.String())
 
-	// Readers can watch but not deploy.
+	// Readers can watch but not deploy, and app output (which can hold user
+	// data) is for deployers only.
 	reader := loginUser(t, "user4")
 	reader.MakeRequest(t, NewRequestWithValues(t, "POST", repo.Link()+"/deploy/managed", map[string]string{
 		"release_id": fmt.Sprint(release.ID),
 	}), http.StatusNotFound)
+	reader.MakeRequest(t, NewRequest(t, "GET", logsURL), http.StatusNotFound)
 }
 
 func TestSimpleMode(t *testing.T) {
@@ -247,10 +257,15 @@ func TestSimpleMode(t *testing.T) {
 
 	releases := session.MakeRequest(t, NewRequest(t, "GET", repo.Link()+"/releases"), http.StatusOK)
 	tabs := NewHTMLParser(t, releases.Body).Find(".overflow-menu-items a")
-	require.Equal(t, 3, tabs.Length())
+	require.Equal(t, 4, tabs.Length())
 	assert.Equal(t, repo.Link()+"/deploy", tabs.Eq(0).AttrOr("href", ""))
 	assert.Equal(t, repo.Link()+"/w3ds", tabs.Eq(1).AttrOr("href", ""))
 	assert.Equal(t, repo.Link()+"/releases", tabs.Eq(2).AttrOr("href", ""))
+	codeLink := tabs.Eq(3).AttrOr("href", "")
+	assert.Equal(t, repo.Link()+"/src/branch/"+repo.DefaultBranch, codeLink, "code is reachable, but not the main tab")
+
+	code := session.MakeRequest(t, NewRequest(t, "GET", codeLink), http.StatusOK)
+	assert.Positive(t, NewHTMLParser(t, code.Body).Find(".overflow-menu-items a.active[href='"+codeLink+"']").Length())
 
 	session.MakeRequest(t, NewRequest(t, "POST", "/user/simple-mode?enabled=false"), http.StatusOK)
 	session.MakeRequest(t, NewRequest(t, "GET", repo.Link()), http.StatusOK)

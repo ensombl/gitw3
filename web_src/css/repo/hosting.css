@@ -332,6 +332,10 @@
   overflow-wrap: anywhere;
 }
 
+.simple-live .managed-app-logs {
+  margin-top: 0.75rem;
+}
+
 .managed-target-heading {
   display: flex;
   flex-wrap: wrap;
