@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -317,6 +319,62 @@ func TestHostingPublishesVersionTags(t *testing.T) {
 			"release_id": fmt.Sprint(tag.ID),
 		}), http.StatusCreated)
 		assert.True(t, released("v0.2.0"))
+	})
+}
+
+func TestHostingDeployOnPush(t *testing.T) {
+	onApplicationRun(t, func(t *testing.T, u *url.URL) {
+		fakes := setupHosting(t)
+		owner := unittest.AssertExistsAndLoadBean(t, &user_model.User{ID: 2})
+		repo, _, cleanup := tests.CreateDeclarativeRepo(t, owner, "push-app", nil, nil, []*files_service.ChangeRepoFile{{
+			Operation: "create", TreePath: "Dockerfile", ContentReader: strings.NewReader("FROM scratch\nEXPOSE 8080\n"),
+		}})
+		defer cleanup()
+		session := loginUser(t, owner.Name)
+		token := getTokenForLoggedInUser(t, session, auth_model.AccessTokenScopeWriteRepository)
+		release := createNewReleaseUsingAPI(t, token, owner, repo, "v1.0.0", repo.DefaultBranch, "v1.0.0", "")
+		session.MakeRequest(t, NewRequestWithValues(t, "POST", repo.Link()+"/deploy/managed", map[string]string{
+			"release_id": fmt.Sprint(release.ID),
+		}), http.StatusCreated)
+		require.Len(t, fakes.dispatched, 1)
+		session.MakeRequest(t, NewRequestWithValues(t, "POST", repo.Link()+"/deploy/managed/targets/web/deploy-on-push", map[string]string{
+			"enabled": "true",
+		}), http.StatusOK)
+
+		dstPath := t.TempDir()
+		u.Path = NewAPITestContext(t, owner.Name, repo.Name, auth_model.AccessTokenScopeReadRepository).GitPath()
+		u.User = url.UserPassword(owner.Name, userPassword)
+		doGitClone(dstPath, u)(t)
+		push := func() {
+			_, _, err := git.NewCommand(git.DefaultContext, "push", "origin").AddDynamicArguments(repo.DefaultBranch).RunStdString(&git.RunOpts{Dir: dstPath})
+			require.NoError(t, err)
+		}
+
+		// A code change becomes the next version, which deploys.
+		doGitAddSomeCommits(dstPath, repo.DefaultBranch)(t)
+		push()
+		var next *repo_model.Release
+		require.Eventually(t, func() bool {
+			rel, err := repo_model.GetRelease(t.Context(), repo.ID, "v1.0.1")
+			next = rel
+			return err == nil
+		}, 15*time.Second, 200*time.Millisecond, "a push to %s is published as v1.0.1", repo.DefaultBranch)
+		head, _, err := git.NewCommand(git.DefaultContext, "rev-parse", "HEAD").RunStdString(&git.RunOpts{Dir: dstPath})
+		require.NoError(t, err)
+		assert.Equal(t, strings.TrimSpace(head), next.Sha1)
+		assert.False(t, next.IsTag)
+		assert.Eventually(t, func() bool { return len(fakes.dispatched) == 2 }, 15*time.Second, 200*time.Millisecond, "v1.0.1 deploys")
+
+		// Metadata-only commits (GitW3 syncing the platform manifest) do not.
+		require.NoError(t, os.MkdirAll(filepath.Join(dstPath, ".w3ds"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dstPath, ".w3ds", "platform.json"), []byte("{}\n"), 0o644))
+		require.NoError(t, git.AddChanges(dstPath, true))
+		signature := git.Signature{Email: "bot@test.test", Name: "bot"}
+		require.NoError(t, git.CommitChanges(dstPath, git.CommitChangesOptions{Committer: &signature, Author: &signature, Message: "chore: sync platform metadata"}))
+		push()
+		time.Sleep(2 * time.Second)
+		assert.Zero(t, unittest.GetCount(t, &repo_model.Release{RepoID: repo.ID, TagName: "v1.0.2"}))
+		assert.Len(t, fakes.dispatched, 2)
 	})
 }
 

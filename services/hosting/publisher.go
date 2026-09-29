@@ -48,6 +48,12 @@ func IsCertificationRequired(err error) bool {
 	return errors.As(err, &publisherErr) && strings.Contains(strings.ToLower(publisherErr.Message), "certification")
 }
 
+// IsVersionDenied reports whether the PPA denied the release being published.
+func IsVersionDenied(err error) bool {
+	var publisherErr *PublisherError
+	return errors.As(err, &publisherErr) && strings.Contains(strings.ToLower(publisherErr.Message), "ppa denied")
+}
+
 // Publisher talks to the platform-manifest-sync sidecar that owns W3DS
 // deployment records.
 type Publisher interface {

@@ -13,16 +13,21 @@ default is `[ui] DEFAULT_SIMPLE_MODE` (default `true`).
 
 ## How a deploy works
 
-1. The user deploys a stable semver release (`v1.2.3`). Only releases deploy; there is no branch
-   push-to-deploy. A target can opt into **Deploy new releases automatically**.
+1. The user deploys a stable semver release (`v1.2.3`). Only releases deploy. A target can opt into
+   **Deploy new releases automatically**, and into **Deploy every push to <default branch>**: each push
+   to the default branch is published as the next patch release (`v1.2.3` → `v1.2.4`), which then
+   deploys. Pushes that only change `.w3ds/` (GitW3's own manifest sync) and commits that already have
+   a release are skipped. In W3DS platform repositories a pushed version tag is published as a release
+   automatically, so it can be certified.
 2. GitW3 reads `.forgejo/deploy.yml` at the release commit. If the file is missing but a `Dockerfile`
    exists, it deploys one `web` target on the Dockerfile's first `EXPOSE`d port (default 3000).
 3. The first deploy of a target creates its Dokploy app and claims a ready domain from the pool. It
    also generates the target's W3DS deployment key and asks the deployer's eID wallet to sign the W3DS
    deployment record **once**. Later releases are published to W3DS by signing with that deployment
    key (`POST /api/v1/deployments/{id}/versions` on the publisher), so no further wallet taps are needed.
-   The release must still be PPA-certified; an uncertified release waits in *Waiting for PPA
-   certification* with its image already built.
+   Only that first deploy needs a PPA-certified release. Later versions inherit the certification the
+   deployment was created with and go live without another review, unless the PPA explicitly denies a
+   version, which fails its deploy.
 4. GitW3 dispatches the central `platform/builder` workflow. The untrusted build node downloads the
    source from a signed, expiring URL. It builds with BuildKit, pushes to
    `REGISTRY_HOST/deployments/<owner>-<repo>-<target>` and scans with Trivy.
@@ -43,7 +48,7 @@ Simple Mode shows the Deploy page as three steps:
 
 1. **Get your app ready.** A copy-paste prompt tells the user's AI assistant how to add a Dockerfile
    that GitW3 can run: listen on `0.0.0.0:$PORT`, a `.dockerignore`, no secrets, and a version tag.
-2. **Publish a version.** A pushed `vX.Y.Z` tag deploys just like a release.
+2. **Publish a version.** A pushed `vX.Y.Z` tag is published as a release and deploys like one.
 3. **Pick an address and deploy.**
 
 Once an app is live, the page shows its URL, a "Deploy latest version" button, a rename form and the

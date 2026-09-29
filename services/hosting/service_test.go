@@ -17,6 +17,7 @@ import (
 	system_model "forgejo.org/models/system"
 	"forgejo.org/models/unittest"
 	user_model "forgejo.org/models/user"
+	w3ds_model "forgejo.org/models/w3ds"
 	hosting_module "forgejo.org/modules/hosting"
 	"forgejo.org/modules/json"
 	"forgejo.org/modules/setting"
@@ -302,6 +303,44 @@ func TestW3DSVersionGate(t *testing.T) {
 	goLive(ctx, deployment)
 	assert.Equal(t, hosting_model.StatusAwaitingSignature, reload(t, deployment.ID).Status, "no wallet signature yet")
 	assert.Empty(t, f.dokploy.images)
+}
+
+func TestLaterVersionsAfterFirstCertifiedDeploy(t *testing.T) {
+	f := setupFakes(t)
+	defer test.MockVariableValue(&setting.Hosting.RequireW3DS, true)()
+	ctx := db.DefaultContext
+	_, user, target := newTarget(t)
+	record := &w3ds_model.Deployment{
+		ID: "signed-deployment", SigningPayload: "gitw3:deployment:v1:signed", RepositoryID: 1, UserID: user.ID,
+		DeployerEName: "@deployer", Name: "web", Environment: "production", ReleaseID: 1, Version: "1.0.0",
+		ReleaseTag: "v1.0.0", CommitSHA: "a", PlatformEName: "@platform", VersionEName: "@version",
+		DeploymentEName: "@deployment", PublicKey: "zKey", BundlePayload: "{}", WalletSignature: "signed",
+		Status: w3ds_model.DeploymentAwaitingSignature,
+	}
+	require.NoError(t, w3ds_model.CreateDeployment(ctx, record))
+	target.W3DSDeploymentID, target.W3DSVersion, target.DeploymentEName = record.ID, "1.0.0", record.DeploymentEName
+	require.NoError(t, hosting_model.UpdateTargetCols(ctx, target, "w3ds_deployment_id", "w3ds_version", "deployment_ename"))
+	built := func(tag string) *hosting_model.Deployment {
+		deployment, _ := queueDeployment(t, target, user, tag)
+		_, _ = hosting_model.Transition(ctx, deployment, hosting_model.StatusBuilding)
+		deployment.ImageDigest = testDigest
+		_, err := hosting_model.Transition(ctx, deployment, hosting_model.StatusBuilt, "image_digest")
+		require.NoError(t, err)
+		return deployment
+	}
+
+	// The publisher accepts later versions without new certification.
+	f.publisher.certified = true
+	next := built("v1.1.0")
+	goLive(ctx, next)
+	assert.Equal(t, hosting_model.StatusDeploying, reload(t, next.ID).Status)
+
+	// A version the PPA denied fails instead of waiting forever.
+	f.publisher.err = &PublisherError{Status: http.StatusConflict, Message: "the PPA denied this version: software version 1.2.0"}
+	denied := built("v1.2.0")
+	goLive(ctx, denied)
+	assert.Equal(t, hosting_model.StatusDeployFailed, reload(t, denied.ID).Status)
+	assert.Contains(t, reload(t, denied.ID).Error, "PPA denied version 1.2.0")
 }
 
 func TestDomainPoolAndCustomDomains(t *testing.T) {

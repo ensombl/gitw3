@@ -250,7 +250,10 @@ func (p *Processor) PublishDeploymentVersion(ctx context.Context, input Deployme
 	if job.Version == input.Version && job.ReleaseTag == input.ReleaseTag && job.CommitSHA == input.CommitSHA {
 		return nil
 	}
-	if err := p.requireDeploymentCertification(ctx, job.RepositoryID, job.PlatformEName, input.Version); err != nil {
+	// The deployment was created from a PPA-certified release and signed by
+	// its deployer's wallet, so later versions inherit that trust instead of
+	// each waiting for review. The PPA can still stop a version by denying it.
+	if err := p.rejectDeniedVersion(ctx, job.RepositoryID, job.PlatformEName, input.Version); err != nil {
 		return err
 	}
 	versionEName, err := w3ds.SoftwareVersionEName(job.PlatformEName, input.Version)
@@ -372,6 +375,22 @@ func (p *Processor) requireDeploymentCertification(ctx context.Context, reposito
 	}
 	if !certifications[version].Certified {
 		return fmt.Errorf("%w for software version %s", ErrDeploymentCertificationRequired, version)
+	}
+	return nil
+}
+
+// ErrDeploymentVersionDenied means the PPA denied this exact version.
+var ErrDeploymentVersionDenied = errors.New("the PPA denied this version")
+
+func (p *Processor) rejectDeniedVersion(ctx context.Context, repositoryID int64, platformEName, version string) error {
+	certifications, err := p.CheckDeploymentCertifications(ctx, CheckDeploymentCertificationsRequest{
+		RepositoryID: repositoryID, PlatformEName: platformEName, Versions: []string{version},
+	})
+	if err != nil {
+		return err
+	}
+	if decision := certifications[version].Decision; decision != nil && decision.Decision == "denied" {
+		return fmt.Errorf("%w: software version %s", ErrDeploymentVersionDenied, version)
 	}
 	return nil
 }

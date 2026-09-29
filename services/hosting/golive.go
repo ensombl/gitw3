@@ -64,9 +64,14 @@ func ensureW3DSVersion(ctx context.Context, target *hosting_model.Target, deploy
 		return false, err
 	}
 	err = publishW3DSVersion(ctx, target.W3DSDeploymentID, target.DeploymentEName, keyFile, version, deployment.TagName, deployment.CommitSHA)
+	if IsVersionDenied(err) {
+		failDeploy(ctx, target, deployment, "The PPA denied version "+version+", so it cannot go live. Fix what the PPA flagged on the W3DS tab and publish a new version.")
+		return false, nil
+	}
 	if err != nil {
-		// Certification can arrive later, and the publisher may be briefly
-		// unavailable: park the built image and let the sync loop retry.
+		// The publisher may be briefly unavailable (or, for a first deploy,
+		// certification may arrive later): park the built image and let the
+		// sync loop retry.
 		if _, transitionErr := hosting_model.Transition(ctx, deployment, hosting_model.StatusAwaitingCertification); transitionErr != nil {
 			return false, transitionErr
 		}

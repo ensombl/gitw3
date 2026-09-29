@@ -80,6 +80,10 @@
 							<input type="checkbox" data-managed-auto-deploy="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/auto-deploy" {{if .Target.AutoDeploy}}checked{{end}}>
 							<span>{{ctx.Locale.Tr "platform.hosting.auto_deploy"}}</span>
 						</label>
+						<label class="managed-auto-deploy" data-tooltip-content="{{ctx.Locale.Tr "platform.hosting.deploy_on_push_help"}}">
+							<input type="checkbox" data-managed-auto-deploy="{{$.RepoLink}}/deploy/managed/targets/{{.Target.Name}}/deploy-on-push" {{if .Target.DeployOnPush}}checked{{end}}>
+							<span>{{ctx.Locale.Tr "platform.hosting.deploy_on_push" $.Repository.DefaultBranch}}</span>
+						</label>
 					{{end}}
 				</div>
 

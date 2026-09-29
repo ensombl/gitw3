@@ -881,13 +881,19 @@ func TestProcessorPublishesDeploymentVersionWithDeploymentKey(t *testing.T) {
 	forged.Version = "1.4.0"
 	require.Error(t, processor.PublishDeploymentVersion(context.Background(), forged, job), "signature covers the version")
 
-	err = processor.PublishDeploymentVersion(context.Background(), input, job)
-	require.ErrorIs(t, err, ErrDeploymentCertificationRequired)
-
+	// The PPA can still stop a version by denying it.
 	fake.mu.Lock()
 	fake.accreditations = []w3ds.AccreditationDecision{
-		{PlatformEName: platformEName, PlatformVersion: "1.3.0", Decision: "granted", CreatedAt: "2026-08-30T00:00:00Z"},
+		{PlatformEName: platformEName, PlatformVersion: "1.3.0", Decision: "denied", CreatedAt: "2026-08-30T00:00:00Z"},
 	}
+	fake.mu.Unlock()
+	err = processor.PublishDeploymentVersion(context.Background(), input, job)
+	require.ErrorIs(t, err, ErrDeploymentVersionDenied)
+
+	// Without a denial, a later version inherits the certification the
+	// deployment was created with.
+	fake.mu.Lock()
+	fake.accreditations = nil
 	fake.mu.Unlock()
 	require.NoError(t, processor.PublishDeploymentVersion(context.Background(), input, job))
 	stored, err := store.GetDeployment(job.ID)

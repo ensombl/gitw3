@@ -332,6 +332,16 @@
   overflow-wrap: anywhere;
 }
 
+.simple-deploy-on-push {
+  margin-top: 1rem;
+}
+
+.simple-deploy-on-push .help {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-light-2);
+  font-size: 0.9rem;
+}
+
 .simple-live .managed-app-logs {
   margin-top: 0.75rem;
 }
