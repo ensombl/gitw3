@@ -147,14 +147,32 @@ func UpdateTargetCols(ctx context.Context, target *Target, cols ...string) error
 
 // DeleteTarget removes a target together with its env vars. Deployments and
 // audit events are kept for history.
+// DeleteTarget removes a target with its variables, deployment history,
+// build jobs and audit trail.
 func DeleteTarget(ctx context.Context, id int64) error {
 	return db.WithTx(ctx, func(ctx context.Context) error {
-		if _, err := db.GetEngine(ctx).Where("target_id = ?", id).Delete(new(EnvVar)); err != nil {
+		e := db.GetEngine(ctx)
+		deployments := builder.Select("id").From("hosting_deployment").Where(builder.Eq{"target_id": id})
+		if _, err := e.Where(builder.In("deployment_id", deployments)).Delete(new(BuildJob)); err != nil {
 			return err
 		}
-		_, err := db.GetEngine(ctx).ID(id).Delete(new(Target))
+		for _, bean := range []any{new(Deployment), new(EnvVar), new(AuditEvent)} {
+			if _, err := e.Where("target_id = ?", id).Delete(bean); err != nil {
+				return err
+			}
+		}
+		_, err := e.ID(id).Delete(new(Target))
 		return err
 	})
+}
+
+// ListOrphanTargets returns targets whose repository no longer exists, for
+// example because its owner was deleted without the usual notifications.
+func ListOrphanTargets(ctx context.Context) ([]*Target, error) {
+	targets := make([]*Target, 0, 4)
+	return targets, db.GetEngine(ctx).
+		Where(builder.NotIn("repo_id", builder.Select("id").From("repository"))).
+		Find(&targets)
 }
 
 // DeleteTargetsByRepo is used when a repository is deleted.

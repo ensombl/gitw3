@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"forgejo.org/models/unittest"
 	user_model "forgejo.org/models/user"
@@ -35,6 +36,8 @@ type fakeDokploy struct {
 	deployErr error
 	// lastDeploy is Dokploy's newest deploy job: title and status.
 	lastDeploy [2]string
+	// created records when each app was created (zero means long ago).
+	created map[string]time.Time
 }
 
 func newFakeDokploy() *fakeDokploy {
@@ -54,6 +57,10 @@ func (f *fakeDokploy) CreateApp(_ context.Context, spec AppSpec) (string, string
 	defer f.mu.Unlock()
 	id := f.id("app")
 	f.apps[id] = spec
+	if f.created == nil {
+		f.created = map[string]time.Time{}
+	}
+	f.created[id] = time.Now()
 	return id, spec.AppName, nil
 }
 
@@ -62,6 +69,16 @@ func (f *fakeDokploy) UpdateApp(_ context.Context, appID string, spec AppSpec) e
 	defer f.mu.Unlock()
 	f.apps[appID] = spec
 	return nil
+}
+
+func (f *fakeDokploy) ListManaged(context.Context) ([]ManagedResource, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	managed := make([]ManagedResource, 0, len(f.apps))
+	for id, app := range f.apps {
+		managed = append(managed, ManagedResource{ID: id, Description: app.Description, CreatedAt: f.created[id]})
+	}
+	return managed, nil
 }
 
 func (f *fakeDokploy) DeleteApp(_ context.Context, appID string) error {

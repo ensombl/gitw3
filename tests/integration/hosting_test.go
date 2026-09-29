@@ -35,25 +35,35 @@ import (
 )
 
 type hostingFakes struct {
-	mu         sync.Mutex
-	dispatched []hosting_service.BuildInputs
-	images     map[string]string
-	domains    []string
-	registry   map[string]bool
-	services   []hosting_service.ServiceStatus
+	mu          sync.Mutex
+	dispatched  []hosting_service.BuildInputs
+	deletedApps []string
+	images      map[string]string
+	domains     []string
+	registry    map[string]bool
+	services    []hosting_service.ServiceStatus
 }
 
 func (f *hostingFakes) CreateApp(_ context.Context, spec hosting_service.AppSpec) (string, string, error) {
 	return "app-" + spec.AppName, spec.AppName, nil
 }
 func (f *hostingFakes) UpdateApp(context.Context, string, hosting_service.AppSpec) error { return nil }
-func (f *hostingFakes) DeleteApp(context.Context, string) error                          { return nil }
-func (f *hostingFakes) SetEnv(context.Context, string, map[string]string) error          { return nil }
+func (f *hostingFakes) DeleteApp(_ context.Context, appID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deletedApps = append(f.deletedApps, appID)
+	return nil
+}
+func (f *hostingFakes) SetEnv(context.Context, string, map[string]string) error { return nil }
 func (f *hostingFakes) DeployImage(_ context.Context, appID, ref, _ string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.images[appID] = ref
 	return nil
+}
+
+func (f *hostingFakes) ListManaged(context.Context) ([]hosting_service.ManagedResource, error) {
+	return nil, nil
 }
 
 func (f *hostingFakes) AppState(context.Context, string) (*hosting_service.AppState, error) {
@@ -375,6 +385,15 @@ func TestHostingDeployOnPush(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		assert.Zero(t, unittest.GetCount(t, &repo_model.Release{RepoID: repo.ID, TagName: "v1.0.2"}))
 		assert.Len(t, fakes.dispatched, 2)
+
+		// Deleting the repository takes its app and history with it.
+		target := unittest.AssertExistsAndLoadBean(t, &hosting_model.Target{RepoID: repo.ID})
+		session.MakeRequest(t, NewRequestWithValues(t, "POST", repo.Link()+"/settings", map[string]string{
+			"action": "delete", "repo_name": repo.FullName(),
+		}), http.StatusSeeOther)
+		unittest.AssertNotExistsBean(t, &hosting_model.Target{ID: target.ID})
+		unittest.AssertNotExistsBean(t, &hosting_model.Deployment{TargetID: target.ID})
+		assert.Contains(t, fakes.deletedApps, target.DokployAppID)
 	})
 }
 
