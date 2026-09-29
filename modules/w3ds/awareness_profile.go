@@ -5,11 +5,13 @@ package w3ds
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"forgejo.org/modules/json"
@@ -17,13 +19,61 @@ import (
 
 const (
 	maxAwarenessPages = 100
-	maxAwarenessBody  = 4 << 20
+	// Profiles often embed their photo as a data URI, so pages are small
+	// and the body limit generous.
+	awarenessPageSize = 50
+	maxAwarenessBody  = 8 << 20
+	// MaxAvatarSourceLength bounds an avatar URL or data URI (about 3 MiB of image).
+	MaxAvatarSourceLength = 4 << 20
 )
 
 // PersonProfile is the subset of a W3DS User profile used by GitW3.
 type PersonProfile struct {
 	DisplayName string
-	AvatarURL   string
+	// AvatarURL is the newest photo GitW3 can load: an absolute http(s) URL
+	// or a data:image URI. Relative paths are skipped; they point at
+	// whichever platform wrote the profile, which the profile does not say.
+	AvatarURL string
+}
+
+// UsableAvatar reports whether GitW3 can load an avatar source.
+func UsableAvatar(source string) bool {
+	if source == "" || len(source) > MaxAvatarSourceLength {
+		return false
+	}
+	if _, ok := DecodeDataImage(source); ok {
+		return true
+	}
+	parsed, err := url.Parse(source)
+	return err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
+}
+
+// DecodeDataImage decodes a base64 data:image URI.
+func DecodeDataImage(source string) ([]byte, bool) {
+	rest, found := strings.CutPrefix(source, "data:")
+	if !found {
+		return nil, false
+	}
+	meta, payload, found := strings.Cut(rest, ",")
+	if !found {
+		return nil, false
+	}
+	mediaType, encoding, _ := strings.Cut(meta, ";")
+	switch strings.ToLower(mediaType) {
+	case "image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif":
+	default:
+		return nil, false
+	}
+	if !strings.EqualFold(encoding, "base64") {
+		return nil, false
+	}
+	payload = strings.TrimSpace(payload)
+	for _, encoder := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		if data, err := encoder.DecodeString(payload); err == nil && len(data) > 0 {
+			return data, true
+		}
+	}
+	return nil, false
 }
 
 type awarenessPacket struct {
@@ -65,7 +115,7 @@ func FetchPersonProfile(ctx context.Context, client *http.Client, baseURL, apiKe
 			return nil, fmt.Errorf("parse AaaS URL: %w", err)
 		}
 		query := endpoint.Query()
-		query.Set("limit", "200")
+		query.Set("limit", strconv.Itoa(awarenessPageSize))
 		query.Set("evault", ename)
 		query.Set("ontology", UserProfileOntology)
 		if cursor != "" {
@@ -107,9 +157,15 @@ func FetchPersonProfile(ctx context.Context, client *http.Client, baseURL, apiKe
 			if packet.Data == nil || stringField(packet.Data, "platformName") != "" {
 				continue
 			}
-			profile = &PersonProfile{
-				DisplayName: firstString(packet.Data, "displayName", "name", "username"),
-				AvatarURL:   firstString(packet.Data, "avatarUrl", "avatar"),
+			if profile == nil {
+				profile = &PersonProfile{}
+			}
+			if name := firstString(packet.Data, "displayName", "name", "username"); name != "" {
+				profile.DisplayName = name
+			}
+			// A later update with an unusable photo keeps the last usable one.
+			if avatar := firstString(packet.Data, "avatarUrl", "avatar"); UsableAvatar(avatar) {
+				profile.AvatarURL = avatar
 			}
 		}
 

@@ -140,7 +140,7 @@ func LinkAccountPostSignIn(ctx *context.Context) {
 
 func linkAccount(ctx *context.Context, u *user_model.User, gothUser goth.User, remember bool) {
 	isW3DS := gothUser.Provider == w3dsAuthSourceName
-	updateAvatarIfNeed(ctx, gothUser.AvatarURL, u, isW3DS)
+	syncSignInAvatar(ctx, gothUser.AvatarURL, u, isW3DS)
 	if isW3DS && strings.TrimSpace(gothUser.Name) != "" {
 		if err := user_service.UpdateUser(ctx, u, &user_service.UpdateOptions{FullName: optional.Some(strings.TrimSpace(gothUser.Name))}); err != nil {
 			ctx.ServerError("UpdateUser", err)
