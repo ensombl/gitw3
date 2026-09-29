@@ -10,6 +10,7 @@ import (
 	hosting_model "forgejo.org/models/hosting"
 	repo_model "forgejo.org/models/repo"
 	user_model "forgejo.org/models/user"
+	"forgejo.org/modules/git"
 	"forgejo.org/modules/graceful"
 	"forgejo.org/modules/log"
 	notify_service "forgejo.org/services/notify"
@@ -35,7 +36,7 @@ func (*notifier) UpdateRelease(ctx context.Context, doer *user_model.User, rel *
 }
 
 func autoDeploy(ctx context.Context, rel *repo_model.Release) {
-	if rel.IsDraft || rel.IsPrerelease || rel.IsTag {
+	if !Enabled() || rel.IsDraft || rel.IsPrerelease || rel.IsTag {
 		return
 	}
 	if _, err := ReleaseVersion(rel); err != nil {
@@ -79,8 +80,18 @@ func autoDeploy(ctx context.Context, rel *repo_model.Release) {
 	}()
 }
 
+// CreateRef publishes a pushed version tag of a W3DS platform as a release.
+func (*notifier) CreateRef(_ context.Context, doer *user_model.User, repo *repo_model.Repository, refFullName git.RefName, _ string) {
+	if refFullName.IsTag() {
+		publishPushedTag(doer, repo, refFullName.TagName())
+	}
+}
+
 // DeleteRepository tears down the repository's apps, domains and targets.
 func (*notifier) DeleteRepository(ctx context.Context, _ *user_model.User, repo *repo_model.Repository) {
+	if !Enabled() {
+		return
+	}
 	if err := DeleteRepoTargets(ctx, repo.ID); err != nil {
 		log.Error("Remove managed hosting of deleted repository %s: %v", repo.FullName(), err)
 	}

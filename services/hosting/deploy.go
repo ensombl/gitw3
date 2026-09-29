@@ -100,6 +100,11 @@ func Deploy(ctx context.Context, opts DeployOptions) (*DeployResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A version tag pushed before tags were published automatically still
+	// needs to become a release before the PPA can certify it.
+	if err := PublishVersionTag(ctx, opts.Actor, opts.Repo, opts.Release); err != nil {
+		return nil, err
+	}
 	config, err := LoadReleaseConfig(ctx, opts.Repo, opts.Release.Sha1)
 	if err != nil {
 		return nil, &UserError{Message: err.Error()}
