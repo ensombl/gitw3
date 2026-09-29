@@ -221,10 +221,15 @@ func (f *fakeSwarm) Services(context.Context, string, string) ([]ServiceStatus, 
 type fakePublisher struct {
 	calls     []string
 	certified bool
+	// err, when set, is returned for every call.
+	err error
 }
 
 func (f *fakePublisher) Call(_ context.Context, method, path string, input, output any) error {
 	f.calls = append(f.calls, method+" "+path)
+	if f.err != nil {
+		return f.err
+	}
 	if !f.certified && path != "/api/v1/platforms/deployment-certifications" {
 		return &PublisherError{Status: http.StatusConflict, Message: "PPA certification is required"}
 	}
